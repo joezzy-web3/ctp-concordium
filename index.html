@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · payments that wait for proof</title>
+<meta name="description" content="An AI agent reads the invoice. Two people count the delivery blind. The supplier approves the amount. Only then does the Concordium contract pay.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app/tokens.css">
+<style>
+body{background:var(--paper)}
+.frame{max-width:1240px;margin:28px auto;background:var(--sheet);border-radius:32px;box-shadow:var(--lift-lg);overflow:hidden}
+nav.top{display:flex;align-items:center;justify-content:space-between;padding:24px 40px}
+nav.top .links{display:flex;gap:32px;font-size:15px;color:var(--mute)}
+nav.top .links a{color:inherit;text-decoration:none}
+@media (hover:hover) and (pointer:fine){nav.top .links a{transition:color .15s ease}nav.top .links a:hover{color:var(--navy)}}
+
+.hero{position:relative;text-align:center;padding:36px 180px 64px}
+.hero h1{position:relative;z-index:2;font:400 clamp(56px,8.4vw,124px)/.9 var(--display);text-transform:uppercase;color:var(--navy);margin:20px 0 24px;letter-spacing:-.005em}
+.hero h1 .ln{display:block}
+.proof{position:relative;display:inline-block}
+.proof::after{content:attr(data-text);position:absolute;inset:0;color:var(--gold);clip-path:inset(0 100% 0 0)}
+.hero .lede{max-width:44ch;margin:0 auto 32px;color:var(--mute);font-size:18px;text-wrap:pretty}
+.hero .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+.obj{position:absolute;z-index:1;will-change:transform}
+.obj .in{border-radius:18px;box-shadow:var(--shadow-obj)}
+.o-inv{left:3%;top:30px}.o-inv .in{width:136px;height:176px;background:var(--card);transform:rotate(-12deg);padding:16px;text-align:left;font-size:11px;color:var(--mute)}
+.o-inv b{display:block;color:var(--navy);font-size:14px}.o-inv i{display:block;height:6px;background:var(--bar);border-radius:4px;margin:8px 0}
+.o-inv .amt{position:absolute;bottom:14px;left:16px;font:700 18px var(--text);color:var(--navy);font-variant-numeric:tabular-nums}
+.o-seal{left:8%;top:300px}.o-seal .in{width:94px;height:94px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--gold-hi),var(--gold-lo) 70%);display:grid;place-items:center;color:var(--gold-ink);font:700 12px/1.15 var(--text);text-align:center;transform:rotate(8deg)}
+.o-shield{right:3%;top:24px}.o-shield .in{width:114px;height:132px;background:linear-gradient(160deg,var(--blue-hi),var(--navy));clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);transform:rotate(10deg);display:grid;place-items:center;color:var(--on-navy);font:700 14px var(--text);border-radius:0}
+.o-lock{right:7.5%;top:336px}.o-lock .in{position:relative;width:96px;height:80px;background:linear-gradient(160deg,var(--steel-hi),var(--steel-lo));border-radius:16px;transform:rotate(-8deg)}
+.o-lock .shackle{position:absolute;left:22px;top:-36px;width:52px;height:48px;border:8px solid var(--steel);border-bottom:0;border-radius:30px 30px 0 0}
+.o-lock .key{position:absolute;left:42px;top:28px;width:12px;height:22px;background:var(--navy);border-radius:6px}
+
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:0 40px 44px}
+.strip a{display:block;background:var(--card);border-radius:20px;padding:16px 20px;box-shadow:var(--lift-sm);text-decoration:none;color:inherit}
+.strip b{display:block;font-size:16px;color:var(--navy)}.strip span{color:var(--mute);font-size:14px}
+@media (hover:hover) and (pointer:fine){.strip a{transition:transform .2s var(--ease-out),box-shadow .2s var(--ease-out)}.strip a:hover{transform:translateY(-2px);box-shadow:var(--lift)}}
+
+.how{background:var(--card);padding:64px 40px}
+.how h2,.judge h2{font:400 46px/1 var(--display);text-transform:uppercase;color:var(--navy);margin:0 0 8px;text-wrap:balance}
+.how>p{color:var(--mute);margin:0 0 32px;max-width:60ch}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:s}
+.steps li{list-style:none;background:var(--sheet);border-radius:22px;padding:20px}
+.steps li::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--navy);color:var(--on-navy);font:700 15px var(--text);margin-bottom:12px}
+.steps b{display:block;color:var(--navy);font-size:17px;margin-bottom:4px}.steps span{color:var(--mute);font-size:15px}
+.steps{padding:0;margin:0}
+.judge{display:grid;grid-template-columns:1.2fr .8fr;gap:32px;align-items:center;padding:56px 40px;background:var(--navy);color:var(--on-navy)}
+.judge h2{color:var(--on-navy)}.judge p{color:var(--mute-on-navy);max-width:52ch}
+.judge ul{margin:0;padding:0;list-style:none}.judge li{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--navy-line)}
+.judge li span{color:var(--mute-on-navy)}
+foot{display:block;padding:24px 40px;color:var(--mute);font-size:14px}
+foot a{color:var(--navy)}
+
+/* ---- the one orchestrated entrance ---- */
+@media (prefers-reduced-motion:no-preference){
+  .rise{opacity:0;transform:translateY(28px);animation:rise .7s var(--ease-out) forwards;animation-delay:var(--d0,0ms)}
+  .ln:nth-child(2){--d0:110ms}.ln:nth-child(3){--d0:190ms}.lede.rise,.ctas.rise{--d0:240ms;transform:translateY(12px)}
+  .obj .in{opacity:0;animation:settle .7s var(--ease-out) forwards;animation-delay:calc(300ms + var(--i,0) * 70ms)}
+  .o-inv .in{--r:-12deg;--dx:-40px}.o-seal .in{--r:8deg;--dx:-30px}.o-shield .in{--r:10deg;--dx:40px}.o-lock .in{--r:-8deg;--dx:30px}
+  .o-seal .in{animation:settle .7s var(--ease-out) forwards,stamp .36s var(--ease-out) 1.55s both}
+  .o-lock .shackle{animation:close .32s var(--ease-out) 1.85s both}
+  .proof::after{animation:fill .6s var(--ease-in-out) 2.05s forwards}
+  .obj{animation:drift var(--d,7s) ease-in-out 2.8s infinite alternate}
+  .o-seal{--d:6s}.o-shield{--d:8s}.o-lock{--d:6.5s}
+}
+@media (prefers-reduced-motion:reduce){
+  .rise,.obj .in{animation:fade .5s ease-out both}.proof::after{clip-path:inset(0)}
+}
+@keyframes rise{to{opacity:1;transform:none}}
+@keyframes settle{from{opacity:0;transform:translateX(var(--dx,0)) rotate(var(--r,0deg)) scale(.95)}to{opacity:1;transform:rotate(var(--r,0deg))}}
+@keyframes stamp{0%{transform:rotate(8deg) scale(1)}40%{transform:rotate(2deg) scale(1.12)}100%{transform:rotate(8deg) scale(1)}}
+@keyframes close{from{transform:translateY(-12px)}to{transform:none}}
+@keyframes fill{to{clip-path:inset(0)}}
+@keyframes drift{from{transform:translateY(-5px)}to{transform:translateY(6px)}}
+@keyframes fade{from{opacity:0}}
+
+@media (max-width:980px){.hero{padding:32px 24px 48px}.obj{display:none}.strip,.steps,.judge{grid-template-columns:1fr}nav.top .links{display:none}.frame{margin:0;border-radius:0}}
+</style>
+</head>
+<body>
+<div class="frame">
+  <nav class="top">
+    <a class="brand" href="./"><span class="flag" aria-hidden="true"></span>Clear to Pay</a>
+    <div class="links"><a href="#how">How it works</a><a href="app/#/judge">Judge mode</a><a href="#proof">Proof on-chain</a></div>
+    <a class="btn line" href="app/">Open the app</a>
+  </nav>
+
+  <header class="hero">
+    <div class="obj o-inv" aria-hidden="true"><div class="in" style="--i:0"><b>INV-1</b>Lagos Foods Ltd<i></i><i></i><i style="width:60%"></i><span class="amt">25 CCD</span></div></div>
+    <div class="obj o-seal" aria-hidden="true"><div class="in" style="--i:1">2 of 2<br>counted</div></div>
+    <div class="obj o-shield" aria-hidden="true"><div class="in" style="--i:2">#1287</div></div>
+    <div class="obj o-lock" aria-hidden="true"><div class="in" style="--i:3"><span class="shackle"></span><span class="key"></span></div></div>
+
+    <h1 aria-label="Payments that wait for proof"><span class="ln rise" style="--i:0">Payments that</span><span class="ln rise" style="--i:1">wait for</span><span class="ln rise" style="--i:2"><span class="proof" data-text="Proof">Proof</span></span></h1>
+    <p class="lede rise" style="--i:3">Paid only after two blind counts and the supplier’s approval.</p>
+    <div class="ctas rise" style="--i:3"><a class="btn dark" href="app/#/buyer/new">Start an order <i aria-hidden="true"></i></a><a class="btn text" href="app/#/judge">Try to fool it</a></div>
+  </header>
+
+  <section class="strip" id="proof" aria-label="Proof on-chain">
+    <a href="https://agent-registry-mcp.concordium.com/v1/check-badge/JyP9U25oUQ6KdnBBHdTYP?network=testnet" target="_blank" rel="noopener"><b>Agent #1287 is verified</b><span>Concordium badge: 15 of 15 checks pass</span></a>
+    <a href="https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7" target="_blank" rel="noopener"><b>The same agent as on NEAR</b><span>Linked on-chain to buyer.cleartopay.testnet</span></a>
+    <a href="https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e866ae55d55e883d7d5d5f6817c598557264322e6f54ddd52aa1a73c89c7285e" target="_blank" rel="noopener"><b>25 CCD held in escrow</b><span>Order #1 on contract &lt;13092,0&gt;</span></a>
+  </section>
+
+  <section class="how" id="how">
+    <h2>How a payment clears</h2>
+    <p>Four checks, in this order. The contract runs them itself; the AI can read and ask, but it can never pay on its own.</p>
+    <ol class="steps">
+      <li><b>The agent reads the invoice</b><span>Agent #1287 submits it to the escrow. Its Concordium badge is checked first.</span></li>
+      <li><b>Two people count, blind</b><span>A receiver and an approver each commit a count before either can see the other’s.</span></li>
+      <li><b>The supplier approves the amount</b><span>From its own account, for this exact invoice. Nobody can pay it less.</span></li>
+      <li><b>The contract pays</b><span>Only to the supplier’s own account, and only after a new account has waited 72 hours.</span></li>
+    </ol>
+  </section>
+
+  <section class="judge">
+    <div><h2>Try to fool it</h2><p>Judge mode runs the attacks that empty company accounts today, against the real contract on testnet, and shows each one fail.</p><a class="btn gold" href="app/#/judge">Open judge mode</a></div>
+    <ul>
+      <li>Pay the supplier less than agreed <span>held</span></li>
+      <li>A third person changes the count <span>refused</span></li>
+      <li>Pay a payout account changed today <span>held</span></li>
+      <li>An unverified agent sends an invoice <span>refused</span></li>
+    </ul>
+  </section>
+  <foot>Built for the Concordium Trusted Agents Hackathon. Open source: <a href="https://github.com/joezzy-web3/ctp-concordium">github.com/joezzy-web3/ctp-concordium</a></foot>
+</div>
+</body>
+</html>
