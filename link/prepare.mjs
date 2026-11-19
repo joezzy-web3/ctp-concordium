@@ -128,7 +128,7 @@ function tx(label, built, expectedHex, contract, receiveName, parameters, schema
   const hexes = hexStrings(built);
   // The live registry returns `parameter_hex` next to `parameter_json`; prefer the hex field by name.
   const paramHex = (hexes.find(([path]) => /parameter_hex$/i.test(path))
-    ?? hexes.find(([path]) => /param[^.]*hex$/i.test(path))
+    ?? hexes.find(([path]) => /param[^.]*(\.)?hex$/i.test(path))
     ?? hexes.find(([path]) => /param[^.]*$/i.test(path) && !/json/i.test(path))
     ?? [])[1] ?? '';
   if (paramHex !== expectedHex) {
