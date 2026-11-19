@@ -14,7 +14,7 @@ Every row marked live links to on-chain evidence or runs in the test suite. Rows
 | Cross-chain link to the Clear to Pay agent on NEAR (CIS-8) | **Live (testnet)** | CIS-8 checked the NEAR signature; registry confirmed the binding before attaching it (link tx below) |
 | Badge gate: refuse counterparty agents whose badge or card does not check out | **Live (off-chain code)** | `gate/`, `npm test` |
 | Receipts: canonical, salted, rule-checked, hash anchored with RegisterData | **Live (testnet)** | `receipt/`, first anchor tx in PLAN.md. Proves the receipt existed unchanged; the issuer and the payment are proven by the escrow contract once deployed |
-| Escrow contract: two named people in two roles count blind, supplier approves its own invoice, 72-hour hold on new payout accounts, pays only on CLEARED, logs every decision | **Deployed (testnet)**, first order next | `<13091,0>`, module `6c8a0802…f10a34c` = verifiable build of commit `471f25f` ([deploy tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=841990e37d7e55b79d7c1dc185ee6e76eb3c81f661d30202bf2c318bbff6d4af), [create tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e53c212f4a5b3eaf822eef56a1163e729ba10c27ca33b98123963b639153dc64)); 14 rule tests, 14 end-to-end tests |
+| Escrow contract: two named people in two roles count blind, supplier approves its own invoice and amount, 72-hour hold on new payout accounts, pays only on CLEARED, logs every decision | **Deployed (testnet)**, first order next | `<13092,0>` (v2), module `532e6af2…da537f27` = verifiable build of commit `1796a52` ([deploy tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=00762ac602569316657f1950a92b7a615d4925afe221077cf404be5c13a701bc)); 14 rule tests, 16 end-to-end tests |
 | Contract checks the agent in the CIS-8004 registry itself | In progress | today the buyer registers only agents the badge gate cleared, and the contract re-checks registration at every decision |
 | Signers proven to be two different verified people (Concordium ID zero-knowledge proofs) | In progress | today: two different accounts in two different roles, each owned by an ID-verified Concordium identity |
 | Payments: x402 service fees; stablecoin payout | In progress | escrow pays in CCD first |
@@ -28,7 +28,7 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 | Key registry (CIS-8) | `<12801,0>` |
 | Explorer | https://testnet.ccdscan.io |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
-| **Escrow contract** | `<13091,0>` · module `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c` · buyer admin `4QzE6Z…cEmTthG` · payout hold 72 h |
+| **Escrow contract** | `<13092,0>` (v2) · module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27` · buyer admin `4QzE6Z…cEmTthG` · payout hold 72 h · [console](https://joezzy-web3.github.io/ctp-concordium/console/) |
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
 Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model; no code reused).

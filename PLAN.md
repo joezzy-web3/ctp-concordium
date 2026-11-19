@@ -19,7 +19,8 @@
 - Reproducible contract: `Cargo.lock` committed, Rust pinned to 1.97.0, verifiable build in CI (`concordium/verifiable-sc-wasm32v1:1`), module SHA-256 at `d1bd4bf`: `29e25639c578ee88e44a98f22ced8ef1057a4cc511bcdba252b96896d7d48914`. End-to-end tests 14/14 in CI and on the developer machine.
 - **Module to deploy:** verifiable build of commit `471f25f` (CI run 44586331198, artifact `ctp_escrow-verifiable`), SHA-256 = module reference `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c`; `verify-build` reports "Source and module match". Deploy page `deploy/` refuses any other file.
 
-## Escrow v2 (to deploy)
+## Escrow v2: deployed 19 Nov 2026 20:34 at `<13092,0>`
+- Deploy tx `00762ac602569316657f1950a92b7a615d4925afe221077cf404be5c13a701bc`; created by buyer admin `4QzE6Z…cEmTthG` (init tx `62b5bc…`, block 51029168), hold 72 h.
 - Verifiable build of `1796a52` (CI run 44595683477), module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27`, "Source and module match", 16/16 end-to-end tests incl. the underpay attack.
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
