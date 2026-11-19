@@ -2,12 +2,49 @@ name: test
 on: [push, pull_request]
 permissions:
   contents: read
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  node:
+    name: Node tests and reproducible page bundles
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
       - run: npm test
+      - name: Committed page bundles match their source
+        if: runner.os == 'Linux'
+        run: |
+          npm run -s build:pages
+          git diff --exit-code -- sign/app.js anchor/app.js link/app.js
+
+  contract:
+    name: Escrow contract (rules, WASM build, end-to-end tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-concordium
+            ~/.cargo/registry
+            contract/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('contract/Cargo.toml') }}
+      - name: Install cargo-concordium
+        run: command -v cargo-concordium || cargo install --locked cargo-concordium
+      - run: cargo test --lib
+      - run: cargo concordium build --schema-embed --out ctp_escrow.wasm.v1
+      - run: cargo test --test escrow
+      - name: Module hash
+        run: sha256sum ctp_escrow.wasm.v1
