@@ -6,6 +6,7 @@ import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
 import { placeholderView } from './placeholder.js';
 import { signerView } from './signer.js';
+import { supplierView, agentView } from './roles.js';
 
 const ROLES = {
   buyer: { name: 'Buyer', line: 'Orders, escrow and payments. Only the buyer account can sign here.', guide: [
@@ -34,8 +35,8 @@ const routes = {
   '': () => pickView(),
   buyer: (sub) => buyerView(sub),
   signer: () => signerView(),
-  supplier: () => placeholderView('supplier'),
-  agent: () => placeholderView('agent'),
+  supplier: () => supplierView(),
+  agent: () => agentView(),
   judge: () => placeholderView('judge'),
 };
 const ORDER = ['', 'buyer', 'signer', 'supplier', 'agent', 'judge'];

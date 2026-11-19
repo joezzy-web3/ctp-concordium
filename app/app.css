@@ -205,3 +205,12 @@ html[data-dir="back"]::view-transition-old(root){animation-name:vt-out-r}html[da
 .fine{font-size:13px;color:var(--mute)}
 .backup{margin-top:12px}.backup summary{cursor:pointer;font-weight:600;color:var(--navy);min-height:32px}
 .closed{margin-top:8px}.closed summary{cursor:pointer;font-weight:600;color:var(--mute);min-height:40px}
+
+/* supplier and agent */
+.big-amount{font:400 56px/1 var(--display);color:var(--navy);margin:8px 0}
+.big-addr{word-break:break-all;background:var(--sheet);padding:12px 16px;border-radius:12px}
+.change{margin-top:12px}.change summary{cursor:pointer;font-weight:600;color:var(--navy);min-height:40px}
+.plain{list-style:none;margin:0;padding:0}.plain li{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}
+.order-id{font-variant-numeric:tabular-nums}
+.panel-h h2,.dash-h h2,.empty h2,.soon h2{text-wrap:balance}
+.btn:active{transform:scale(.96)}
