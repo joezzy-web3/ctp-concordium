@@ -29,8 +29,19 @@ nav.top .links a{color:inherit;text-decoration:none}
 .o-inv{left:3%;top:30px}.o-inv .in{width:136px;height:176px;background:var(--card);transform:rotate(-12deg);padding:16px;text-align:left;font-size:11px;color:var(--mute)}
 .o-inv b{display:block;color:var(--navy);font-size:14px}.o-inv i{display:block;height:6px;background:var(--bar);border-radius:4px;margin:8px 0}
 .o-inv .amt{position:absolute;bottom:14px;left:16px;font:700 18px var(--text);color:var(--navy);font-variant-numeric:tabular-nums}
-.o-seal{left:8%;top:300px}.o-seal .in{width:94px;height:94px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--gold-hi),var(--gold-lo) 70%);display:grid;place-items:center;color:var(--gold-ink);font:700 12px/1.15 var(--text);text-align:center;transform:rotate(8deg)}
-.o-shield{right:3%;top:24px}.o-shield .in{width:114px;height:132px;background:linear-gradient(160deg,var(--blue-hi),var(--navy));clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);transform:rotate(10deg);display:grid;place-items:center;color:var(--on-navy);font:700 14px var(--text);border-radius:0}
+.o-slip{left:7%;top:292px}.o-slip .in{width:152px;padding:16px 16px 20px;background:var(--card);transform:rotate(6deg);text-align:left;font-size:12px;color:var(--mute);border-radius:12px 12px 4px 4px;-webkit-mask:radial-gradient(circle 5px at 50% 100%,transparent 98%,var(--mask)) 0 0/12px 100%;mask:radial-gradient(circle 5px at 50% 100%,transparent 98%,var(--mask)) 0 0/12px 100%}
+.o-slip b{display:block;color:var(--navy);font-size:13px;margin-bottom:8px}
+.o-slip .row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px dashed var(--line);font-variant-numeric:tabular-nums}
+.o-slip .tick{width:16px;height:16px;border-radius:50%;background:var(--ok);display:grid;place-items:center}
+.o-slip .tick svg{width:10px;height:10px}
+.o-id{right:4%;top:52px}.o-id .strap{position:absolute;left:50%;top:-28px;width:16px;height:40px;margin-left:-8px;background:linear-gradient(var(--navy-2),var(--navy));border-radius:4px}
+.o-id .in{position:relative;width:128px;padding:24px 16px 16px;background:linear-gradient(170deg,var(--blue-hi),var(--navy));color:var(--on-navy);transform:rotate(9deg);text-align:left;border-radius:16px}
+.o-id .hole{position:absolute;left:50%;top:8px;width:32px;height:6px;margin-left:-16px;border-radius:4px;background:var(--navy)}
+.o-id .face{width:40px;height:40px;border-radius:10px;background:var(--on-navy);display:grid;place-items:center;margin-bottom:12px}
+.o-id .face svg{width:26px;height:26px}
+.o-id small{display:block;font-size:11px;color:var(--mute-on-navy)}.o-id b{display:block;font:700 15px var(--text);margin-bottom:8px}
+.o-id .ver{display:inline-flex;align-items:center;gap:4px;background:var(--ok-strong);color:var(--on-navy);border-radius:999px;padding:2px 8px 2px 4px;font:600 11px var(--text)}
+.o-id .ver svg{width:12px;height:12px}
 .o-lock{right:7.5%;top:336px}.o-lock .in{position:relative;width:96px;height:80px;background:linear-gradient(160deg,var(--steel-hi),var(--steel-lo));border-radius:16px;transform:rotate(-8deg)}
 .o-lock .shackle{position:absolute;left:22px;top:-36px;width:52px;height:48px;border:8px solid var(--steel);border-bottom:0;border-radius:30px 30px 0 0}
 .o-lock .key{position:absolute;left:42px;top:28px;width:12px;height:22px;background:var(--navy);border-radius:6px}
@@ -60,19 +71,20 @@ foot a{color:var(--navy)}
   .rise{opacity:0;transform:translateY(28px);animation:rise .7s var(--ease-out) forwards;animation-delay:var(--d0,0ms)}
   .ln:nth-child(2){--d0:110ms}.ln:nth-child(3){--d0:190ms}.lede.rise,.ctas.rise{--d0:240ms;transform:translateY(12px)}
   .obj .in{opacity:0;animation:settle .7s var(--ease-out) forwards;animation-delay:calc(300ms + var(--i,0) * 70ms)}
-  .o-inv .in{--r:-12deg;--dx:-40px}.o-seal .in{--r:8deg;--dx:-30px}.o-shield .in{--r:10deg;--dx:40px}.o-lock .in{--r:-8deg;--dx:30px}
-  .o-seal .in{animation:settle .7s var(--ease-out) forwards,stamp .36s var(--ease-out) 1.55s both}
+  .o-inv .in{--r:-12deg;--dx:-40px}.o-slip .in{--r:6deg;--dx:-30px}.o-id .in{--r:9deg;--dx:40px}.o-lock .in{--r:-8deg;--dx:30px}
+  .o-slip .tick{animation:tick .3s var(--ease-out) both}.o-slip .row:nth-of-type(1) .tick{animation-delay:1.35s}.o-slip .row:nth-of-type(2) .tick{animation-delay:1.6s}
+  .o-id .ver{animation:tick .3s var(--ease-out) 1.1s both}
   .o-lock .shackle{animation:close .32s var(--ease-out) 1.85s both}
   .proof::after{animation:fill .6s var(--ease-in-out) 2.05s forwards}
   .obj{animation:drift var(--d,7s) ease-in-out 2.8s infinite alternate}
-  .o-seal{--d:6s}.o-shield{--d:8s}.o-lock{--d:6.5s}
+  .o-slip{--d:6s}.o-id{--d:8s}.o-lock{--d:6.5s}
 }
 @media (prefers-reduced-motion:reduce){
   .rise,.obj .in{animation:fade .5s ease-out both}.proof::after{clip-path:inset(0)}
 }
 @keyframes rise{to{opacity:1;transform:none}}
 @keyframes settle{from{opacity:0;transform:translateX(var(--dx,0)) rotate(var(--r,0deg)) scale(.95)}to{opacity:1;transform:rotate(var(--r,0deg))}}
-@keyframes stamp{0%{transform:rotate(8deg) scale(1)}40%{transform:rotate(2deg) scale(1.12)}100%{transform:rotate(8deg) scale(1)}}
+@keyframes tick{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
 @keyframes close{from{transform:translateY(-12px)}to{transform:none}}
 @keyframes fill{to{clip-path:inset(0)}}
 @keyframes drift{from{transform:translateY(-5px)}to{transform:translateY(6px)}}
@@ -91,8 +103,8 @@ foot a{color:var(--navy)}
 
   <header class="hero">
     <div class="obj o-inv" aria-hidden="true"><div class="in" style="--i:0"><b>INV-1</b>Lagos Foods Ltd<i></i><i></i><i style="width:60%"></i><span class="amt">25 CCD</span></div></div>
-    <div class="obj o-seal" aria-hidden="true"><div class="in" style="--i:1">2 of 2<br>counted</div></div>
-    <div class="obj o-shield" aria-hidden="true"><div class="in" style="--i:2">#1287</div></div>
+    <div class="obj o-slip" aria-hidden="true"><div class="in" style="--i:1"><b>Delivery count</b><div class="row">Receiver 100<span class="tick" style="color:var(--on-navy)"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.3l2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="row">Approver 100<span class="tick" style="color:var(--on-navy)"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.3l2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
+    <div class="obj o-id" aria-hidden="true"><span class="strap"></span><div class="in" style="--i:2"><span class="hole"></span><div class="face"><svg viewBox="0 0 26 26"><rect x="5" y="8" width="16" height="12" rx="4" fill="var(--navy)"/><circle cx="10" cy="14" r="1.8" fill="var(--gold)"/><circle cx="16" cy="14" r="1.8" fill="var(--gold)"/><path d="M13 4v4" stroke="var(--navy)" stroke-width="2" stroke-linecap="round"/><circle cx="13" cy="4" r="1.6" fill="var(--gold)"/></svg></div><small>AI agent</small><b>#1287</b><span class="ver"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.3l2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Verified</span></div></div>
     <div class="obj o-lock" aria-hidden="true"><div class="in" style="--i:3"><span class="shackle"></span><span class="key"></span></div></div>
 
     <h1 aria-label="Payments that wait for proof"><span class="ln rise" style="--i:0">Payments that</span><span class="ln rise" style="--i:1">wait for</span><span class="ln rise" style="--i:2"><span class="proof" data-text="Proof">Proof</span></span></h1>
