@@ -19,6 +19,17 @@
 - Reproducible contract: `Cargo.lock` committed, Rust pinned to 1.97.0, verifiable build in CI (`concordium/verifiable-sc-wasm32v1:1`), module SHA-256 at `d1bd4bf`: `29e25639c578ee88e44a98f22ced8ef1057a4cc511bcdba252b96896d7d48914`. End-to-end tests 14/14 in CI and on the developer machine.
 - **Module to deploy:** verifiable build of commit `471f25f` (CI run 44586331198, artifact `ctp_escrow-verifiable`), SHA-256 = module reference `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c`; `verify-build` reports "Source and module match". Deploy page `deploy/` refuses any other file.
 
+## Demo cast (testnet accounts, public addresses)
+| Role | Account |
+|---|---|
+| Buyer admin of `<13091,0>` | `4QzE6ZTUg2j5FCH4fxyvNLEvcmuY3w8PrTZ66qjqocycEmTthG` |
+| Agent (owner of Agent #1287) | `44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG` |
+| Receiver | `3NrB4khEwjL32cM8qVsay6iHTRznthBFPNCG6GvmLNQygyVE2S` |
+| Approver | `3byivDufzZzRRFasdEcL6pYM9zyyER73kaYvraPWb1rVixy9pA` |
+| Supplier (also its payout account) | `45H81t8SBw5z84LjPcX3VFZRWPrcEKv3bTbao8yC5hbP2BixMY` |
+
+All five come from one tester's identity on testnet. That is exactly the gap Concordium ID proofs close (build order 3): in production each signer proves they are a different verified person.
+
 ## Done
 - [x] Agent Card built with the hosted MCP tool `build_agent_card`, hosted on GitHub Pages, served bytes verified (v1, superseded by v2 below).
 - [x] **Registered on testnet: Agent #1287**, native, active. Agent ID (badge) `JyP9U25oUQ6KdnBBHdTYP`, owner `44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG`, registered 19 Nov 2026 13:41 (UTC+1), via the testnet Agent Registry app.
