@@ -1,0 +1,84 @@
+{
+  "network": "testnet",
+  "owner": "44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG",
+  "agent_id": 1287,
+  "near": {
+    "account": "buyer.cleartopay.testnet",
+    "public_key": "ed25519:CbHyryfNkK8GuvMyG4Jd9TvxygNcCSzZ9Qzxgge6QvbK",
+    "public_key_hex": "ac3980e34943f80de879e9cff1889d51998076d163b29a53db4dc4f57e4f4582",
+    "namespace": "near:testnet",
+    "key_type": "ed25519"
+  },
+  "proof": {
+    "scheme": "solana-ed25519",
+    "canonical_hex": "4349532d382f76312f63616e6f6e6963616c9278f55e8366c065c474c07146d2eedea12cdbe67ee9f9c532922aa9858011b8013200000000000000000000000000004221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f7960c0000006e6561723a746573746e65740c0000006e6561723a746573746e6574070000006564323535313920000000ac3980e34943f80de879e9cff1889d51998076d163b29a53db4dc4f57e4f45820e000000736f6c616e612d65643235353139",
+    "signature_hex": "16f872cb6d0be1041fcbf81983f5e27814346bd8934aa5e0bde8a6f62eb79ad374035212ca72672037f9ef5c6cd1b445de29b1d230293c1e4d7a2d62ffc91a07"
+  },
+  "txs": [
+    {
+      "label": "Register the NEAR key in CIS-8",
+      "contract": {
+        "index": 12801,
+        "subindex": 0
+      },
+      "receive_name": "CIS-8.registerExternalKey",
+      "energy": 60000,
+      "parameters": {
+        "external_key": {
+          "namespace": "near:testnet",
+          "key_type": "ed25519",
+          "public_key": "ac3980e34943f80de879e9cff1889d51998076d163b29a53db4dc4f57e4f4582"
+        },
+        "proof": {
+          "scheme": "solana-ed25519",
+          "signature": "16f872cb6d0be1041fcbf81983f5e27814346bd8934aa5e0bde8a6f62eb79ad374035212ca72672037f9ef5c6cd1b445de29b1d230293c1e4d7a2d62ffc91a07"
+        },
+        "metadata": [
+          {
+            "key": "near_account",
+            "value": "buyer.cleartopay.testnet"
+          },
+          {
+            "key": "agent",
+            "value": "Clear to Pay, Concordium Agent #1287"
+          }
+        ]
+      },
+      "schema_b64": "FAADAAAADAAAAGV4dGVybmFsX2tleRQAAwAAAAkAAABuYW1lc3BhY2UWAggAAABrZXlfdHlwZRYCCgAAAHB1YmxpY19rZXkdAgUAAABwcm9vZhQAAgAAAAYAAABzY2hlbWUWAgkAAABzaWduYXR1cmUdAggAAABtZXRhZGF0YRACFAACAAAAAwAAAGtleRYCBQAAAHZhbHVlFgI=",
+      "parameter_hex": "0c0000006e6561723a746573746e6574070000006564323535313920000000ac3980e34943f80de879e9cff1889d51998076d163b29a53db4dc4f57e4f45820e000000736f6c616e612d656432353531394000000016f872cb6d0be1041fcbf81983f5e27814346bd8934aa5e0bde8a6f62eb79ad374035212ca72672037f9ef5c6cd1b445de29b1d230293c1e4d7a2d62ffc91a07020000000c0000006e6561725f6163636f756e741800000062757965722e636c656172746f7061792e746573746e6574050000006167656e7424000000436c65617220746f205061792c20436f6e636f726469756d204167656e74202331323837"
+    },
+    {
+      "label": "Attach it to Agent #1287",
+      "contract": {
+        "index": 12802,
+        "subindex": 0
+      },
+      "receive_name": "CIS-8004.setExternalReference",
+      "energy": 60000,
+      "parameters": {
+        "token_id": "0705000000000000",
+        "external_reference": {
+          "Some": [
+            {
+              "contract_address": {
+                "index": 12801,
+                "subindex": 0
+              },
+              "kind": {
+                "Cis8": [
+                  {
+                    "namespace": "near:testnet",
+                    "key_type": "ed25519",
+                    "public_key": "ac3980e34943f80de879e9cff1889d51998076d163b29a53db4dc4f57e4f4582"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "schema_b64": "FAACAAAACAAAAHRva2VuX2lkHQASAAAAZXh0ZXJuYWxfcmVmZXJlbmNlFQIAAAAEAAAATm9uZQIEAAAAU29tZQEBAAAAFAACAAAAEAAAAGNvbnRyYWN0X2FkZHJlc3MMBAAAAGtpbmQVAQAAAAQAAABDaXM4AQEAAAAUAAMAAAAJAAAAbmFtZXNwYWNlFgIIAAAAa2V5X3R5cGUWAgoAAABwdWJsaWNfa2V5HQI=",
+      "parameter_hex": "0807050000000000000101320000000000000000000000000000000c0000006e6561723a746573746e6574070000006564323535313920000000ac3980e34943f80de879e9cff1889d51998076d163b29a53db4dc4f57e4f4582"
+    }
+  ]
+}
