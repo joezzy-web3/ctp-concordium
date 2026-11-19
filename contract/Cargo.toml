@@ -5,6 +5,10 @@ edition = "2021"
 license = "MIT"
 description = "Clear to Pay escrow: supplier payment rules enforced on-chain (Concordium)"
 
+[features]
+# Builds the AgentView test helper into the library (used by the mock registry).
+mock = []
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

@@ -1,0 +1,21 @@
+[package]
+name = "mock_registry"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Test-only stand-in for the CIS-8004 Agent Registry: answers agentOf in the specification's layout."
+publish = false
+
+[features]
+mock = []
+default = ["mock"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+concordium-std = "11.0.0"
+
+[profile.release]
+opt-level = "s"
+codegen-units = 1

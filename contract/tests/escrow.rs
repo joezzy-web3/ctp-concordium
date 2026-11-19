@@ -28,6 +28,15 @@ const ENERGY: Energy = Energy { energy: 100_000 };
 struct T {
     chain: Chain,
     addr: ContractAddress,
+    registry: ContractAddress,
+}
+
+/// Test-only registry entry (same layout as mock-registry's `Entry`).
+#[derive(concordium_std::Serial)]
+struct Entry {
+    token_id: u64,
+    owner: AccountAddress,
+    active: bool,
 }
 
 impl T {
@@ -47,6 +56,15 @@ impl T {
         e.parse_return_value::<Error>().expect("contract error")
     }
     fn balance(&self, a: AccountAddress) -> Amount { self.chain.account_balance_available(a).unwrap() }
+    /// Changes what the registry says about agent 1287.
+    fn registry_says(&mut self, owner: AccountAddress, active: bool) {
+        self.chain.contract_update(SIGNER, ADMIN, Address::Account(ADMIN), ENERGY, UpdateContractPayload {
+            amount: Amount::zero(),
+            address: self.registry,
+            receive_name: OwnedReceiveName::new_unchecked("CIS-8004.set".into()),
+            message: OwnedParameter::from_serial(&Entry { token_id: 1287, owner, active }).unwrap(),
+        }).expect("registry set");
+    }
     fn wait(&mut self, ms: u64) { self.chain.tick_block_time(Duration::from_millis(ms)).unwrap(); }
     fn decision(&self, r: &ContractInvokeSuccess) -> (Verdict, Vec<Code>, Option<AccountAddress>) {
         for (_, evs) in r.events() {
@@ -58,6 +76,17 @@ impl T {
         }
         panic!("no Decision event");
     }
+}
+
+fn deploy_registry(chain: &mut Chain, entries: Vec<Entry>) -> ContractAddress {
+    let m = module_load_v1("mock-registry/mock_registry.wasm.v1").expect("build the mock registry: cd mock-registry && cargo concordium build --out mock_registry.wasm.v1");
+    let r = chain.module_deploy_v1(SIGNER, ADMIN, m).expect("deploy mock registry").module_reference;
+    chain.contract_init(SIGNER, ADMIN, ENERGY, InitContractPayload {
+        amount: Amount::zero(),
+        mod_ref: r,
+        init_name: OwnedContractName::new_unchecked("init_CIS-8004".into()),
+        param: OwnedParameter::from_serial(&entries).unwrap(),
+    }).expect("init mock registry").contract_address
 }
 
 fn commit_hash(qty: u64, salt: [u8; 32]) -> HashSha2256 {
@@ -72,15 +101,16 @@ fn setup_with_order(escrow: Amount) -> T {
     for a in [ADMIN, RECEIVER, APPROVER, OTHER_SIGNER, SUPPLIER, PAYOUT, NEW_PAYOUT, AGENT, STRANGER] {
         chain.create_account(Account::new(a, Amount::from_ccd(10_000)));
     }
-    let module = module_load_v1("ctp_escrow.wasm.v1").expect("build the module first: cargo concordium build --schema-embed --out ctp_escrow.wasm.v1");
+    let registry = deploy_registry(&mut chain, vec![Entry { token_id: 1287, owner: AGENT, active: true }]);
+    let module = module_load_v1("ctp_escrow.wasm.v1").expect("build the module first: cargo concordium build --out ctp_escrow.wasm.v1");
     let deployed = chain.module_deploy_v1(SIGNER, ADMIN, module).expect("deploy");
     let init = chain.contract_init(SIGNER, ADMIN, ENERGY, InitContractPayload {
         amount: Amount::zero(),
         mod_ref: deployed.module_reference,
         init_name: OwnedContractName::new_unchecked("init_ctp_escrow".into()),
-        param: OwnedParameter::from_serial(&InitParams { hold_ms: HOLD_MS }).unwrap(),
+        param: OwnedParameter::from_serial(&InitParams { hold_ms: HOLD_MS, registry }).unwrap(),
     }).expect("init");
-    let mut t = T { chain, addr: init.contract_address };
+    let mut t = T { chain, addr: init.contract_address, registry };
     // The whole cast in one transaction.
     t.ok(ADMIN, "setup", &SetupParams {
         signers: vec![
@@ -263,7 +293,7 @@ fn hold_outside_the_allowed_range_is_refused_at_init() {
             amount: Amount::zero(),
             mod_ref: m,
             init_name: OwnedContractName::new_unchecked("init_ctp_escrow".into()),
-            param: OwnedParameter::from_serial(&InitParams { hold_ms }).unwrap(),
+            param: OwnedParameter::from_serial(&InitParams { hold_ms, registry: ContractAddress { index: 0, subindex: 0 } }).unwrap(),
         });
         assert!(r.is_err(), "hold {hold_ms} should be refused");
     }
@@ -294,4 +324,71 @@ fn setup_is_admin_only_and_refuses_a_supplier_twice() {
     assert_eq!(t.err(STRANGER, "setup", &p), Error::NotAdmin);
     let again = SetupParams { signers: vec![], agents: vec![], suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: NEW_PAYOUT }] };
     assert_eq!(t.err(ADMIN, "setup", &again), Error::SupplierExists);
+}
+
+#[test]
+fn an_agent_the_registry_does_not_vouch_for_cannot_be_added() {
+    let mut t = setup();
+    // Wrong owner for token 1287.
+    assert_eq!(t.err(ADMIN, "add_agent", &AgentParams { account: STRANGER, agent_token_id: 1287 }), Error::AgentNotVerified);
+    // A token the registry does not know.
+    assert_eq!(t.err(ADMIN, "add_agent", &AgentParams { account: AGENT, agent_token_id: 9999 }), Error::AgentNotVerified);
+    // Revoked.
+    t.registry_says(AGENT, false);
+    assert_eq!(t.err(ADMIN, "add_agent", &AgentParams { account: AGENT, agent_token_id: 1287 }), Error::AgentNotVerified);
+}
+
+#[test]
+fn a_revoked_agent_is_refused_at_once() {
+    let mut t = setup();
+    t.registry_says(AGENT, false);
+    assert_eq!(t.err(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::AgentNotVerified);
+    t.registry_says(AGENT, true);
+    happy_path_until_execute(&mut t, QTY, QTY);
+    t.wait(HOLD_MS);
+    t.registry_says(AGENT, false);
+    let before = t.balance(PAYOUT);
+    assert_eq!(t.err(AGENT, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT }), Error::AgentNotVerified);
+    assert_eq!(t.balance(PAYOUT), before);
+}
+
+#[test]
+fn an_agent_transferred_to_someone_else_is_refused() {
+    let mut t = setup();
+    t.registry_says(STRANGER, true);
+    assert_eq!(t.err(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::AgentNotVerified);
+}
+
+#[test]
+fn a_junk_invoice_can_be_rejected_and_the_real_one_paid() {
+    let mut t = setup();
+    let (sr, sa) = ([11u8; 32], [22u8; 32]);
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
+    t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
+    // A hijacked agent jams the order with a junk invoice.
+    let junk = HashSha2256([0xee; 32]);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: junk, amount: PRICE });
+    assert_eq!(t.err(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::InvoiceExists);
+    // Strangers and the agent cannot clear it; the supplier can.
+    assert_eq!(t.err(STRANGER, "reject_invoice", &ORDER), Error::NotAdmin);
+    assert_eq!(t.err(AGENT, "reject_invoice", &ORDER), Error::NotAdmin);
+    t.ok(SUPPLIER, "reject_invoice", &ORDER);
+    // The real invoice goes through and is paid.
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.wait(HOLD_MS);
+    assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
+}
+
+#[test]
+fn rejecting_clears_the_supplier_approval_too() {
+    let mut t = setup();
+    happy_path_until_execute(&mut t, QTY, QTY);
+    t.ok(ADMIN, "reject_invoice", &ORDER);
+    assert_eq!(t.err(AGENT, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT }), Error::NoInvoice);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.wait(HOLD_MS);
+    assert_eq!(execute(&mut t).1, vec![Code::HeldNoSupplierApproval]);
 }

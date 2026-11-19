@@ -10,6 +10,7 @@
 
 use concordium_std::*;
 pub mod rules;
+pub mod registry;
 pub use rules::{Code, Role, Verdict};
 use rules::{Facts, Reveal};
 
@@ -76,6 +77,8 @@ pub struct Order {
 pub struct State<S = StateApi> {
     admin: AccountAddress,
     hold_ms: u64,
+    /// The CIS-8004 Agent Registry asked about every agent, at registration and at every use.
+    registry: ContractAddress,
     signers: StateMap<AccountAddress, Role, S>,
     /// Account that owns a registered agent -> its CIS-8004 agent token id.
     agents: StateMap<AccountAddress, u64, S>,
@@ -115,6 +118,10 @@ pub enum Error {
     RevealDoesNotMatchCommit,
     InvoiceExists,
     TransferFailed,
+    /// The registry does not show this agent as Active and owned by this account.
+    AgentNotVerified,
+    /// The registry could not be read, or answered in an unexpected format (fail closed).
+    RegistryUnavailable,
 }
 
 impl From<LogError> for Error {
@@ -142,6 +149,7 @@ pub enum Event {
     CountRevealed { order_id: OrderId, signer: AccountAddress, role: Role, qty: u64 },
     InvoiceSubmitted { order_id: OrderId, agent: AccountAddress, agent_token_id: u64, invoice_hash: HashSha2256, amount: Amount },
     InvoiceApproved { order_id: OrderId, supplier: AccountAddress, invoice_hash: HashSha2256, amount: Amount },
+    InvoiceRejected { order_id: OrderId, by: AccountAddress, invoice_hash: HashSha2256 },
     SignerSet { account: AccountAddress, role: Role },
     AgentSet { account: AccountAddress, agent_token_id: u64 },
     Decision {
@@ -163,6 +171,8 @@ pub enum Event {
 pub struct InitParams {
     /// How long a new payout account waits before it can be paid (ms). 72 h in production.
     pub hold_ms: u64,
+    /// The CIS-8004 Agent Registry (testnet: <12802,0>).
+    pub registry: ContractAddress,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -239,6 +249,7 @@ pub struct ExecuteParams {
 pub struct ConfigView {
     pub admin: AccountAddress,
     pub hold_ms: u64,
+    pub registry: ContractAddress,
 }
 
 // ---------- helpers ----------
@@ -252,6 +263,27 @@ fn sender_account(ctx: &ReceiveContext) -> ContractResult<AccountAddress> {
 
 fn ensure_admin(ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<()> {
     ensure!(ctx.sender().matches_account(&host.state().admin), Error::NotAdmin);
+    Ok(())
+}
+
+/// Asks the CIS-8004 registry whether `token_id` is Active and owned by `account`.
+/// Any failure to read or parse the answer is a refusal (fail closed).
+fn verify_agent(host: &Host<State>, token_id: u64, account: &AccountAddress) -> ContractResult<()> {
+    let mut param = [0u8; 9];
+    param[0] = 8;
+    param[1..].copy_from_slice(&token_id.to_le_bytes());
+    let registry = host.state().registry;
+    let mut rv = match host.invoke_contract_raw_read_only(&registry, Parameter::new_unchecked(&param), EntrypointName::new_unchecked("agentOf"), Amount::zero()) {
+        Ok(Some(rv)) => rv,
+        Ok(None) => return Err(Error::RegistryUnavailable),
+        Err(CallContractError::LogicReject { .. }) => return Err(Error::AgentNotVerified), // no such agent
+        Err(_) => return Err(Error::RegistryUnavailable),
+    };
+    let mut bytes = Vec::new();
+    bytes.resize(rv.size() as usize, 0u8);
+    rv.read_exact(&mut bytes).map_err(|_| Error::RegistryUnavailable)?;
+    let info = registry::parse_agent_of(&bytes).map_err(|_| Error::RegistryUnavailable)?.ok_or(Error::AgentNotVerified)?;
+    ensure!(info.token_id == token_id && info.active && info.owner == account.0, Error::AgentNotVerified);
     Ok(())
 }
 
@@ -270,6 +302,7 @@ fn init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<State
     Ok(State {
         admin: ctx.init_origin(),
         hold_ms: p.hold_ms,
+        registry: p.registry,
         signers: state_builder.new_map(),
         agents: state_builder.new_map(),
         suppliers: state_builder.new_map(),
@@ -286,6 +319,7 @@ fn set_signer(host: &mut Host<State>, logger: &mut Logger, p: &SignerParams) -> 
 }
 
 fn set_agent(host: &mut Host<State>, logger: &mut Logger, p: &AgentParams) -> ContractResult<()> {
+    verify_agent(host, p.agent_token_id, &p.account)?;
     let _ = host.state_mut().agents.insert(p.account, p.agent_token_id);
     logger.log(&Event::AgentSet { account: p.account, agent_token_id: p.agent_token_id })?;
     Ok(())
@@ -488,12 +522,31 @@ fn approve_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
     Ok(())
 }
 
+/// The buyer or the supplier clears a wrong invoice, so the right one can be submitted.
+/// Without this, a compromised agent could jam an order with a junk invoice.
+#[receive(contract = "ctp_escrow", name = "reject_invoice", parameter = "OrderId", error = "Error", mutable, enable_logger)]
+fn reject_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
+    let by = sender_account(ctx).map_err(|_| Error::NotAdmin)?;
+    let order_id: OrderId = ctx.parameter_cursor().get()?;
+    let order = open_order(host, order_id)?;
+    ensure!(!order.paid, Error::OrderClosed);
+    ensure!(by == host.state().admin || by == order.supplier, Error::NotAdmin);
+    let invoice = order.invoice.ok_or(Error::NoInvoice)?;
+    if let Some(mut o) = host.state_mut().orders.get_mut(&order_id) {
+        o.invoice = None;
+        o.supplier_approval = None;
+    }
+    logger.log(&Event::InvoiceRejected { order_id, by, invoice_hash: invoice.invoice_hash })?;
+    Ok(())
+}
+
 // ---------- agent ----------
 
 #[receive(contract = "ctp_escrow", name = "submit_invoice", parameter = "InvoiceParams", error = "Error", mutable, enable_logger)]
 fn submit_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     let agent = sender_account(ctx).map_err(|_| Error::NotAgent)?;
     let agent_token_id = host.state().agents.get(&agent).map(|t| *t).ok_or(Error::NotAgent)?;
+    verify_agent(host, agent_token_id, &agent)?;
     let p: InvoiceParams = ctx.parameter_cursor().get()?;
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
@@ -511,6 +564,8 @@ fn submit_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Log
 fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<Verdict> {
     let caller = sender_account(ctx).map_err(|_| Error::NotAgent)?;
     let caller_token = host.state().agents.get(&caller).map(|t| *t).ok_or(Error::NotAgent)?;
+    // Re-checked at every decision: a revoked or transferred agent is refused at once.
+    verify_agent(host, caller_token, &caller)?;
     let p: ExecuteParams = ctx.parameter_cursor().get()?;
     let order = open_order(host, p.order_id)?;
     // A paid order is final: no further decisions are logged for it.
@@ -571,5 +626,5 @@ fn view_supplier(ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<Sup
 
 #[receive(contract = "ctp_escrow", name = "view_config", return_value = "ConfigView")]
 fn view_config(_ctx: &ReceiveContext, host: &Host<State>) -> ReceiveResult<ConfigView> {
-    Ok(ConfigView { admin: host.state().admin, hold_ms: host.state().hold_ms })
+    Ok(ConfigView { admin: host.state().admin, hold_ms: host.state().hold_ms, registry: host.state().registry })
 }

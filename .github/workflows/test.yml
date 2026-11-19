@@ -40,11 +40,14 @@ jobs:
             ~/.cargo/bin/cargo-concordium
             ~/.cargo/registry
             contract/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('contract/Cargo.lock', 'contract/rust-toolchain.toml') }}
+            contract/mock-registry/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('contract/Cargo.lock', 'contract/mock-registry/Cargo.lock', 'contract/rust-toolchain.toml') }}
       - name: Install cargo-concordium
         run: command -v cargo-concordium || cargo install --locked cargo-concordium
       - run: cargo test --lib
-      - run: cargo concordium build --schema-embed --out ctp_escrow.wasm.v1
+      - name: Build the test-only stand-in registry
+        run: cd mock-registry && cargo concordium build --out mock_registry.wasm.v1
+      - run: cargo concordium build --out ctp_escrow.wasm.v1
       - run: cargo test --test escrow
       - name: Module hash (host build, used by the tests)
         run: sha256sum ctp_escrow.wasm.v1
