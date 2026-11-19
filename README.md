@@ -18,7 +18,7 @@ Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/p
 | Key registry (CIS-8) | `<12801,0>` |
 | Explorer | https://testnet.ccdscan.io |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
-| **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` |
+| **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid (anchor tx [`9556522bc1…`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) |
 
 Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model; no code reused).
 
