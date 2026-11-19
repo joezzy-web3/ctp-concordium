@@ -5,6 +5,7 @@ import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
 import { placeholderView } from './placeholder.js';
+import { signerView } from './signer.js';
 
 const ROLES = {
   buyer: { name: 'Buyer', line: 'Orders, escrow and payments. Only the buyer account can sign here.', guide: [
@@ -32,7 +33,7 @@ const ROLES = {
 const routes = {
   '': () => pickView(),
   buyer: (sub) => buyerView(sub),
-  signer: () => placeholderView('signer'),
+  signer: () => signerView(),
   supplier: () => placeholderView('supplier'),
   agent: () => placeholderView('agent'),
   judge: () => placeholderView('judge'),

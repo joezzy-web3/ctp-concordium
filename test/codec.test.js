@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeOrder, decodeSupplier, orderStage, microToCcd, accountAddress } from '../app/src/codec.js';
+import { decodeOrder, decodeSupplier, orderStage, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf } from '../app/src/codec.js';
+import { createHash } from 'node:crypto';
 import { accountBytes } from '../link/encode.js';
 
 const F = JSON.parse(readFileSync(new URL('./fixtures/escrow-bytes.json', import.meta.url)));
@@ -54,4 +55,21 @@ test('micro-CCD formats without float errors', () => {
   assert.equal(microToCcd(25000000n), '25');
   assert.equal(microToCcd(1n), '0.000001');
   assert.equal(microToCcd(1234567n), '1.234567');
+});
+
+test('seal layout matches contract/src/rules.rs commit_preimage', async () => {
+  const key = new Uint8Array(32).fill(9);
+  const p = sealPreimage(7, 100, key);
+  assert.equal(Buffer.from(p.subarray(0, 12)).toString(), 'CTP-count/v1');
+  assert.deepEqual([...p.subarray(12, 20)], [7, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([...p.subarray(20, 28)], [100, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([...p.subarray(28)], [...key]);
+  assert.equal(await sealOf(7, 100, key), createHash('sha256').update(p).digest('hex'));
+});
+
+test('CCD amounts parse exactly', () => {
+  assert.equal(ccdToMicro('25'), 25000000n);
+  assert.equal(ccdToMicro('0.25'), 250000n);
+  assert.equal(ccdToMicro('1.000001'), 1000001n);
+  for (const bad of ['', '-1', '1.0000001', '1e3', 'abc', '1,5']) assert.equal(ccdToMicro(bad), null, bad);
 });

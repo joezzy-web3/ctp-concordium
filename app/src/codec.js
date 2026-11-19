@@ -115,3 +115,21 @@ export function ccdToMicro(s) {
   return BigInt(w) * 1000000n + BigInt((f + '000000').slice(0, 6));
 }
 
+
+export const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+/** The 60 bytes a blind count commits to: "CTP-count/v1" ‖ order_id LE ‖ count LE ‖ 32-byte key.
+ *  Same layout as contract/src/rules.rs commit_preimage. */
+export function sealPreimage(orderId, qty, key) {
+  const pre = new Uint8Array(60);
+  pre.set(new TextEncoder().encode('CTP-count/v1'), 0);
+  const dv = new DataView(pre.buffer);
+  dv.setBigUint64(12, BigInt(orderId), true);
+  dv.setBigUint64(20, BigInt(qty), true);
+  pre.set(key, 28);
+  return pre;
+}
+/** The seal stored on-chain: SHA-256 of the preimage, hex. */
+export async function sealOf(orderId, qty, key) {
+  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', sealPreimage(orderId, qty, key))));
+}
