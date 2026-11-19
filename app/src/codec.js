@@ -1,0 +1,108 @@
+// Decoders for the escrow contract's view results, written against the contract's
+// own Rust serialization (see test/fixtures/escrow-bytes.json and test/codec.test.js).
+// Pure JavaScript, no WebAssembly, so the app stays small.
+
+const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) + BigInt(b);
+  let s = '';
+  while (n > 0n) { s = ALPHABET[Number(n % 58n)] + s; n /= 58n; }
+  for (const b of bytes) { if (b !== 0) break; s = '1' + s; }
+  return s;
+}
+
+/** 32 raw bytes -> Concordium account address (base58check, version 1). */
+export async function accountAddress(raw) {
+  const body = new Uint8Array(33);
+  body[0] = 1;
+  body.set(raw, 1);
+  const h1 = new Uint8Array(await crypto.subtle.digest('SHA-256', body));
+  const h2 = new Uint8Array(await crypto.subtle.digest('SHA-256', h1));
+  const all = new Uint8Array(37);
+  all.set(body);
+  all.set(h2.subarray(0, 4), 33);
+  return base58(all);
+}
+
+class Reader {
+  constructor(bytes) { this.b = bytes; this.i = 0; this.v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); }
+  need(n) { if (this.i + n > this.b.length) throw new Error('truncated contract data'); }
+  u8() { this.need(1); return this.b[this.i++]; }
+  u32() { this.need(4); const x = this.v.getUint32(this.i, true); this.i += 4; return x; }
+  u64() { this.need(8); const x = this.v.getBigUint64(this.i, true); this.i += 8; return x; }
+  raw(n) { this.need(n); const x = this.b.slice(this.i, this.i + n); this.i += n; return x; }
+  bool() { const x = this.u8(); if (x > 1) throw new Error('bad bool'); return x === 1; }
+  hex32() { return [...this.raw(32)].map((x) => x.toString(16).padStart(2, '0')).join(''); }
+  role() { const t = this.u8(); if (t > 1) throw new Error('bad role'); return t === 0 ? 'Receiver' : 'Approver'; }
+  done() { if (this.i !== this.b.length) throw new Error('unexpected extra contract data'); }
+}
+
+const accounts = new Map();
+async function acct(r) {
+  const raw = r.raw(32);
+  const key = raw.join(',');
+  if (!accounts.has(key)) accounts.set(key, await accountAddress(raw));
+  return accounts.get(key);
+}
+
+/** Order, as returned by view_order. Amounts are micro-CCD as BigInt. */
+export async function decodeOrder(bytes) {
+  const r = new Reader(bytes);
+  const o = {};
+  o.supplier = await acct(r);
+  o.receiver = await acct(r);
+  o.approver = await acct(r);
+  o.expected_qty = r.u64();
+  o.amount = r.u64();
+  o.commits = [];
+  for (let n = r.u32(); n > 0; n--) o.commits.push({ signer: await acct(r), role: r.role(), hash: r.hex32() });
+  o.reveals = [];
+  for (let n = r.u32(); n > 0; n--) o.reveals.push({ signer: await acct(r), role: r.role(), qty: r.u64() });
+  o.invoice = r.u8() ? { agent: await acct(r), agent_token_id: r.u64(), invoice_hash: r.hex32(), amount: r.u64() } : null;
+  o.supplier_approval = r.u8() ? { invoice_hash: r.hex32(), amount: r.u64() } : null;
+  o.paid = r.bool();
+  o.refunded = r.bool();
+  r.done();
+  return o;
+}
+
+/** Supplier, as returned by view_supplier. payout_set_at is milliseconds since 1970. */
+export async function decodeSupplier(bytes) {
+  const r = new Reader(bytes);
+  const s = { payout: await acct(r), payout_set_at: Number(r.u64()) };
+  r.done();
+  return s;
+}
+
+/** ConfigView, as returned by view_config. */
+export async function decodeConfig(bytes) {
+  const r = new Reader(bytes);
+  const c = { admin: await acct(r), hold_ms: Number(r.u64()) };
+  r.done();
+  return c;
+}
+
+/** Where an order stands, in words a person understands, from its decoded state. */
+export function orderStage(o, supplier, holdMs, now = Date.now()) {
+  if (o.refunded) return { key: 'refunded', label: 'Refunded', tone: 'mute' };
+  if (o.paid) return { key: 'paid', label: 'Paid', tone: 'ok' };
+  if (o.commits.length < 2) return { key: 'counting', label: `Counting: ${o.commits.length} of 2 committed`, tone: 'wait' };
+  if (o.reveals.length < 2) return { key: 'revealing', label: `Revealing: ${o.reveals.length} of 2`, tone: 'wait' };
+  if (o.reveals.some((x) => x.qty !== o.expected_qty)) return { key: 'mismatch', label: 'Counts do not match the order', tone: 'hold' };
+  if (!o.invoice) return { key: 'invoice', label: 'Waiting for the invoice', tone: 'wait' };
+  const approved = o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount;
+  if (!approved) return { key: 'approval', label: 'Waiting for the supplier to approve', tone: 'wait' };
+  if (o.invoice.amount !== o.amount) return { key: 'amount', label: 'Invoice amount differs from the escrow', tone: 'hold' };
+  const free = supplier ? supplier.payout_set_at + holdMs : 0;
+  if (now < free) return { key: 'hold', label: 'Ready, payout hold running', tone: 'hold', until: free };
+  return { key: 'ready', label: 'Ready to pay', tone: 'ok' };
+}
+
+export const microToCcd = (m) => {
+  const s = BigInt(m).toString().padStart(7, '0');
+  const whole = s.slice(0, -6).replace(/^0+(?=\d)/, '');
+  const frac = s.slice(-6).replace(/0+$/, '');
+  return frac ? `${whole}.${frac}` : whole;
+};
