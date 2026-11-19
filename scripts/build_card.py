@@ -7,7 +7,10 @@ returned. That hash is what gets anchored on-chain, and verifiers compare it
 with the SHA-256 of the file as served, so the bytes must not change.
 
 Read-only: it builds JSON, it signs and sends nothing.
-Usage: python3 scripts/build_card.py <your testnet account address>
+Usage: python3 scripts/build_card.py <testnet account address> [token_id]
+
+Always builds for TESTNET (the server defaults to mainnet). Pass the token_id
+once the agent is registered, so the badge carries the right token address.
 """
 import hashlib
 import json
@@ -58,10 +61,13 @@ def call(name, arguments):
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         raise SystemExit(__doc__)
     owner = sys.argv[1].strip()
-    args = {"name": NAME, "description": DESCRIPTION, "agent_uri": AGENT_URI, "owner_account": owner}
+    args = {"name": NAME, "description": DESCRIPTION, "agent_uri": AGENT_URI,
+            "owner_account": owner, "network": "testnet"}
+    if len(sys.argv) == 3:
+        args["token_id"] = sys.argv[2].strip()
     try:
         out = call("build_agent_card", {**args, "skills": SKILLS})
     except SystemExit as e:
@@ -69,6 +75,9 @@ def main():
         out = call("build_agent_card", args)
 
     print("Tool returned keys:", ", ".join(out.keys()))
+    print("Network:", out.get("network"), "| token address:", out.get("token_address"))
+    if out.get("network") not in (None, "testnet"):
+        raise SystemExit("Refusing: the tool built a non-testnet card.")
     # The hash is whichever returned value is a 64-character hex string.
     want = next((v for v in out.values() if isinstance(v, str) and len(v) == 64
                  and all(c in "0123456789abcdefABCDEF" for c in v)), None)
@@ -90,6 +99,12 @@ def main():
             print("Wrote agent-card.json,", len(data), "bytes")
             print("SHA-256:", hashlib.sha256(data).hexdigest())
             print("Matches the tool's hash: yes")
+            badge = next((e for e in json.loads(data).get("capabilities", {}).get("extensions", [])
+                          if "concordium-badge" in e.get("uri", "")), None)
+            if badge:
+                p = badge.get("params", {})
+                print("Badge tokenAddress:", p.get("tokenAddress"))
+                print("Badge contracts:", p.get("contracts"))
             return
     raise SystemExit("Could not reproduce the tool's hash. Paste me the 'Tool returned keys' line.")
 
