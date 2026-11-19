@@ -1,7 +1,7 @@
 // Chain access for the app: the browser wallet for signing, a testnet gRPC-web
 // node for reading the escrow contract and waiting for finalization.
 import { detectConcordiumProvider } from '@concordium/browser-wallet-api-helpers';
-import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, Energy, Parameter, ReceiveName, TransactionHash } from '@concordium/web-sdk';
+import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, Energy, ReceiveName, TransactionHash } from '@concordium/web-sdk';
 import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
 import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
 import { decodeConfig, decodeOrder, decodeSupplier } from './codec.js';
@@ -102,7 +102,9 @@ async function view(method, paramBytes) {
   const res = await node.invokeContract({
     contract: CONTRACT,
     method: ReceiveName.fromString(`ctp_escrow.${method}`),
-    parameter: Parameter.fromBuffer(paramBytes ?? new Uint8Array(0)),
+    // The gRPC client only reads `.buffer` (Parameter.toProto); importing Parameter itself
+    // would pull in a 680 KB schema engine we do not need.
+    parameter: { buffer: paramBytes ?? new Uint8Array(0) },
     energy: Energy.create(100000),
   });
   if (!res) throw new Error('The node could not run the query.');

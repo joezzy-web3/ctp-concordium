@@ -106,3 +106,12 @@ export const microToCcd = (m) => {
   const frac = s.slice(-6).replace(/0+$/, '');
   return frac ? `${whole}.${frac}` : whole;
 };
+
+/** "12.5" -> 12500000n micro-CCD, or null if not a valid amount. */
+export function ccdToMicro(s) {
+  const t = String(s ?? '').trim();
+  if (!/^\d{1,12}(\.\d{1,6})?$/.test(t)) return null;
+  const [w, f = ''] = t.split('.');
+  return BigInt(w) * 1000000n + BigInt((f + '000000').slice(0, 6));
+}
+

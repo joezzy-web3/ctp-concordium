@@ -2,6 +2,8 @@
 
 **An AI agent can be fooled into believing an invoice. Clear to Pay makes sure that belief is not enough to move the company's money** — and on Concordium, every agent and every signer involved is accountable to a verified human or company.
 
+**Try it:** [landing page](https://joezzy-web3.github.io/ctp-concordium/) · [app](https://joezzy-web3.github.io/ctp-concordium/app/) (Concordium Browser Wallet on testnet)
+
 Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**.
 
 ## Status: live today vs in progress

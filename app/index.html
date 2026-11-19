@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay</title>
+<meta name="description" content="Clear to Pay app: buyers fund orders in escrow, two people count deliveries blind, suppliers approve the amount, and the Concordium contract pays only when every check passes.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <a class="brand" href="../"><span class="flag" aria-hidden="true"></span>Clear to Pay</a>
+    <nav id="tabs" aria-label="Roles">
+      <a href="#/buyer" data-role="buyer">Buyer</a>
+      <a href="#/signer" data-role="signer">Delivery signer</a>
+      <a href="#/supplier" data-role="supplier">Supplier</a>
+      <a href="#/agent" data-role="agent">Agent</a>
+      <a href="#/judge" data-role="judge">Judge mode</a>
+    </nav>
+    <button id="wallet" class="btn line" type="button">Connect wallet</button>
+  </header>
+  <div id="band" class="band" aria-live="polite"></div>
+  <main id="view" tabindex="-1"><noscript><p class="panel">This app talks to the Concordium wallet and needs JavaScript.</p></noscript></main>
+</div>
+<div id="notices" aria-live="polite"></div>
+<script>
+  window.addEventListener('error', function (e) {
+    if (e.target && e.target !== window && e.target.tagName !== 'SCRIPT') return; // a font or image failing is not a page error
+    var n = document.createElement('div'); n.className = 'notice no'; n.textContent = 'Page error: ' + (e.message || 'a script failed to load');
+    document.getElementById('notices').appendChild(n);
+  }, true);
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
