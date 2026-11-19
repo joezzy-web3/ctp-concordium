@@ -69,7 +69,11 @@ def main():
         out = call("build_agent_card", args)
 
     print("Tool returned keys:", ", ".join(out.keys()))
-    want = next((v for k, v in out.items() if "hash" in k.lower() and isinstance(v, str) and len(v) == 64), None)
+    # The hash is whichever returned value is a 64-character hex string.
+    want = next((v for v in out.values() if isinstance(v, str) and len(v) == 64
+                 and all(c in "0123456789abcdefABCDEF" for c in v)), None)
+    if want is None:
+        raise SystemExit("No SHA-256 in the tool output. Paste me the 'Tool returned keys' line.")
     # Prefer a ready-made JSON string from the tool; otherwise try common serialisations.
     candidates = [v for v in out.values() if isinstance(v, str) and v.lstrip().startswith("{")]
     card_obj = next((v for k, v in out.items() if isinstance(v, dict) and "name" in v), None)
@@ -80,12 +84,12 @@ def main():
                        json.dumps(card_obj, indent=2, sort_keys=True)]
     for text in candidates:
         data = text.encode("utf-8")
-        if want is None or hashlib.sha256(data).hexdigest() == want.lower():
+        if hashlib.sha256(data).hexdigest() == want.lower():
             with open("agent-card.json", "wb") as f:
                 f.write(data)
             print("Wrote agent-card.json,", len(data), "bytes")
             print("SHA-256:", hashlib.sha256(data).hexdigest())
-            print("Matches tool hash:", want is not None)
+            print("Matches the tool's hash: yes")
             return
     raise SystemExit("Could not reproduce the tool's hash. Paste me the 'Tool returned keys' line.")
 
