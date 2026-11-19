@@ -21,7 +21,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           npm run -s build:pages
-          git diff --exit-code -- sign/app.js anchor/app.js link/app.js deploy/app.js
+          git diff --exit-code -- sign/app.js anchor/app.js link/app.js deploy/app.js console/app.js
 
   contract:
     name: Escrow contract (rules, WASM build, end-to-end tests)

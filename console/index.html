@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · Escrow console (testnet)</title>
+<style>
+  :root { --navy:#10264A; --gold:#E6BE4F; --ok:#127A4A; --bad:#C42B1C; --mute:#55657C; --line:#D5DCD7; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--navy); max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p.sub { color: var(--mute); margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+  td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--mute); width: 34%; }
+  code { font-size: 12px; word-break: break-all; }
+  button { height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--navy); color: #fff; font: inherit; cursor: pointer; margin-right: 8px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .ok { background: #E5F2EA; color: var(--ok); } .bad { background: #FBECEA; color: var(--bad); } .info { background: #F1F3F6; color: var(--mute); }
+</style>
+<style>
+  section { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 18px 0; }
+  section h2 { font-size: 16px; margin: 0 0 4px; } section p { color: var(--mute); margin: 0 0 10px; font-size: 13px; }
+  label { display: block; font-size: 12px; color: var(--mute); margin-top: 8px; }
+  input, select { width: 100%; font: 12px ui-monospace, monospace; padding: 7px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  section button { margin-top: 10px; height: 34px; }
+  #out { position: sticky; bottom: 8px; }
+</style>
+</head>
+<body>
+<h1>Escrow console</h1>
+<p class="sub">Contract <code>&lt;13091,0&gt;</code> on Concordium <b>testnet</b>. Each person connects their own account and does only their part; the contract refuses anyone else.</p>
+<p><button id="connect">Connect wallet</button> <span style="font-size:13px;color:var(--mute)">Connected: <code id="acct">not connected</code></span></p>
+<div id="out"></div>
+
+<section>
+  <h2>Buyer (admin account)</h2>
+  <p>Set up the cast once, then fund each order. The CCD you attach to an order stays in the contract until it is paid or refunded.</p>
+  <div class="row"><div><label>Signer account</label><input id="signer_account"></div>
+  <div><label>Role</label><select id="signer_role"><option>Receiver</option><option>Approver</option></select></div></div>
+  <button data-action="add_signer">Add signer</button>
+  <div class="row"><div><label>Agent account (owner of the registered agent)</label><input id="agent_account" value="44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG"></div>
+  <div><label>Agent token id (CIS-8004)</label><input id="agent_token" value="1287"></div></div>
+  <button data-action="add_agent">Add agent</button>
+  <div class="row"><div><label>Supplier account</label><input id="supplier_account"></div>
+  <div><label>Payout account (starts the 72-hour hold)</label><input id="supplier_payout"></div></div>
+  <button data-action="register_supplier">Register supplier</button>
+  <div class="row"><div><label>Order id</label><input id="order_id" value="1"></div><div><label>Expected quantity</label><input id="order_qty" value="100"></div></div>
+  <div class="row"><div><label>Supplier</label><input id="order_supplier"></div><div><label>Amount to escrow (CCD)</label><input id="order_amount" value="25"></div></div>
+  <div class="row"><div><label>Receiver (named for this order)</label><input id="order_receiver"></div><div><label>Approver (named for this order)</label><input id="order_approver"></div></div>
+  <button data-action="create_order">Create and fund order</button>
+  <div class="row"><div><label>Refund order id</label><input id="refund_order"></div><div></div></div>
+  <button data-action="refund">Refund unpaid order</button>
+</section>
+
+<section>
+  <h2>Signers (receiver and approver)</h2>
+  <p>Count the delivery on your own. Commit first: the contract only sees a fingerprint of your number. When both of you have committed, reveal. Neither can copy the other.</p>
+  <div class="row"><div><label>Order id</label><input id="count_order" value="1"></div><div><label>Your count</label><input id="count_qty"></div></div>
+  <label>Salt (made for you at commit and saved in this browser; keep a copy)</label><input id="count_salt">
+  <button data-action="commit_count">Commit count</button> <button data-action="reveal_count">Reveal count</button>
+</section>
+
+<section>
+  <h2>Invoice (agent submits, supplier approves)</h2>
+  <p>Both pick the same invoice file; its SHA-256 is what goes on-chain. The supplier's approval binds the exact invoice to the order.</p>
+  <div class="row"><div><label>Order id</label><input id="inv_order" value="1"></div><div><label>Invoice amount (CCD)</label><input id="inv_amount" value="25"></div></div>
+  <label>Invoice file</label><input type="file" id="inv_file">
+  <label>Invoice SHA-256</label><input id="inv_hash">
+  <button data-action="submit_invoice">Agent: submit invoice</button> <button data-action="approve_invoice">Supplier: approve invoice</button>
+  <label>Receipt SHA-256 (optional: links the off-chain receipt to the decision)</label><input id="receipt_hash">
+  <button data-action="execute_payment">Agent: ask for payment</button>
+</section>
+
+<section>
+  <h2>Supplier: change payout account</h2>
+  <p>Only the supplier can do this, and every change restarts the 72-hour hold.</p>
+  <label>New payout account</label><input id="new_payout">
+  <button data-action="set_payout">Set payout account</button>
+</section>
+<script>
+  // Shows any loading error on the page instead of failing silently.
+  window.addEventListener('error', (e) => {
+    const box = document.createElement('div');
+    box.className = 'msg bad';
+    box.textContent = 'Page error: ' + (e.message || 'script failed to load');
+    document.getElementById('out').replaceChildren(box);
+  }, true);
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
