@@ -56,6 +56,10 @@ jobs:
           sha256sum dist/*
       - name: Re-verify the module against its packaged source
         run: cargo concordium verify-build --module dist/ctp_escrow.wasm.v1 --source dist/ctp_escrow.wasm.v1.tar
+      - name: Embedded parameter schema (base64, for the console page)
+        run: |
+          cargo concordium schema-base64 --module dist/ctp_escrow.wasm.v1 --out dist/schema.b64
+          echo "SCHEMA_B64=$(tr -d '\n' < dist/schema.b64)"
       - uses: actions/upload-artifact@v4
         with:
           name: ctp_escrow-verifiable
