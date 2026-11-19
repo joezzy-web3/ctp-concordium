@@ -55,7 +55,7 @@ jobs:
           ls -la dist
           sha256sum dist/*
       - name: Re-verify the module against its packaged source
-        run: cargo concordium verify-build --module dist/ctp_escrow.wasm.v1
+        run: cargo concordium verify-build --module dist/ctp_escrow.wasm.v1 --source dist/ctp_escrow.wasm.v1.tar
       - uses: actions/upload-artifact@v4
         with:
           name: ctp_escrow-verifiable

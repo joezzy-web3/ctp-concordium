@@ -19,13 +19,11 @@ cargo test --test escrow               # 14 end-to-end tests against the compile
 ```bash
 cargo concordium build --verifiable --out dist/ctp_escrow.wasm.v1   # needs Docker
 sha256sum dist/ctp_escrow.wasm.v1
-cargo concordium verify-build --module dist/ctp_escrow.wasm.v1     # rebuilds from the packaged source and compares
+cargo concordium verify-build --module dist/ctp_escrow.wasm.v1 --source dist/ctp_escrow.wasm.v1.tar   # rebuilds from the packaged source and compares
 ```
 
 CI (`.github/workflows/test.yml`, job "Escrow contract") does all three on every push and publishes `ctp_escrow.wasm.v1` and its source archive as the artifact `ctp_escrow-verifiable`.
 
-| Build | Image | SHA-256 of `ctp_escrow.wasm.v1` |
-|---|---|---|
-| commit `d1bd4bf` | `concordium/verifiable-sc-wasm32v1:1` | `29e25639c578ee88e44a98f22ced8ef1057a4cc511bcdba252b96896d7d48914` |
+The verifiable build embeds a fingerprint of the packaged `contract/` sources, so any change in that folder (even a README edit) gives a new module hash. The hash that matters is the one of the deployed module; it is recorded here at deployment, with the commit it was built from.
 
 The deployed module reference and contract address will be added here after deployment.
