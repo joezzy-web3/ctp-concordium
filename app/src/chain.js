@@ -7,12 +7,12 @@ import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
 import { decodeConfig, decodeOrder, decodeSupplier } from './codec.js';
 
 export const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
-export const ESCROW = { index: 13092, subindex: 0 };
+export const ESCROW = { index: Number(globalThis.CTP_ESCROW ?? 13092), subindex: 0 };
 export const AGENT = { id: 1287, badge: 'JyP9U25oUQ6KdnBBHdTYP', owner: '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG' };
 const CONTRACT = ContractAddress.create(ESCROW.index, ESCROW.subindex);
 
 // The contract's error variants in order; concordium-std gives the first one code -1.
-const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed'];
+const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed', 'AgentNotVerified', 'RegistryUnavailable'];
 export const EXPLAIN = {
   NotAdmin: 'Only the buyer account can do this.',
   NotSigner: 'This account is not a listed signer.',
@@ -35,6 +35,8 @@ export const EXPLAIN = {
   InvoiceExists: 'An invoice was already submitted for this order.',
   ZeroAmount: 'Attach an amount to fund the order.',
   TransferFailed: 'The payout transfer failed.',
+  AgentNotVerified: 'The Concordium agent registry does not show this agent as active and owned by this account.',
+  RegistryUnavailable: 'The contract could not read the agent registry, so it refused to be safe. Try again.',
 };
 export const errorName = (code) => ERRORS[-Number(code) - 1] ?? null;
 

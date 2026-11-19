@@ -66,7 +66,7 @@ export async function supplierView() {
       const f = e.target.files?.[0];
       if (!f) return;
       fileOk = (await fileHash(f)) === o.invoice.invoice_hash;
-      fill(fileState, fileOk ? chip('ok', 'Same invoice') : chip('no', 'Different file'), ' ', fileOk ? 'This is the invoice the agent submitted.' : 'This is not the invoice the agent submitted. Do not approve; contact the buyer.');
+      fill(fileState, fileOk ? chip('ok', 'Same invoice') : chip('no', 'Different file'), ' ', fileOk ? 'This is the invoice the agent submitted.' : 'This is not the invoice the agent submitted. Do not approve it; reject it below.');
     } });
     return h('section.panel.count',
       h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', approved ? 'Approved' : 'Invoice waiting for your approval'), h('span', chip(st.tone, st.label)))),
@@ -75,7 +75,7 @@ export async function supplierView() {
       approved ? null : [
         h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
         h('label.field', h('span', 'Amount you agree to be paid (CCD)'), amountIn),
-        h('button.btn.gold', { type: 'button', onclick: async (e) => {
+        h('div.count-row', h('button.btn.gold', { type: 'button', onclick: async (e) => {
           if (!fileOk) return notice('no', 'Pick your invoice file first, so you approve exactly the invoice you sent.');
           const micro = ccdToMicro(amountIn.value);
           if (micro == null) return notice('no', 'Enter the amount in CCD, for example 25 or 12.5.');
@@ -83,7 +83,13 @@ export async function supplierView() {
           e.currentTarget.disabled = true;
           const r = await act('approve_invoice', { order_id: o.id, invoice_hash: o.invoice.invoice_hash, amount: micro.toString() }, { done: `You approved order #${o.id} for ${microToCcd(micro)} CCD.` });
           if (r.ok) location.reload();
-        } }, icon('check', 18), 'Approve invoice and amount')]);
+        } }, icon('check', 18), 'Approve invoice and amount'),
+        h('button.btn.text', { type: 'button', onclick: async (e) => {
+          if (!confirm(`Reject this invoice on order #${o.id}? Use this if it is not the invoice you sent. The agent can then submit the right one.`)) return;
+          e.currentTarget.disabled = true;
+          const r = await act('reject_invoice', o.id, { done: `Invoice on order #${o.id} rejected.` });
+          if (r.ok) location.reload();
+        } }, 'Not my invoice: reject it'))]);
   };
 
   return frame(side,

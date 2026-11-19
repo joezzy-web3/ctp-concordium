@@ -280,6 +280,12 @@ async function ordersView() {
         st.until ? [h('dt', 'Payout hold ends'), h('dd', fmtDate(st.until))] : null),
       h('div.actions',
         po ? h('button.btn.line.small', { type: 'button', onclick: () => printPO({ ...po, orderId: o.id, micro: o.amount, units: o.expected_qty }) }, icon('download', 16), 'Purchase order') : null,
+        o.invoice && !o.paid && !o.refunded ? h('button.btn.text.small', { type: 'button', onclick: async (e) => {
+          if (!confirm(`Reject the invoice on order #${o.id}? It is cleared, with any supplier approval, so the right invoice can be submitted.`)) return;
+          e.currentTarget.disabled = true;
+          const res = await act('reject_invoice', o.id, { done: `Invoice on order #${o.id} rejected. The agent can submit the right one.` });
+          if (res.ok) location.reload();
+        } }, 'Reject invoice') : null,
         !o.paid && !o.refunded ? h('button.btn.text.small.danger', { type: 'button', onclick: async (e) => {
           if (!confirm(`Refund order #${o.id}? ${microToCcd(o.amount)} CCD goes back to the buyer and the order closes.`)) return;
           e.currentTarget.disabled = true;

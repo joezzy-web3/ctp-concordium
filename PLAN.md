@@ -15,7 +15,8 @@
 
 ## Audit 19 Nov (external AI, report F-01 to F-15)
 - Fixed and tested: F-03 supplier approves its own invoice; F-05 removed signers cannot reveal; F-06 orders name their two signers; F-07 strict receipt validation; F-08/F-04 honest wording and a live-vs-in-progress table; F-09 hardened card fetch; F-10 pinned link bundle; F-11 timeouts and best-effort wipe documented; F-12 CI runs contract rules, WASM build and 14 end-to-end tests, rebuilds page bundles, runs on Windows; F-13 no HTML injection in pages; F-14 byte-exact JSON and wider ignores; F-15 hold range at init; decisions final once paid.
-- Open, scheduled: F-01 two verified people (Concordium ID proofs, build order 3); F-02 contract checks the agent in CIS-8004 itself; re-anchor the Agent Card with the escrow address after deploy.
+- F-02 fixed in escrow v3 (built and tested, to deploy): the contract asks the CIS-8004 registry `agentOf` itself at add_agent, submit_invoice and execute_payment; parser tested against the registry's real answer for Agent #1287. Also v3: `reject_invoice` (buyer or supplier) so a hijacked agent cannot jam an order.
+- Open: F-01 two verified people (Concordium ID proofs; needs a verifier design: question for office hours Tue 24 Nov); re-anchor the Agent Card with the final escrow address.
 - Reproducible contract: `Cargo.lock` committed, Rust pinned to 1.97.0, verifiable build in CI (`concordium/verifiable-sc-wasm32v1:1`), module SHA-256 at `d1bd4bf`: `29e25639c578ee88e44a98f22ced8ef1057a4cc511bcdba252b96896d7d48914`. End-to-end tests 14/14 in CI and on the developer machine.
 - **Module to deploy:** verifiable build of commit `471f25f` (CI run 44586331198, artifact `ctp_escrow-verifiable`), SHA-256 = module reference `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c`; `verify-build` reports "Source and module match". Deploy page `deploy/` refuses any other file.
 
@@ -25,6 +26,10 @@
 - Order #1 created and funded with 25 CCD (100 units, receiver 3NrB…, approver 3byi…, supplier 45H8…): tx `e866ae55d55e883d7d5d5f6817c598557264322e6f54ddd52aa1a73c89c7285e`, 19 Nov 2026 20:47 Lagos.
 - Verifiable build of `1796a52` (CI run 44595683477), module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27`, "Source and module match", 16/16 end-to-end tests incl. the underpay attack.
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
+
+## Escrow v3: ready to deploy
+- Verifiable build of `72df744` (CI run 44619009408), module `d7f8bd31119f34f1dd8e72031eb72fafbaa43157cd183b1c18767fe0ea4ec9bf`, "Source and module match", 20 unit + 21 end-to-end tests. Init takes `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it.
+- After deploy: setup in one transaction (supplier hold restarts), point the app at the new index. Final demo contract must be set up 72 h before recording; deadline Wed 9 Dec.
 
 ## Demo cast (testnet accounts, public addresses)
 | Role | Account |
