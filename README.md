@@ -28,6 +28,7 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 | Key registry (CIS-8) | `<12801,0>` |
 | Explorer | https://testnet.ccdscan.io |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
+| **Escrow contract** | `<13091,0>` · module `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c` · buyer admin `4QzE6Z…cEmTthG` · payout hold 72 h |
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
 Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model; no code reused).
