@@ -28,7 +28,7 @@
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
 ## Escrow v3: ready to deploy
-- Verifiable build of `72df744` (CI run 44619009408), module `d7f8bd31119f34f1dd8e72031eb72fafbaa43157cd183b1c18767fe0ea4ec9bf`, "Source and module match", 20 unit + 21 end-to-end tests. Init takes `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it.
+- Verifiable build of `fa403c2` (CI run 44629173275), module `14281bf5662547b4f99e66cc1de1df08ec9ec239b319da854ba27f6758f3207f`, "Source and module match", 20 unit + 21 end-to-end tests. Init takes `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it.
 - After deploy: setup in one transaction (supplier hold restarts), point the app at the new index. Final demo contract must be set up 72 h before recording; deadline Wed 9 Dec.
 
 ## Demo cast (testnet accounts, public addresses)
