@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview A · Portals · Clear to Pay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--night:#060A16;--navy:#10264A;--ink:#C9D3E6;--dim:#7C8AA5;--gold:#E6BE4F;--ok:#3FD49A;--hold:#F2A93B;--no:#F2555A;--panel:#0C1530}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--night);color:var(--ink);font:400 16px/1.6 "IBM Plex Sans",system-ui,sans-serif}
+a{color:inherit}
+nav{display:flex;align-items:center;justify-content:space-between;padding:22px clamp(20px,5vw,64px)}
+.brand{display:flex;gap:10px;align-items:center;font:700 15px "Unbounded";color:#fff;letter-spacing:.01em}
+.flag{width:22px;height:16px;background:var(--gold);clip-path:polygon(0 0,100% 0,86% 30%,100% 55%,78% 72%,92% 100%,0 100%)}
+nav .links{display:flex;gap:28px;font-size:14px;color:var(--dim)}
+.btn{display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:999px;border:0;font:600 14px "IBM Plex Sans",system-ui,sans-serif;cursor:pointer}
+.btn.gold{background:var(--gold);color:var(--night)}.btn.ghost{background:transparent;color:#fff;border:1px solid #2A3756}
+.hero{display:grid;grid-template-columns:1.05fr 1fr;align-items:center;gap:20px;min-height:600px;padding:20px clamp(20px,5vw,64px) 40px}
+h1{font:700 clamp(36px,5.2vw,72px)/1.02 "Unbounded";color:#fff;margin:0 0 22px;letter-spacing:-.02em}
+.lede{max-width:46ch;color:var(--ink);font-size:18px;margin:0 0 30px}
+.stage{position:relative;height:520px;overflow:hidden}
+.track{position:absolute;left:50%;top:0;bottom:0;width:120px;transform:translateX(-50%);background:repeating-linear-gradient(0deg,#121C36 0 14px,#0A1226 14px 28px);border-radius:60px;opacity:.7;mask:linear-gradient(transparent,#000 15%,#000 85%,transparent)}
+.ring{position:absolute;left:50%;top:50%;width:300px;height:120px;transform:translate(-50%,-50%);border-radius:50%;border:6px solid var(--gold);box-shadow:0 0 40px 6px rgba(230,190,79,.55),inset 0 0 30px rgba(230,190,79,.4);animation:ring 6s infinite}
+.coin{position:absolute;left:50%;width:120px;height:120px;margin-left:-60px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#2B3E66,#0E1A36 70%);border:3px solid #33476F;display:grid;place-items:center;color:#fff;font:700 13px "Unbounded";text-align:center;line-height:1.2;animation:coin 6s infinite}
+.coin small{display:block;font:500 11px "IBM Plex Sans";color:var(--dim)}
+@keyframes coin{0%{top:-130px}40%{top:220px}55%{top:220px}100%{top:600px}}
+@keyframes ring{0%,38%{border-color:var(--gold);box-shadow:0 0 40px 6px rgba(230,190,79,.55)}45%,60%{border-color:var(--ok);box-shadow:0 0 60px 14px rgba(63,212,154,.6)}70%,100%{border-color:var(--gold);box-shadow:0 0 40px 6px rgba(230,190,79,.55)}}
+.verdict{position:absolute;right:0;top:50%;transform:translateY(-50%);font:700 13px "Unbounded";color:var(--ok);animation:v 6s infinite;opacity:0}
+@keyframes v{0%,42%{opacity:0}46%,62%{opacity:1}70%,100%{opacity:0}}
+.proof{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#1A2544;border-top:1px solid #1A2544;border-bottom:1px solid #1A2544}
+.proof div{background:var(--night);padding:22px clamp(20px,5vw,64px)}
+.proof b{display:block;color:#fff;font:600 15px "IBM Plex Sans"}.proof span{color:var(--dim);font-size:14px}
+.inside{padding:80px clamp(20px,5vw,64px)}
+.inside h2{font:700 30px "Unbounded";color:#fff;margin:0 0 6px}.inside>p{color:var(--dim);margin:0 0 30px}
+.app{display:grid;grid-template-columns:220px 1fr;background:var(--panel);border:1px solid #1A2544;border-radius:22px;overflow:hidden}
+.side{padding:22px;border-right:1px solid #1A2544}.side .role{color:var(--gold);font-weight:600;font-size:13px;margin-bottom:18px}
+.side a{display:block;padding:9px 12px;border-radius:10px;color:var(--dim);text-decoration:none;font-size:14px}.side a.on{background:#16244A;color:#fff}
+.steps{display:flex;gap:6px;padding:20px 28px 0}.steps span{flex:1;height:4px;border-radius:4px;background:#1C2A50}.steps span.done{background:var(--gold)}
+.review{padding:24px 28px 30px}
+.sec{display:grid;grid-template-columns:150px 1fr auto;gap:16px;padding:16px 0;border-bottom:1px solid #1A2544}
+.sec h4{margin:0;color:var(--dim);font:500 14px "IBM Plex Sans"}.sec .v{color:#fff}.sec .v small{display:block;color:var(--dim)}
+.edit{background:none;border:1px solid #2A3756;color:var(--ink);border-radius:8px;height:30px;padding:0 12px;cursor:pointer}
+.sum{display:flex;justify-content:space-between;align-items:center;margin-top:24px;gap:16px;flex-wrap:wrap}
+.total{font:700 34px "Unbounded";color:#fff}.total small{font:400 14px "IBM Plex Sans";color:var(--dim);display:block}
+.wallet{margin-top:20px;background:#081024;border:1px dashed #2A3756;border-radius:12px;padding:14px 16px;font:400 13px/1.7 "IBM Plex Sans";color:var(--dim)}
+.wallet b{color:var(--gold);font-weight:600}
+@media (max-width:900px){.hero,.app{grid-template-columns:1fr}.stage{height:420px}.side{display:none}.proof{grid-template-columns:1fr}.sec{grid-template-columns:1fr auto}.sec h4{grid-column:1/-1}}
+@media (prefers-reduced-motion:reduce){.coin,.ring,.verdict{animation:none}.coin{top:220px}.verdict{opacity:1}}
+.btn:focus-visible,.edit:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+</style>
+</head>
+<body>
+<nav><div class="brand"><span class="flag"></span>Clear to Pay</div><div class="links"><a>How it works</a><a>Judge mode</a><a>Proof on-chain</a></div><button class="btn ghost">Open the app</button></nav>
+<section class="hero">
+  <div>
+    <h1>No invoice gets through without proof.</h1>
+    <p class="lede">An AI agent reads the invoice. Two people count the delivery without seeing each other's number. The supplier approves the amount. Only then does the contract on Concordium release the money.</p>
+    <button class="btn gold">Start an order</button> <button class="btn ghost">Try to fool it</button>
+  </div>
+  <div class="stage" aria-hidden="true"><div class="track"></div><div class="ring"></div><div class="coin">INV-1<small>25 CCD</small></div><div class="verdict">CLEARED</div></div>
+</section>
+<div class="proof">
+  <div><b>Agent #1287, verified</b><span>Concordium badge: 15 of 15 checks pass</span></div>
+  <div><b>Linked to its NEAR agent</b><span>buyer.cleartopay.testnet, proven on-chain</span></div>
+  <div><b>Escrow &lt;13092,0&gt;</b><span>Order #1 holds 25 CCD until every rule passes</span></div>
+</div>
+<section class="inside">
+  <h2>Inside: the buyer's review</h2>
+  <p>Last step of a new order. Everything here goes in one signature.</p>
+  <div class="app">
+    <aside class="side"><div class="role">Buyer</div><a>Readiness</a><a class="on">New order</a><a>Orders</a><a>Cast</a></aside>
+    <div>
+      <div class="steps"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+      <div class="review">
+        <div class="sec"><h4>Supplier</h4><div class="v">Lagos Foods Ltd<small>45H8…BixMY · paid to its own account · hold ends Sun 20:43</small></div><button class="edit">Edit</button></div>
+        <div class="sec"><h4>Order lines</h4><div class="v">Rice, 50 kg bag × 100<small>Delivered to Apapa warehouse</small></div><button class="edit">Edit</button></div>
+        <div class="sec"><h4>Who counts</h4><div class="v">Receiver 3NrB…E2S · Approver 3byi…y9pA<small>Two people, two roles, counting blind</small></div><button class="edit">Edit</button></div>
+        <div class="sum"><div class="total">25 CCD<small>locked in escrow until the order clears</small></div><div><button class="btn ghost">Download PO (PDF)</button> <button class="btn gold">Sign with wallet</button></div></div>
+        <div class="wallet"><b>Your wallet will sign</b><br>contract &lt;13092,0&gt; · ctp_escrow.create_order · attach 25 CCD<br>{ order_id: 1, expected_qty: 100, supplier: 45H8…BixMY, receiver: 3NrB…E2S, approver: 3byi…y9pA }</div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

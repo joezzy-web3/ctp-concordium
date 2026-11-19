@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview B · Bold · Clear to Pay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#ECEEF1;--card:#fff;--ink:#121A2B;--navy:#10264A;--gold:#E3B23C;--mute:#5E6878;--line:#D9DDE3;--ok:#1E9E68;--hold:#D9861C}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:400 16px/1.6 Figtree,system-ui,sans-serif}
+.frame{max-width:1240px;margin:28px auto;background:#F6F7F9;border-radius:28px;box-shadow:0 30px 80px -40px rgba(16,38,74,.35);overflow:hidden}
+nav{display:flex;align-items:center;justify-content:space-between;padding:24px 40px}
+.brand{display:flex;gap:10px;align-items:center;font:700 20px Figtree;color:var(--navy)}
+.flag{width:24px;height:18px;background:var(--gold);clip-path:polygon(0 0,100% 0,86% 30%,100% 55%,78% 72%,92% 100%,0 100%)}
+nav .links{display:flex;gap:30px;font-size:15px;color:var(--mute)}
+.btn{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 24px;border-radius:14px;border:0;font:600 15px Figtree,system-ui,sans-serif;cursor:pointer}
+.btn.dark{background:var(--navy);color:#fff;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}.btn.dark i{width:14px;height:14px;background:var(--gold);clip-path:polygon(0 0,100% 0,100% 100%)}
+.btn.line{background:#fff;color:var(--navy);border:1px solid var(--line)}
+.hero{position:relative;text-align:center;padding:40px 170px 70px}
+h1{position:relative;z-index:2;font:400 clamp(56px,8.4vw,124px)/.9 Anton,Impact,sans-serif;text-transform:uppercase;color:var(--navy);margin:20px 0 26px;letter-spacing:-.01em}
+h1 em{font-style:normal;color:var(--gold)}
+.lede{max-width:52ch;margin:0 auto 30px;color:var(--mute);font-size:18px}
+.obj{position:absolute;border-radius:18px;box-shadow:0 22px 40px -18px rgba(16,38,74,.45),inset 0 1px 0 rgba(255,255,255,.6)}
+.inv{left:2.5%;top:24px;width:132px;height:170px;background:#fff;transform:rotate(-12deg);padding:16px;font-size:11px;color:var(--mute)}
+.inv b{display:block;color:var(--navy);font-size:14px}.inv i{display:block;height:6px;background:#E6E9EE;border-radius:3px;margin:9px 0}
+.inv .amt{position:absolute;bottom:14px;left:16px;font:700 18px Figtree;color:var(--navy)}
+.seal{left:7%;top:300px;width:92px;height:92px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#F3CF6E,#C08D1C 70%);transform:rotate(8deg);display:grid;place-items:center;color:#6B4A07;font:700 11px Figtree;text-align:center}
+.shield{right:3%;top:20px;width:112px;height:130px;background:linear-gradient(160deg,#2E5BA8,#10264A);clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%);transform:rotate(10deg);display:grid;place-items:center;color:#fff;font:700 13px Figtree}
+.lock{right:7%;top:330px;width:96px;height:80px;background:linear-gradient(160deg,#F7F8FA,#C9CFD8);border-radius:16px;transform:rotate(-8deg)}
+.lock:before{content:"";position:absolute;left:22px;top:-34px;width:52px;height:46px;border:9px solid #B8C0CC;border-bottom:0;border-radius:30px 30px 0 0}
+.lock:after{content:"";position:absolute;left:42px;top:28px;width:12px;height:22px;background:var(--navy);border-radius:6px}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:0 40px 40px}
+.strip div{background:#fff;border-radius:18px;padding:18px 20px;border:1px solid var(--line)}
+.strip b{display:block;font-size:16px;color:var(--navy)}.strip span{color:var(--mute);font-size:14px}
+.inside{padding:60px 40px;background:#fff;border-top:1px solid var(--line)}
+.inside h2{font:400 46px/1 Anton,Impact,sans-serif;text-transform:uppercase;color:var(--navy);margin:0 0 6px}.inside>p{color:var(--mute);margin:0 0 28px}
+.tabs{display:flex;gap:8px;margin-bottom:22px}.tabs span{padding:9px 16px;border-radius:12px;background:var(--paper);color:var(--mute);font-weight:600;font-size:14px}.tabs span.on{background:var(--navy);color:#fff}
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}
+.sec{border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:14px;display:flex;justify-content:space-between;gap:16px}
+.sec h4{margin:0 0 4px;font-size:13px;color:var(--mute);font-weight:600}.sec .v{font-size:17px;font-weight:600;color:var(--ink)}.sec small{display:block;color:var(--mute);font-weight:400;font-size:14px}
+.edit{align-self:center;background:var(--paper);border:0;border-radius:10px;height:34px;padding:0 14px;font:600 13px Figtree;color:var(--navy);cursor:pointer}
+.pay{background:var(--navy);color:#fff;border-radius:22px;padding:26px}
+.pay .big{font:400 72px/1 Anton,Impact,sans-serif;margin:6px 0}.pay p{color:#AFC0DC;margin:0 0 20px;font-size:14px}
+.pay .btn{width:100%;justify-content:center;margin-top:10px}.pay .btn.gold{background:var(--gold);color:var(--navy)}.pay .btn.out{background:transparent;color:#fff;border:1px solid #3A5684}
+.wallet{margin-top:16px;font-size:13px;color:#AFC0DC;border-top:1px solid #2A4470;padding-top:14px}
+@media (max-width:900px){.hero{padding:30px 24px 50px}.obj{display:none}.strip,.grid{grid-template-columns:1fr}nav .links{display:none}}
+.btn:focus-visible,.edit:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+</style>
+</head>
+<body>
+<div class="frame">
+<nav><div class="brand"><span class="flag"></span>Clear to Pay</div><div class="links"><span>How it works</span><span>Judge mode</span><span>Proof on-chain</span></div><button class="btn line">Open the app</button></nav>
+<section class="hero">
+  <div class="obj inv"><b>INV-1</b>Lagos Foods Ltd<i></i><i></i><i style="width:60%"></i><span class="amt">25 CCD</span></div>
+  <div class="obj seal">2 of 2<br>counted</div>
+  <div class="obj shield">#1287</div>
+  <div class="obj lock"></div>
+  <h1>Payments that<br>wait for <em>proof</em></h1>
+  <p class="lede">The AI reads the invoice. Two people count the delivery blind. The supplier approves the amount. Only then does the Concordium contract pay.</p>
+  <button class="btn dark">Start an order <i></i></button>
+</section>
+<div class="strip">
+  <div><b>Agent #1287 is verified</b><span>Concordium badge, 15 of 15 checks</span></div>
+  <div><b>Same agent as on NEAR</b><span>Linked on-chain to buyer.cleartopay.testnet</span></div>
+  <div><b>25 CCD in escrow</b><span>Order #1 on contract &lt;13092,0&gt;</span></div>
+</div>
+<section class="inside">
+  <h2>Review and sign</h2>
+  <p>The last step of a new order. Check it, change anything, then one signature sends it all.</p>
+  <div class="tabs"><span>Readiness</span><span class="on">New order</span><span>Orders</span><span>Cast</span></div>
+  <div class="grid">
+    <div>
+      <div class="sec"><div><h4>Supplier</h4><div class="v">Lagos Foods Ltd<small>Paid to 45H8…BixMY · new-account hold ends Sun 20:43</small></div></div><button class="edit">Edit</button></div>
+      <div class="sec"><div><h4>Order lines</h4><div class="v">Rice, 50 kg bag × 100<small>Delivered to Apapa warehouse</small></div></div><button class="edit">Edit</button></div>
+      <div class="sec"><div><h4>Who counts the delivery</h4><div class="v">3NrB…E2S and 3byi…y9pA<small>Receiver and approver, counting without seeing each other's number</small></div></div><button class="edit">Edit</button></div>
+    </div>
+    <div class="pay">
+      <div style="font-size:14px;color:#AFC0DC">Locked in escrow</div>
+      <div class="big">25 CCD</div>
+      <p>Paid to the supplier only when both counts match, the supplier approves this amount, and the hold has passed.</p>
+      <button class="btn gold">Sign with wallet</button>
+      <button class="btn out">Download PO (PDF)</button>
+      <div class="wallet">Your wallet will sign: ctp_escrow.create_order on &lt;13092,0&gt;, attaching 25 CCD.</div>
+    </div>
+  </div>
+</section>
+</div>
+</body>
+</html>

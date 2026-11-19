@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview C · Mix · Clear to Pay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E9EBE4;--card:#F7F8F3;--navy:#10264A;--gold:#E6BE4F;--sage:#C7D6BF;--amber:#F2D58A;--lilac:#B9B6F2;--rose:#F1B9B2;--ink:#1B2333;--mute:#667085;--line:#DADDD3}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.6 "DM Sans",system-ui,sans-serif}
+nav{display:flex;align-items:center;justify-content:space-between;padding:24px clamp(20px,5vw,60px)}
+.brand{display:flex;gap:10px;align-items:center;font:800 20px "Bricolage Grotesque";color:var(--navy)}
+.flag{width:24px;height:18px;background:var(--gold);clip-path:polygon(0 0,100% 0,86% 30%,100% 55%,78% 72%,92% 100%,0 100%)}
+.btn{display:inline-flex;align-items:center;height:46px;padding:0 22px;border-radius:999px;border:0;font:600 15px "DM Sans",system-ui,sans-serif;cursor:pointer}
+.btn.navy{background:var(--navy);color:#fff}.btn.soft{background:#fff;color:var(--navy)}
+.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:40px;align-items:end;padding:30px clamp(20px,5vw,60px) 60px}
+h1{font:800 clamp(52px,7.4vw,108px)/.92 "Bricolage Grotesque";color:var(--navy);margin:0 0 24px;letter-spacing:-.035em}
+.lede{max-width:44ch;color:var(--mute);font-size:18px;margin:0 0 28px}
+.feed{background:var(--navy);color:#fff;border-radius:28px;padding:24px}
+.feed h3{margin:0 0 14px;font:500 15px "DM Sans";color:#AFC0DC}
+.dec{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid #23406E}
+.dec b{display:block;font-weight:600}.dec span{color:#AFC0DC;font-size:13px}
+.dec .chip{border-radius:999px;padding:5px 12px;font:600 12px "DM Sans";color:var(--navy)}.chip.ok{background:var(--sage)}.chip.hold{background:var(--amber)}.chip.no{background:var(--rose)}
+.app{margin:0 clamp(20px,5vw,60px) 60px;display:grid;grid-template-columns:230px 1fr 300px;background:var(--card);border-radius:30px;overflow:hidden;box-shadow:0 40px 80px -50px rgba(16,38,74,.5)}
+.side{background:var(--navy);color:#C9D3E6;padding:26px 18px}
+.who{display:flex;gap:10px;align-items:center;margin-bottom:28px}.who i{width:40px;height:40px;border-radius:50%;background:var(--gold)}.who b{display:block;color:#fff}.who span{font-size:13px}
+.side a{display:block;padding:10px 14px;border-radius:12px;margin-bottom:4px;font-size:15px}.side a.on{background:#fff;color:var(--navy);font-weight:600}
+.main{padding:28px}
+.main h2{font:800 30px "Bricolage Grotesque";color:var(--navy);margin:0;letter-spacing:-.02em}.main>p{color:var(--mute);margin:2px 0 22px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px}
+.tile{border-radius:22px;padding:16px 18px}.tile span{font-size:13px;color:#3B4456}.tile b{display:block;font:800 30px "Bricolage Grotesque";color:var(--ink)}
+.t1{background:var(--sage)}.t2{background:var(--amber)}.t3{background:var(--lilac)}
+.sec{display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:18px;padding:16px 18px;margin-bottom:10px}
+.sec h4{margin:0;font-size:13px;color:var(--mute);font-weight:500}.sec .v{font-weight:600}.sec small{display:block;color:var(--mute);font-weight:400}
+.edit{border:0;background:var(--bg);border-radius:10px;height:32px;padding:0 14px;font:600 13px "DM Sans";color:var(--navy);cursor:pointer}
+.right{padding:28px 24px;border-left:1px solid var(--line)}
+.right h3{margin:0 0 4px;font:800 18px "Bricolage Grotesque";color:var(--navy)}.right p{color:var(--mute);font-size:14px;margin:0 0 16px}
+.ring{width:150px;height:150px;border-radius:50%;margin:10px auto 18px;background:conic-gradient(var(--lilac) 0 72%,var(--line) 72%);display:grid;place-items:center}
+.ring div{width:112px;height:112px;border-radius:50%;background:var(--card);display:grid;place-items:center;text-align:center;font:800 22px/1.1 "Bricolage Grotesque";color:var(--navy)}.ring small{display:block;font:500 12px "DM Sans";color:var(--mute)}
+.right .btn{width:100%;justify-content:center;margin-bottom:10px}
+@media (max-width:1000px){.hero,.app{grid-template-columns:1fr}.side{display:none}.right{border-left:0;border-top:1px solid var(--line)}.tiles{grid-template-columns:1fr}}
+.btn:focus-visible,.edit:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+</style>
+</head>
+<body>
+<nav><div class="brand"><span class="flag"></span>Clear to Pay</div><button class="btn soft">Open the app</button></nav>
+<section class="hero">
+  <div>
+    <h1>An invoice is a claim. Payment needs proof.</h1>
+    <p class="lede">The AI agent reads the invoice. Two people count the delivery blind, the supplier approves the amount, and the Concordium contract pays only when every check passes.</p>
+    <button class="btn navy">Start an order</button> <button class="btn soft">Try to fool it</button>
+  </div>
+  <div class="feed">
+    <h3>Latest decisions on &lt;13092,0&gt;</h3>
+    <div class="dec"><div><b>Order #1 · 25 CCD</b><span>Waiting for the supplier's hold to end</span></div><span class="chip hold">HELD</span></div>
+    <div class="dec"><div><b>Paid less than approved</b><span>Judge mode attack</span></div><span class="chip hold">HELD</span></div>
+    <div class="dec"><div><b>Unverified agent</b><span>Badge did not check out</span></div><span class="chip no">REFUSED</span></div>
+    <div class="dec"><div><b>Agent #1287</b><span>Verified by Concordium</span></div><span class="chip ok">VERIFIED</span></div>
+  </div>
+</section>
+<section class="app">
+  <aside class="side">
+    <div class="who"><i></i><div><b>Buyer</b><span>4QzE…TthG</span></div></div>
+    <a>Readiness</a><a class="on">New order</a><a>Orders</a><a>Cast</a><a>Receipts</a>
+  </aside>
+  <div class="main">
+    <h2>Review order #2</h2>
+    <p>Change anything with Edit. One signature sends it all.</p>
+    <div class="tiles">
+      <div class="tile t1"><span>Cast ready</span><b>4 of 4</b></div>
+      <div class="tile t2"><span>Supplier hold</span><b>2d 23h</b></div>
+      <div class="tile t3"><span>In escrow now</span><b>25 CCD</b></div>
+    </div>
+    <div class="sec"><div><h4>Supplier</h4><div class="v">Lagos Foods Ltd<small>Paid to its own account 45H8…BixMY</small></div></div><button class="edit">Edit</button></div>
+    <div class="sec"><div><h4>Order lines</h4><div class="v">Rice, 50 kg bag × 100<small>Apapa warehouse</small></div></div><button class="edit">Edit</button></div>
+    <div class="sec"><div><h4>Who counts</h4><div class="v">Receiver 3NrB…E2S · Approver 3byi…y9pA<small>Blind counts, two roles</small></div></div><button class="edit">Edit</button></div>
+  </div>
+  <div class="right">
+    <h3>Amount to lock</h3>
+    <p>Released only when counts match, the supplier approves it, and the hold has passed.</p>
+    <div class="ring"><div>25 CCD<small>to escrow</small></div></div>
+    <button class="btn navy">Sign with wallet</button>
+    <button class="btn soft" style="background:var(--bg)">Download PO (PDF)</button>
+  </div>
+</section>
+</body>
+</html>
