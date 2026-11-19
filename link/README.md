@@ -9,6 +9,7 @@ Clear to Pay already runs on NEAR (`guard.cleartopay.testnet`, owned by `buyer.c
 
 Design choices, and what protects the user:
 - **The owner key, not the agent's working key.** The NEAR key bound is the full-access key of `buyer.cleartopay.testnet`, the account that owns the NEAR contract and grants or revokes the agent's limited key. Concordium's owner account and NEAR's owner key now provably belong to the same controller.
+- **Signing raw bytes with a full-access key is safe here.** NEAR signs transactions over the 32-byte SHA-256 of the transaction, and off-chain messages (NEP-413) carry their own prefix. The CIS-8 message is 195 bytes that start with the ASCII tag `CIS-8/v1/canonical`, so its signature can never be taken for a NEAR transaction or a NEP-413 message; it authorises nothing on NEAR.
 - **The secret never leaves the machine.** It is read once into memory, used to sign one message and wiped; the script prints only the public key and the signature, and refuses to run if the key in the file is not the one named with `--expect`.
 - **Nothing is trusted blindly.** Every byte the registry tools return (the message to sign and both transaction parameters) is rebuilt from the CIS-8 and CIS-8004 specifications and must match exactly, or the script stops.
 - **Replay-proof.** The signed message includes the Concordium account, the CIS-8 contract address and the testnet genesis hash, so the signature is valid for this binding only.
