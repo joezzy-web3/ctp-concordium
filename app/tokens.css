@@ -4,7 +4,7 @@
   --gold:#E3B23C; --gold-ink:#6B4A07; --gold-hi:#F3CF6E; --gold-lo:#C08D1C;
   --steel-hi:#F7F8FA; --steel-lo:#C9CFD8; --steel:#B8C0CC; --blue-hi:#2E5BA8;
   --shadow-obj:0 22px 40px -18px rgba(16,38,74,.45),inset 0 1px 0 rgba(255,255,255,.6); --mute:#5E6878; --mute-on-navy:#AFC0DC; --line:#D9DDE3;
-  --ok:#1E8E5E; --ok-strong:#146B46; --ok-bg:#DFF2E8; --mask:#000; --hold:#B4690E; --hold-bg:#FBEBD2; --no:#B42318; --no-bg:#FDE3E1;
+  --ok:#1E8E5E; --ok-strong:#146B46; --ok-bg:#DFF2E8; --mask:#000; --glass-hi:rgba(255,255,255,.9); --glass-lo:rgba(233,236,241,.55); --glass-edge:rgba(255,255,255,.8); --knob-shadow:0 6px 12px -4px rgba(16,38,74,.45); --well:inset 0 3px 8px rgba(16,38,74,.25); --drop:drop-shadow(0 10px 12px rgba(16,38,74,.35)); --hold:#B4690E; --hold-bg:#FBEBD2; --no:#B42318; --no-bg:#FDE3E1;
   --display:Anton,Impact,"Arial Narrow",sans-serif; --text:Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;
   --ease-out:cubic-bezier(0.23,1,0.32,1); --ease-in-out:cubic-bezier(0.77,0,0.175,1);
   --lift-sm:0 1px 2px rgba(16,38,74,.06),0 4px 14px -6px rgba(16,38,74,.14);
