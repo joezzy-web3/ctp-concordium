@@ -1,0 +1,19 @@
+[package]
+name = "ctp_escrow"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Clear to Pay escrow: supplier payment rules enforced on-chain (Concordium)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "s"
+codegen-units = 1
+
+[dependencies]
+concordium-std = "11.0.0"
+
+[dev-dependencies]
+concordium-smart-contract-testing = "5.0.0"
