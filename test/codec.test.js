@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeOrder, decodeSupplier, orderStage, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf } from '../app/src/codec.js';
+import { decodeOrder, decodeSupplier, orderStage, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
 import { createHash } from 'node:crypto';
 import { accountBytes } from '../link/encode.js';
 
@@ -59,12 +59,26 @@ test('micro-CCD formats without float errors', () => {
 
 test('seal layout matches contract/src/rules.rs commit_preimage', async () => {
   const key = new Uint8Array(32).fill(9);
-  const p = sealPreimage(7, 100, key);
-  assert.equal(Buffer.from(p.subarray(0, 12)).toString(), 'CTP-count/v1');
+  const signer = new Uint8Array(32).fill(3);
+  const p = sealPreimage(7, signer, 100, key);
+  assert.equal(p.length, 92);
+  assert.equal(Buffer.from(p.subarray(0, 12)).toString(), 'CTP-count/v2');
   assert.deepEqual([...p.subarray(12, 20)], [7, 0, 0, 0, 0, 0, 0, 0]);
-  assert.deepEqual([...p.subarray(20, 28)], [100, 0, 0, 0, 0, 0, 0, 0]);
-  assert.deepEqual([...p.subarray(28)], [...key]);
-  assert.equal(await sealOf(7, 100, key), createHash('sha256').update(p).digest('hex'));
+  assert.deepEqual([...p.subarray(20, 52)], [...signer]);
+  assert.deepEqual([...p.subarray(52, 60)], [100, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([...p.subarray(60)], [...key]);
+  const addr = await accountAddress(signer);
+  assert.deepEqual([...await addrBytes(addr)], [...signer]);
+  assert.equal(await sealOf(7, addr, 100, key), createHash('sha256').update(p).digest('hex'));
+});
+
+test('a seal is bound to its signer', async () => {
+  const key = new Uint8Array(32).fill(9);
+  const a = await accountAddress(new Uint8Array(32).fill(2));
+  const b = await accountAddress(new Uint8Array(32).fill(3));
+  assert.notEqual(await sealOf(7, a, 100, key), await sealOf(7, b, 100, key));
+  await assert.rejects(addrBytes(a.slice(0, -1) + (a.endsWith('1') ? '2' : '1')));
+  await assert.rejects(addrBytes('0OIl'));
 });
 
 test('CCD amounts parse exactly', () => {

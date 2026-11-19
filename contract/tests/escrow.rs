@@ -89,8 +89,8 @@ fn deploy_registry(chain: &mut Chain, entries: Vec<Entry>) -> ContractAddress {
     }).expect("init mock registry").contract_address
 }
 
-fn commit_hash(qty: u64, salt: [u8; 32]) -> HashSha2256 {
-    HashSha2256(Sha256::digest(rules::commit_preimage(ORDER, qty, &salt)).into())
+fn commit_hash(who: AccountAddress, qty: u64, salt: [u8; 32]) -> HashSha2256 {
+    HashSha2256(Sha256::digest(rules::commit_preimage(ORDER, &who.0, qty, &salt)).into())
 }
 
 /// Deploys, lists the signers and the agent, registers the supplier and funds one order.
@@ -128,8 +128,8 @@ fn setup_with_order(escrow: Amount) -> T {
 /// Both named signers count `qty`, the agent submits, the supplier approves.
 fn happy_path_until_execute(t: &mut T, qty_r: u64, qty_a: u64) {
     let (sr, sa) = ([11u8; 32], [22u8; 32]);
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(qty_r, sr) });
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(qty_a, sa) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, qty_r, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, qty_a, sa) });
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: qty_r, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: qty_a, salt: sa });
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
@@ -176,8 +176,8 @@ fn counts_that_disagree_are_held_and_nothing_is_paid() {
 fn invoice_without_supplier_approval_is_held() {
     let mut t = setup();
     let (sr, sa) = ([11u8; 32], [22u8; 32]);
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, sa) });
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
@@ -200,7 +200,7 @@ fn only_the_supplier_can_approve_its_invoice() {
 fn a_third_signer_cannot_join_or_block_an_order() {
     // Audit F-06: only the receiver and approver named on the order can count it.
     let mut t = setup();
-    assert_eq!(t.err(OTHER_SIGNER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(0, [1; 32]) }), Error::NotOrderSigner);
+    assert_eq!(t.err(OTHER_SIGNER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(OTHER_SIGNER, 0, [1; 32]) }), Error::NotOrderSigner);
 }
 
 #[test]
@@ -208,8 +208,8 @@ fn a_removed_signer_cannot_reveal_an_earlier_commit() {
     // Audit F-05.
     let mut t = setup();
     let (sr, sa) = ([11u8; 32], [22u8; 32]);
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, sa) });
     t.ok(ADMIN, "remove_signer", &RECEIVER);
     assert_eq!(t.err(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr }), Error::SignerNoLongerValid);
 }
@@ -218,9 +218,9 @@ fn a_removed_signer_cannot_reveal_an_earlier_commit() {
 fn reveals_wait_for_both_commits_and_must_match_them() {
     let mut t = setup();
     let sr = [11u8; 32];
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
     assert_eq!(t.err(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr }), Error::WaitingForSecondRole);
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, [22; 32]) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, [22; 32]) });
     assert_eq!(t.err(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY + 1, salt: sr }), Error::RevealDoesNotMatchCommit);
 }
 
@@ -262,8 +262,8 @@ fn only_the_submitting_registered_agent_can_ask_for_payment() {
 fn wrong_invoice_amount_is_held() {
     let mut t = setup();
     let (sr, sa) = ([11u8; 32], [22u8; 32]);
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, sa) });
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: Amount::from_ccd(12_500) });
@@ -305,8 +305,8 @@ fn buyer_and_agent_cannot_underpay_the_supplier() {
     // the real invoice with the lower amount. The supplier approved PRICE, so it is held.
     let mut t = setup_with_order(Amount::from_ccd(1_000));
     let (sr, sa) = ([11u8; 32], [22u8; 32]);
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, sa) });
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: Amount::from_ccd(1_000) });
@@ -363,8 +363,8 @@ fn an_agent_transferred_to_someone_else_is_refused() {
 fn a_junk_invoice_can_be_rejected_and_the_real_one_paid() {
     let mut t = setup();
     let (sr, sa) = ([11u8; 32], [22u8; 32]);
-    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
-    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, sa) });
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
     // A hijacked agent jams the order with a junk invoice.
@@ -391,4 +391,18 @@ fn rejecting_clears_the_supplier_approval_too() {
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
     t.wait(HOLD_MS);
     assert_eq!(execute(&mut t).1, vec![Code::HeldNoSupplierApproval]);
+}
+
+#[test]
+fn a_signer_cannot_copy_the_other_signers_seal() {
+    // Self-audit 19 Nov: the seal includes the signer's account, so the approver
+    // cannot reuse the receiver's public seal and echo the receiver's reveal.
+    let mut t = setup();
+    let sr = [11u8; 32];
+    let seal = commit_hash(RECEIVER, QTY, sr);
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: seal });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: seal });
+    t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
+    // The receiver's count and key are now public; replaying them does not open the copy.
+    assert_eq!(t.err(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr }), Error::RevealDoesNotMatchCommit);
 }

@@ -76,7 +76,7 @@ function card(o, me) {
       const s = { qty: v, key: hex(key) };
       store.set(keyName(me, o.id), s);
       btn.disabled = true;
-      const r = await act('commit_count', { order_id: o.id, hash: await sealOf(o.id, v, key) }, { pending: 'Sealing your count. ', done: `Your count is sealed for order #${o.id}.` });
+      const r = await act('commit_count', { order_id: o.id, hash: await sealOf(o.id, me, v, key) }, { pending: 'Sealing your count. ', done: `Your count is sealed for order #${o.id}.` });
       btn.disabled = false;
       if (r.ok) location.reload();
     } }, icon('lock', 18), 'Seal my count');

@@ -13,6 +13,23 @@ function base58(bytes) {
   return s;
 }
 
+/** Concordium account address -> its 32 raw bytes. Checks the version and checksum. */
+export async function accountBytes(addr) {
+  let n = 0n;
+  for (const c of String(addr)) {
+    const d = ALPHABET.indexOf(c);
+    if (d < 0) throw new Error('Not a Concordium account address.');
+    n = n * 58n + BigInt(d);
+  }
+  const all = new Uint8Array(37);
+  for (let i = 36; i >= 0; i--) { all[i] = Number(n & 255n); n >>= 8n; }
+  if (n !== 0n || all[0] !== 1) throw new Error('Not a Concordium account address.');
+  const h1 = new Uint8Array(await crypto.subtle.digest('SHA-256', all.subarray(0, 33)));
+  const h2 = new Uint8Array(await crypto.subtle.digest('SHA-256', h1));
+  if (h2.subarray(0, 4).some((b, i) => b !== all[33 + i])) throw new Error('Not a Concordium account address.');
+  return all.slice(1, 33);
+}
+
 /** 32 raw bytes -> Concordium account address (base58check, version 1). */
 export async function accountAddress(raw) {
   const body = new Uint8Array(33);
@@ -118,18 +135,20 @@ export function ccdToMicro(s) {
 
 export const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-/** The 60 bytes a blind count commits to: "CTP-count/v1" ‖ order_id LE ‖ count LE ‖ 32-byte key.
- *  Same layout as contract/src/rules.rs commit_preimage. */
-export function sealPreimage(orderId, qty, key) {
-  const pre = new Uint8Array(60);
-  pre.set(new TextEncoder().encode('CTP-count/v1'), 0);
+/** Bytes a signer hashes to seal a count. Same layout as contract/src/rules.rs commit_preimage:
+ *  "CTP-count/v2" ‖ order id (u64 LE) ‖ signer account (32 bytes) ‖ qty (u64 LE) ‖ key (32 bytes). */
+export function sealPreimage(orderId, signer, qty, key) {
+  const pre = new Uint8Array(92);
+  pre.set(new TextEncoder().encode('CTP-count/v2'), 0);
   const dv = new DataView(pre.buffer);
   dv.setBigUint64(12, BigInt(orderId), true);
-  dv.setBigUint64(20, BigInt(qty), true);
-  pre.set(key, 28);
+  pre.set(signer, 20);
+  dv.setBigUint64(52, BigInt(qty), true);
+  pre.set(key, 60);
   return pre;
 }
-/** The seal stored on-chain: SHA-256 of the preimage, hex. */
-export async function sealOf(orderId, qty, key) {
-  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', sealPreimage(orderId, qty, key))));
+/** Seal for `signerAddress` (base58). The signer's own account is inside the seal. */
+export async function sealOf(orderId, signerAddress, qty, key) {
+  const signer = await accountBytes(signerAddress);
+  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', sealPreimage(orderId, signer, qty, key))));
 }

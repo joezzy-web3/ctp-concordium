@@ -100,13 +100,16 @@ pub fn decide<A: PartialEq>(f: &Facts<A>) -> (Verdict, Vec<Code>) {
 }
 
 /// The bytes a signer hashes to commit a blind count:
-/// `"CTP-count/v1" ‖ order_id (u64 LE) ‖ qty (u64 LE) ‖ salt (32 bytes)`.
-pub fn commit_preimage(order_id: u64, qty: u64, salt: &[u8; 32]) -> [u8; 60] {
-    let mut out = [0u8; 60];
-    out[..12].copy_from_slice(b"CTP-count/v1");
+/// `"CTP-count/v2" ‖ order_id (u64 LE) ‖ signer account (32 bytes) ‖ qty (u64 LE) ‖ salt (32 bytes)`.
+/// The signer's own account is inside the seal, so a seal copied by the other signer
+/// never opens for them: each person must count and seal for themselves.
+pub fn commit_preimage(order_id: u64, signer: &[u8; 32], qty: u64, salt: &[u8; 32]) -> [u8; 92] {
+    let mut out = [0u8; 92];
+    out[..12].copy_from_slice(b"CTP-count/v2");
     out[12..20].copy_from_slice(&order_id.to_le_bytes());
-    out[20..28].copy_from_slice(&qty.to_le_bytes());
-    out[28..].copy_from_slice(salt);
+    out[20..52].copy_from_slice(signer);
+    out[52..60].copy_from_slice(&qty.to_le_bytes());
+    out[60..].copy_from_slice(salt);
     out
 }
 
@@ -222,10 +225,11 @@ mod tests {
 
     #[test]
     fn commit_preimage_layout() {
-        let p = commit_preimage(7, 100, &[9u8; 32]);
-        assert_eq!(&p[..12], b"CTP-count/v1");
+        let p = commit_preimage(7, &[3u8; 32], 100, &[9u8; 32]);
+        assert_eq!(&p[..12], b"CTP-count/v2");
         assert_eq!(&p[12..20], &7u64.to_le_bytes());
-        assert_eq!(&p[20..28], &100u64.to_le_bytes());
-        assert_eq!(&p[28..], &[9u8; 32]);
+        assert_eq!(&p[20..52], &[3u8; 32]);
+        assert_eq!(&p[52..60], &100u64.to_le_bytes());
+        assert_eq!(&p[60..], &[9u8; 32]);
     }
 }

@@ -494,7 +494,7 @@ fn reveal_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     ensure!(order.reveals.iter().all(|r| r.signer != signer), Error::AlreadyRevealed);
     // Blind: nobody reveals until both named people have committed.
     ensure!(order.commits.len() == 2, Error::WaitingForSecondRole);
-    let h = crypto_primitives.hash_sha2_256(&rules::commit_preimage(p.order_id, p.qty, &p.salt));
+    let h = crypto_primitives.hash_sha2_256(&rules::commit_preimage(p.order_id, &signer.0, p.qty, &p.salt));
     ensure!(h == commit.hash, Error::RevealDoesNotMatchCommit);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.reveals.push(RevealedCount { signer, role, qty: p.qty });
