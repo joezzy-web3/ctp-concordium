@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · Link the NEAR agent (testnet)</title>
+<style>
+  :root { --navy:#10264A; --gold:#E6BE4F; --ok:#127A4A; --bad:#C42B1C; --mute:#55657C; --line:#D5DCD7; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--navy); max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p.sub { color: var(--mute); margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+  td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--mute); width: 34%; }
+  code { font-size: 12px; word-break: break-all; }
+  button { height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--navy); color: #fff; font: inherit; cursor: pointer; margin-right: 8px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .ok { background: #E5F2EA; color: var(--ok); } .bad { background: #FBECEA; color: var(--bad); } .info { background: #F1F3F6; color: var(--mute); }
+</style>
+</head>
+<body>
+<h1>Link the NEAR agent to Agent #1287</h1>
+<p class="sub">Step 1 records on Concordium's CIS-8 registry that the NEAR key below is controlled by the owner of Agent #1287; the contract checks the NEAR signature itself. Step 2 attaches that record to Agent #1287 as its external reference. Testnet only.</p>
+<table>
+  <tr><td>NEAR agent</td><td><code id="near">loading…</code></td></tr>
+  <tr><td>Key</td><td><code id="ns">-</code></td></tr>
+  <tr><td>NEAR signature</td><td><code id="sig">-</code></td></tr>
+  <tr><td>Step 1</td><td><code id="t0">-</code></td></tr>
+  <tr><td>Step 2</td><td><code id="t1">-</code></td></tr>
+  <tr><td>Connected account</td><td><code id="acct">not connected</code></td></tr>
+</table>
+<button id="connect">Connect wallet</button>
+<button id="s0" disabled>1 · Register NEAR key</button>
+<button id="s1" disabled>2 · Attach to Agent #1287</button>
+<div id="out"></div>
+<script>
+  window.addEventListener('error', (e) => { document.getElementById('out').innerHTML = '<div class="msg bad">Page error: ' + (e.message || 'script failed to load') + '</div>'; }, true);
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
