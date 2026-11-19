@@ -40,11 +40,21 @@ jobs:
             ~/.cargo/bin/cargo-concordium
             ~/.cargo/registry
             contract/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('contract/Cargo.toml') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('contract/Cargo.lock', 'contract/rust-toolchain.toml') }}
       - name: Install cargo-concordium
         run: command -v cargo-concordium || cargo install --locked cargo-concordium
       - run: cargo test --lib
       - run: cargo concordium build --schema-embed --out ctp_escrow.wasm.v1
       - run: cargo test --test escrow
-      - name: Module hash
+      - name: Module hash (host build, used by the tests)
         run: sha256sum ctp_escrow.wasm.v1
+      - name: Verifiable build (Concordium's build image; this is the module to deploy)
+        run: |
+          mkdir -p dist
+          cargo concordium build --verifiable --out dist/ctp_escrow.wasm.v1
+          ls -la dist
+          sha256sum dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ctp_escrow-verifiable
+          path: contract/dist/
