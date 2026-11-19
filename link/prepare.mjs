@@ -126,7 +126,11 @@ function tx(label, built, expectedHex, contract, receiveName, parameters, schema
   // The parameter hex can sit at any depth; take the hex string whose path mentions "param",
   // else any hex string equal to ours.
   const hexes = hexStrings(built);
-  const paramHex = (hexes.find(([path]) => /param/i.test(path)) ?? hexes.find(([, h]) => h === expectedHex) ?? [])[1] ?? '';
+  // The live registry returns `parameter_hex` next to `parameter_json`; prefer the hex field by name.
+  const paramHex = (hexes.find(([path]) => /parameter_hex$/i.test(path))
+    ?? hexes.find(([path]) => /param[^.]*hex$/i.test(path))
+    ?? hexes.find(([path]) => /param[^.]*$/i.test(path) && !/json/i.test(path))
+    ?? [])[1] ?? '';
   if (paramHex !== expectedHex) {
     die(`${label}: registry parameter differs from the spec.\n  registry: ${paramHex || '(none found)'}\n  ours:     ${expectedHex}\n  registry response: ${JSON.stringify(built).slice(0, 1500)}`);
   }
