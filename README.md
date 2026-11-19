@@ -41,3 +41,20 @@ Design choices, and what protects the user:
 - **Fails closed.** If the registry or the card cannot be reached, the agent is HELD, never CLEARED, so an outage can only delay a payment, not let one through.
 - **Careful with untrusted input.** Agent IDs are checked before they go into a URL; cards must be https, at most 256 KB, fetched with a timeout and no redirects.
 
+## Accountability receipt
+
+Every decision Clear to Pay makes becomes a receipt, and the receipt's hash is anchored on Concordium.
+
+```bash
+node receipt/cli.js demo JyP9U25oUQ6KdnBBHdTYP     # check the agent, write receipts/<hash>.json, print the anchor data
+node receipt/cli.js verify receipts/<hash>.json <on-chain data hex>
+```
+
+Anchor a receipt from the browser wallet at `anchor/` (https://joezzy-web3.github.io/ctp-concordium/anchor/).
+
+Design choices, and what protects the user:
+- **Only a hash goes on-chain.** The 36-byte anchor is `CTP1` plus the receipt's SHA-256. Invoice details stay with the business, and a random salt in every receipt means the hash cannot be matched to a guessed invoice.
+- **The rules are enforced in the record itself.** A receipt cannot say CLEARED unless the sending agent passed the badge gate and two different people signed.
+- **Tamper-evident log.** Each receipt carries the hash of the one before it, so a receipt removed or reordered later shows up.
+- **Same bytes everywhere.** Receipts use a strict canonical JSON (sorted keys, amounts as strings, no floats), so the command line and the browser compute the same hash.
+

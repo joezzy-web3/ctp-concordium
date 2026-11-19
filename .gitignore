@@ -8,3 +8,6 @@ wallet*.json
 # build output
 target/
 node_modules/
+
+# demo receipts made locally
+receipts/

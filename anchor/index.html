@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · Anchor a receipt (testnet)</title>
+<style>
+  :root { --navy:#10264A; --gold:#E6BE4F; --ok:#127A4A; --bad:#C42B1C; --mute:#55657C; --line:#D5DCD7; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--navy); max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p.sub { color: var(--mute); margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+  td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--mute); width: 34%; }
+  code { font-size: 12px; word-break: break-all; }
+  button { height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--navy); color: #fff; font: inherit; cursor: pointer; margin-right: 8px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .ok { background: #E5F2EA; color: var(--ok); } .bad { background: #FBECEA; color: var(--bad); } .info { background: #F1F3F6; color: var(--mute); }
+</style>
+<style> textarea { width: 100%; height: 180px; font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 8px; padding: 10px; box-sizing: border-box; } </style>
+</head>
+<body>
+<h1>Anchor an accountability receipt</h1>
+<p class="sub">Paste a receipt made by Clear to Pay (Agent #1287). This page hashes it itself and registers <code>CTP1</code> + the 32-byte hash on Concordium <b>testnet</b> with a RegisterData transaction. Only the hash goes on-chain; the invoice stays private.</p>
+
+<textarea id="receipt" placeholder="Paste the contents of receipts/&lt;hash&gt;.json here"></textarea>
+<p><button id="check">Check receipt</button></p>
+
+<table>
+  <tr><td>Invoice</td><td><code id="rinvoice">-</code></td></tr>
+  <tr><td>Decision</td><td><code id="rverdict">-</code></td></tr>
+  <tr><td>Receipt hash</td><td><code id="rhash">-</code></td></tr>
+  <tr><td>Signing account</td><td><code>44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG</code> (owner of Agent #1287)</td></tr>
+  <tr><td>Connected account</td><td><code id="acct">not connected</code></td></tr>
+</table>
+
+<button id="connect">Connect wallet</button>
+<button id="send" disabled>Sign and anchor</button>
+<div id="out"></div>
+
+<script>
+  window.addEventListener('error', (e) => { document.getElementById('out').innerHTML = '<div class="msg bad">Page error: ' + (e.message || 'script failed to load') + '</div>'; }, true);
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
