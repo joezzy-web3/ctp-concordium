@@ -72,7 +72,6 @@ function hexStrings(o, path = '$', out = []) {
   else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) hexStrings(v, `${path}.${k}`, out);
   return out;
 }
-const pick = (o, re) => { const hit = Object.entries(o ?? {}).find(([k]) => re.test(k)); return hit?.[1]; };
 
 // ---- 2. Canonical bytes: registry vs our own ----
 const canon = await call('build_cis8_canonical_bytes', {
@@ -108,25 +107,46 @@ const setRef = await call('build_set_external_reference', {
   external_reference: { contract_address: E.CIS8_TESTNET, kind: 'Cis8', key },
 });
 
+/** First string under a key whose path matches `re`, searching nested objects. */
+function findString(o, re, path = '$') {
+  if (!o || typeof o !== 'object') return undefined;
+  for (const [k, v] of Object.entries(o)) {
+    const p = `${path}.${k}`;
+    if (typeof v === 'string' && re.test(k)) return v;
+    if (typeof v === 'number' && re.test(k)) return String(v);
+  }
+  for (const [k, v] of Object.entries(o)) {
+    const hit = findString(v, re, `${path}.${k}`);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
 function tx(label, built, expectedHex, contract, receiveName, parameters, schemaB64) {
-  const paramHex = String(pick(built, /param/i) ?? '').replace(/^0x/, '').toLowerCase();
-  if (paramHex !== expectedHex) die(`${label}: registry parameter differs from the spec.\n  registry: ${paramHex}\n  ours:     ${expectedHex}`);
-  const rn = String(pick(built, /receive/i) ?? '');
+  // The parameter hex can sit at any depth; take the hex string whose path mentions "param",
+  // else any hex string equal to ours.
+  const hexes = hexStrings(built);
+  const paramHex = (hexes.find(([path]) => /param/i.test(path)) ?? hexes.find(([, h]) => h === expectedHex) ?? [])[1] ?? '';
+  if (paramHex !== expectedHex) {
+    die(`${label}: registry parameter differs from the spec.\n  registry: ${paramHex || '(none found)'}\n  ours:     ${expectedHex}\n  registry response: ${JSON.stringify(built).slice(0, 1500)}`);
+  }
+  const rn = findString(built, /receive/i);
   if (rn && rn !== receiveName) die(`${label}: registry says ${rn}, expected ${receiveName}`);
-  const energy = Math.max(Number(pick(built, /energy/i)) || 0, 60000);
+  const energy = Math.max(Number(findString(built, /energy/i)) || 0, 60000);
   return { label, contract, receive_name: receiveName, energy, parameters, schema_b64: schemaB64, parameter_hex: paramHex };
 }
 const regParams = { key, scheme: SCHEME, signatureHex, metadata };
 const refParams = { tokenId: AGENT_ID, cis8: E.CIS8_TESTNET, key };
 const txs = [
   tx('Register the NEAR key in CIS-8', reg, E.registerParam(regParams).toString('hex'), E.CIS8_TESTNET,
-    String(pick(reg, /receive/i) ?? 'cis8.registerExternalKey'), E.registerJson(regParams), E.REGISTER_SCHEMA_B64),
+    findString(reg, /receive/i) ?? 'cis8.registerExternalKey', E.registerJson(regParams), E.REGISTER_SCHEMA_B64),
   tx('Attach it to Agent #1287', setRef, E.setExternalReferenceParam(refParams).toString('hex'), E.CIS8004_TESTNET,
-    String(pick(setRef, /receive/i) ?? 'CIS-8004.setExternalReference'), E.setExternalReferenceJson(refParams), E.SET_REF_SCHEMA_B64),
+    findString(setRef, /receive/i) ?? 'CIS-8004.setExternalReference', E.setExternalReferenceJson(refParams), E.SET_REF_SCHEMA_B64),
 ];
 for (const t of txs) {
   if (!/\.(registerExternalKey|setExternalReference)$/.test(t.receive_name)) die(`unexpected entrypoint ${t.receive_name}`);
 }
+writeFileSync('link/registry-responses.json', JSON.stringify({ canonical: canon, register: reg, set_external_reference: setRef }, null, 2) + '\n');
 console.log('Both transaction parameters match the specs.');
 
 // ---- 5. Bundle (public data only) ----
