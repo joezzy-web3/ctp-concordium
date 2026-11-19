@@ -21,6 +21,7 @@
 
 ## Escrow v2: deployed 19 Nov 2026 20:34 at `<13092,0>`
 - Deploy tx `00762ac602569316657f1950a92b7a615d4925afe221077cf404be5c13a701bc`; created by buyer admin `4QzE6Z…cEmTthG` (init tx `62b5bc…`, block 51029168), hold 72 h.
+- Cast set up in one transaction `5ceebe7c6dc59eed13eaa21cb6518429bbfda509748b6c8962c4530d51827ae3` (19 Nov 2026 20:43 Lagos, block 51029412): receiver, approver, agent #1287, supplier with its own payout account. **The supplier's 72-hour hold ends Sun 22 Nov 2026 19:43 UTC** (20:43 Lagos): from then, order #1 can clear and pay.
 - Verifiable build of `1796a52` (CI run 44595683477), module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27`, "Source and module match", 16/16 end-to-end tests incl. the underpay attack.
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
