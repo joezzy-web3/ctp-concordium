@@ -17,6 +17,7 @@
 - Fixed and tested: F-03 supplier approves its own invoice; F-05 removed signers cannot reveal; F-06 orders name their two signers; F-07 strict receipt validation; F-08/F-04 honest wording and a live-vs-in-progress table; F-09 hardened card fetch; F-10 pinned link bundle; F-11 timeouts and best-effort wipe documented; F-12 CI runs contract rules, WASM build and 14 end-to-end tests, rebuilds page bundles, runs on Windows; F-13 no HTML injection in pages; F-14 byte-exact JSON and wider ignores; F-15 hold range at init; decisions final once paid.
 - Open, scheduled: F-01 two verified people (Concordium ID proofs, build order 3); F-02 contract checks the agent in CIS-8004 itself; re-anchor the Agent Card with the escrow address after deploy.
 - Reproducible contract: `Cargo.lock` committed, Rust pinned to 1.97.0, verifiable build in CI (`concordium/verifiable-sc-wasm32v1:1`), module SHA-256 at `d1bd4bf`: `29e25639c578ee88e44a98f22ced8ef1057a4cc511bcdba252b96896d7d48914`. End-to-end tests 14/14 in CI and on the developer machine.
+- **Module to deploy:** verifiable build of commit `471f25f` (CI run 44586331198, artifact `ctp_escrow-verifiable`), SHA-256 = module reference `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c`; `verify-build` reports "Source and module match". Deploy page `deploy/` refuses any other file.
 
 ## Done
 - [x] Agent Card built with the hosted MCP tool `build_agent_card`, hosted on GitHub Pages, served bytes verified (v1, superseded by v2 below).

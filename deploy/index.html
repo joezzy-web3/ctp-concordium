@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · Deploy the escrow contract (testnet)</title>
+<style>
+  :root { --navy:#10264A; --gold:#E6BE4F; --ok:#127A4A; --bad:#C42B1C; --mute:#55657C; --line:#D5DCD7; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--navy); max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p.sub { color: var(--mute); margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+  td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--mute); width: 34%; }
+  code { font-size: 12px; word-break: break-all; }
+  button { height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--navy); color: #fff; font: inherit; cursor: pointer; margin-right: 8px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .ok { background: #E5F2EA; color: var(--ok); } .bad { background: #FBECEA; color: var(--bad); } .info { background: #F1F3F6; color: var(--mute); }
+</style>
+<style> input[type=text] { width: 100%; font: 12px ui-monospace, monospace; padding: 8px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; } </style>
+</head>
+<body>
+<h1>Deploy the escrow contract</h1>
+<p class="sub">Step 1 deploys the verified module built by CI. Step 2 creates the contract with a 72-hour hold on new payout accounts. <b>The account that sends step 2 becomes the buyer admin.</b> Testnet only.</p>
+<table>
+  <tr><td>Module file</td><td><input type="file" id="file" accept=".v1"></td></tr>
+  <tr><td>Expected SHA-256</td><td><code id="expected"></code></td></tr>
+  <tr><td>Your file's SHA-256</td><td><code id="sha">-</code></td></tr>
+  <tr><td>Module reference</td><td><input type="text" id="ref" placeholder="filled in from the file, or paste a deployed module reference"></td></tr>
+  <tr><td>Payout hold</td><td><code id="hold"></code></td></tr>
+  <tr><td>Connected account</td><td><code id="acct">not connected</code></td></tr>
+</table>
+<button id="connect">Connect wallet</button>
+<button id="deploy" disabled>1 · Deploy module</button>
+<button id="init" disabled>2 · Create contract</button>
+<div id="out"></div>
+<script>
+  // Shows any loading error on the page instead of failing silently.
+  window.addEventListener('error', (e) => {
+    const box = document.createElement('div');
+    box.className = 'msg bad';
+    box.textContent = 'Page error: ' + (e.message || 'script failed to load');
+    document.getElementById('out').replaceChildren(box);
+  }, true);
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

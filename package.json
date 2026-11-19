@@ -11,7 +11,7 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "gate": "node gate/cli.js",
-    "build:pages": "for d in sign anchor link; do esbuild $d/src/$d.js --bundle --format=esm --platform=browser --minify --target=es2020 --log-level=warning --outfile=$d/app.js || exit 1; done"
+    "build:pages": "for d in sign anchor link deploy; do esbuild $d/src/$d.js --bundle --format=esm --platform=browser --minify --target=es2020 --log-level=warning --outfile=$d/app.js || exit 1; done"
   },
   "devDependencies": {
     "@concordium/browser-wallet-api-helpers": "3.3.0",
