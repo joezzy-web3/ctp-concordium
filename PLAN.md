@@ -6,7 +6,7 @@
 - **Submission:** Wed 9 Dec, 23:59 (repo, demo video, CCDExplorer links)
 
 ## Build order (agreed 19 Nov)
-1. NEAR link: finish the two wallet transactions (built, waiting for signature)
+1. ~~NEAR link~~ done 19 Nov
 2. **Escrow contract in Rust on testnet:** the two-signer rule, blind delivery counts, the 72-hour hold on new payout accounts and the badge requirement enforced on-chain; the contract itself emits the decision record, so a receipt can no longer be anchored by just anyone
 3. Verified human signers with Concordium ID proofs
 4. Payments: x402 service fees (and PLT stablecoin payout from escrow)
@@ -19,7 +19,7 @@
 - [x] **Card v2 anchored on-chain.** Card rebuilt for testnet (v2, 2943 bytes, SHA-256 `b6567d9bdb984846f7f72a2769a42485888be98928b11398c6a58be1828e9588`) and anchored with `CIS-8004.setAgentURI` from the browser wallet via `sign/` (tx `9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23`). The registry's own checks pass: `verify-agent-card` → `match: true`; `check-badge` → `badge_valid: true`, all 15 checks true, no issues.
 - [x] **Feature 1, verify before you pay: badge gate** (`gate/`). Checks a counterparty agent's badge from two independent sources (the registry reads the chain; Clear to Pay fetches and hashes the card itself) and returns CLEARED / HELD / REFUSED with reason codes and evidence for the receipt. Fails closed. 15 tests (`npm test`), CI on every push.
 - [x] **Feature 2, accountability receipt** (`receipt/`, `anchor/`). One canonical JSON record per decision (invoice, badge-gate evidence, verdict and codes, signers, deciding agent #1287, link to the previous receipt, random salt). Only `CTP1` + its SHA-256 (36 bytes) goes on-chain via RegisterData, signed by the agent owner in the browser wallet. Refuses to record CLEARED unless the gate cleared and two different humans signed. 13 tests; First receipt anchored on testnet 19 Nov 2026: verdict CLEARED, receipt hash `7072261d7d5b212647c4be64469d8fba9c9e69e8e6869cbdab0c83fe06673c61`, RegisterData tx `6ee54f73adee62d2ca1dfb1f03a9dc492c123884daa5a0c81d61f30c31639d01`; CCDScan shows the data as `CTP1` + that hash.
-- [ ] **NEAR link (built, waiting for your signature).** `link/`: signs the CIS-8 canonical message with the NEAR owner key of `buyer.cleartopay.testnet` (namespace `near:testnet`, ed25519), checks every registry-built byte against the specs, then two wallet transactions: `registerExternalKey` on CIS-8 and `setExternalReference` on Agent #1287. 6 tests; dry-run against a fake registry and a mock wallet.
+- [x] **NEAR link: Agent #1287 is bound to the NEAR agent.** The NEAR owner key of `buyer.cleartopay.testnet` (`ed25519:CbHyry…QvbK`, namespace `near:testnet`) signed the CIS-8 canonical message; every registry-built byte matched our spec encoder. `registerExternalKey` on CIS-8 `<12801,0>` (tx `c33957395cb0176e4b8994bf5f94741fa69fdf1d5f5c2dac5e9f0efcddf2c5e3`, the contract verified the NEAR signature) and `setExternalReference` on Agent #1287 (tx `3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7`; the registry called CIS-8 mid-transaction to confirm the binding before attaching it). 19 Nov 2026.
 
 ## How we answer the brief
 The brief: *take an AI agent you already run on another chain and make it accountable: prove a verified human stands behind it, pay and get paid on its own, and leave a record.*
