@@ -29,25 +29,31 @@
 </head>
 <body>
 <h1>Escrow console</h1>
-<p class="sub">Contract <code>&lt;13091,0&gt;</code> on Concordium <b>testnet</b>. Each person connects their own account and does only their part; the contract refuses anyone else.</p>
+<p class="sub">Contract <code id="caddr">&lt;escrow&gt;</code> on Concordium <b>testnet</b>. Each person connects their own account and does only their part; the contract refuses anyone else.</p>
 <p><button id="connect">Connect wallet</button> <span style="font-size:13px;color:var(--mute)">Connected: <code id="acct">not connected</code></span></p>
 <div id="out"></div>
 
 <section>
   <h2>Buyer (admin account)</h2>
   <p>Set up the cast once, then fund each order. The CCD you attach to an order stays in the contract until it is paid or refunded.</p>
+  <h2 style="font-size:14px;margin-top:6px">One-click setup</h2>
+  <div class="row"><div><label>Receiver</label><input id="setup_receiver" value="3NrB4khEwjL32cM8qVsay6iHTRznthBFPNCG6GvmLNQygyVE2S"></div>
+  <div><label>Approver</label><input id="setup_approver" value="3byivDufzZzRRFasdEcL6pYM9zyyER73kaYvraPWb1rVixy9pA"></div></div>
+  <p style="margin-top:8px">Uses the agent and supplier fields below too. One transaction sets up everyone.</p>
+  <button data-action="setup">Set up the whole cast</button>
+  <h2 style="font-size:14px;margin-top:18px">Or one at a time</h2>
   <div class="row"><div><label>Signer account</label><input id="signer_account"></div>
   <div><label>Role</label><select id="signer_role"><option>Receiver</option><option>Approver</option></select></div></div>
   <button data-action="add_signer">Add signer</button>
   <div class="row"><div><label>Agent account (owner of the registered agent)</label><input id="agent_account" value="44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG"></div>
   <div><label>Agent token id (CIS-8004)</label><input id="agent_token" value="1287"></div></div>
   <button data-action="add_agent">Add agent</button>
-  <div class="row"><div><label>Supplier account</label><input id="supplier_account"></div>
-  <div><label>Payout account (starts the 72-hour hold)</label><input id="supplier_payout"></div></div>
+  <div class="row"><div><label>Supplier account</label><input id="supplier_account" value="45H81t8SBw5z84LjPcX3VFZRWPrcEKv3bTbao8yC5hbP2BixMY"></div>
+  <div><label>Payout account (starts the 72-hour hold)</label><input id="supplier_payout" value="45H81t8SBw5z84LjPcX3VFZRWPrcEKv3bTbao8yC5hbP2BixMY"></div></div>
   <button data-action="register_supplier">Register supplier</button>
   <div class="row"><div><label>Order id</label><input id="order_id" value="1"></div><div><label>Expected quantity</label><input id="order_qty" value="100"></div></div>
-  <div class="row"><div><label>Supplier</label><input id="order_supplier"></div><div><label>Amount to escrow (CCD)</label><input id="order_amount" value="25"></div></div>
-  <div class="row"><div><label>Receiver (named for this order)</label><input id="order_receiver"></div><div><label>Approver (named for this order)</label><input id="order_approver"></div></div>
+  <div class="row"><div><label>Supplier</label><input id="order_supplier" value="45H81t8SBw5z84LjPcX3VFZRWPrcEKv3bTbao8yC5hbP2BixMY"></div><div><label>Amount to escrow (CCD)</label><input id="order_amount" value="25"></div></div>
+  <div class="row"><div><label>Receiver (named for this order)</label><input id="order_receiver" value="3NrB4khEwjL32cM8qVsay6iHTRznthBFPNCG6GvmLNQygyVE2S"></div><div><label>Approver (named for this order)</label><input id="order_approver" value="3byivDufzZzRRFasdEcL6pYM9zyyER73kaYvraPWb1rVixy9pA"></div></div>
   <button data-action="create_order">Create and fund order</button>
   <div class="row"><div><label>Refund order id</label><input id="refund_order"></div><div></div></div>
   <button data-action="refund">Refund unpaid order</button>
@@ -63,7 +69,7 @@
 
 <section>
   <h2>Invoice (agent submits, supplier approves)</h2>
-  <p>Both pick the same invoice file; its SHA-256 is what goes on-chain. The supplier's approval binds the exact invoice to the order.</p>
+  <p>Both pick the same invoice file; its SHA-256 is what goes on-chain. The supplier's approval binds the exact invoice and the amount to the order, so nobody can pay less than the supplier approved.</p>
   <div class="row"><div><label>Order id</label><input id="inv_order" value="1"></div><div><label>Invoice amount (CCD)</label><input id="inv_amount" value="25"></div></div>
   <label>Invoice file</label><input type="file" id="inv_file">
   <label>Invoice SHA-256</label><input id="inv_hash">

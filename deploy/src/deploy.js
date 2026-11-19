@@ -5,7 +5,7 @@ import { say, code, bold, br, txLink } from '../../ui/say.js';
 
 const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
 // SHA-256 of the verifiable build from CI that we deploy (contract/ at the pinned commit).
-const EXPECTED_MODULE_SHA256 = '6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c';
+const EXPECTED_MODULE_SHA256 = '532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27';
 const DEPLOY_MODULE = 0; // AccountTransactionType.DeployModule
 const INIT_CONTRACT = 1; // AccountTransactionType.InitContract
 const HOLD_MS = 72 * 3600 * 1000; // 72 hours
