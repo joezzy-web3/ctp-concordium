@@ -24,3 +24,20 @@ Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay
 
 ## Licence
 MIT
+
+## Verify before you pay (badge gate)
+
+Before Clear to Pay accepts an invoice from another AI agent, it checks that agent's Verified by Concordium badge:
+
+```bash
+npm test                                      # 15 offline tests
+node gate/cli.js JyP9U25oUQ6KdnBBHdTYP         # live check of our own agent on testnet
+```
+
+The answer is `CLEARED`, `HELD` or `REFUSED`, with reason codes (`gate/codes.js`) and evidence: token id, owner, status, the on-chain hash and Clear to Pay's own hash of the card.
+
+Design choices, and what protects the user:
+- **Two independent sources.** The registry service reads the chain; Clear to Pay fetches the card and hashes the raw bytes itself. A card edited after anchoring is refused even if another check says it is fine.
+- **Fails closed.** If the registry or the card cannot be reached, the agent is HELD, never CLEARED, so an outage can only delay a payment, not let one through.
+- **Careful with untrusted input.** Agent IDs are checked before they go into a URL; cards must be https, at most 256 KB, fetched with a timeout and no redirects.
+

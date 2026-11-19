@@ -1,0 +1,13 @@
+{
+  "name": "ctp-concordium",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clear to Pay on Concordium: accountable supplier-payment agent (CIS-8004 Agent #1287)",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "gate": "node gate/cli.js"
+  }
+}

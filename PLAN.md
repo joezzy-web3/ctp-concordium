@@ -4,6 +4,7 @@
 - [x] Agent Card built with the hosted MCP tool `build_agent_card`, hosted on GitHub Pages, served bytes verified (v1, superseded by v2 below).
 - [x] **Registered on testnet: Agent #1287**, native, active. Agent ID (badge) `JyP9U25oUQ6KdnBBHdTYP`, owner `44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG`, registered 19 Nov 2026 13:41 (UTC+1), via the testnet Agent Registry app.
 - [x] **Card v2 anchored on-chain.** Card rebuilt for testnet (v2, 2943 bytes, SHA-256 `b6567d9bdb984846f7f72a2769a42485888be98928b11398c6a58be1828e9588`) and anchored with `CIS-8004.setAgentURI` from the browser wallet via `sign/` (tx `9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23`). The registry's own checks pass: `verify-agent-card` → `match: true`; `check-badge` → `badge_valid: true`, all 15 checks true, no issues.
+- [x] **Feature 1, verify before you pay: badge gate** (`gate/`). Checks a counterparty agent's badge from two independent sources (the registry reads the chain; Clear to Pay fetches and hashes the card itself) and returns CLEARED / HELD / REFUSED with reason codes and evidence for the receipt. Fails closed. 15 tests (`npm test`), CI on every push.
 
 ## How we answer the brief
 The brief: *take an AI agent you already run on another chain and make it accountable: prove a verified human stands behind it, pay and get paid on its own, and leave a record.*
