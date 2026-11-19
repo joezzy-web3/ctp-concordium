@@ -11,3 +11,4 @@ node_modules/
 
 # demo receipts made locally
 receipts/
+__pycache__/

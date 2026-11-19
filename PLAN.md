@@ -1,5 +1,18 @@
 # Plan and open items
 
+## Dates (UTC)
+- **Checkpoint 1:** Sun 22 Nov, 23:59 (idea text; draft Sat 21 Nov)
+- **Office hours:** from Tue 24 Nov, 15:00 (ask: Agent IDP on testnet; NEAR namespace in CIS-8)
+- **Submission:** Wed 9 Dec, 23:59 (repo, demo video, CCDExplorer links)
+
+## Build order (agreed 19 Nov)
+1. NEAR link: finish the two wallet transactions (built, waiting for signature)
+2. **Escrow contract in Rust on testnet:** the two-signer rule, blind delivery counts, the 72-hour hold on new payout accounts and the badge requirement enforced on-chain; the contract itself emits the decision record, so a receipt can no longer be anchored by just anyone
+3. Verified human signers with Concordium ID proofs
+4. Payments: x402 service fees (and PLT stablecoin payout from escrow)
+5. PATH_TO_PRODUCTION.md, mainnet registration, UI pass, demo video, audit prompt
+6. Stretch: supplier trust passport, one-click team onboarding
+
 ## Done
 - [x] Agent Card built with the hosted MCP tool `build_agent_card`, hosted on GitHub Pages, served bytes verified (v1, superseded by v2 below).
 - [x] **Registered on testnet: Agent #1287**, native, active. Agent ID (badge) `JyP9U25oUQ6KdnBBHdTYP`, owner `44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG`, registered 19 Nov 2026 13:41 (UTC+1), via the testnet Agent Registry app.
