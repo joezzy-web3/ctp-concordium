@@ -1,0 +1,69 @@
+{
+  "name": "Clear to Pay",
+  "description": "Supplier-payment guard for AI agents. Clear to Pay reads supplier invoices but can never release payment on its own: money is released only when two verified people sign blind delivery counts, the invoice is signed by the supplier's registered key and matches the order, and any new payout account has waited 72 hours. It refuses invoices from agents whose Verified by Concordium badge does not check out, and keeps an audit trail for EU AI Act record keeping.",
+  "url": "https://joezzy-web3.github.io/ctp-concordium/agent-card.json",
+  "version": "1.0.0",
+  "defaultInputModes": [
+    "text/markdown",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "text/markdown",
+    "application/json"
+  ],
+  "authentication": {
+    "schemes": []
+  },
+  "skills": [
+    {
+      "id": "check-invoice",
+      "name": "Check an invoice",
+      "description": "Returns CLEARED, HELD or SEIZED with reason codes for a supplier invoice. Never pays.",
+      "tags": [
+        "invoice",
+        "payments",
+        "fraud",
+        "accountability"
+      ]
+    },
+    {
+      "id": "verify-agent",
+      "name": "Verify a counterparty agent",
+      "description": "Checks another agent's Verified by Concordium badge and Agent Card hash before dealing with it.",
+      "tags": [
+        "badge",
+        "cis-8004",
+        "verification"
+      ]
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extensions": [
+      {
+        "uri": "https://docs.concordium.com/a2a-extensions/concordium-badge/v1",
+        "description": "Verified by Concordium badge — on-chain agent identity in a CIS-8004 registry",
+        "required": false,
+        "params": {
+          "tokenAddress": null,
+          "owner": {
+            "account": "ccd:9dd9ca4d19e9393877d2c44b70f89acb:44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG"
+          },
+          "agentWallet": "ccd:9dd9ca4d19e9393877d2c44b70f89acb:44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG",
+          "contracts": {
+            "cis8004": "ccd:9dd9ca4d19e9393877d2c44b70f89acb:10082.0",
+            "cis8": "ccd:9dd9ca4d19e9393877d2c44b70f89acb:10081.0"
+          },
+          "verify": "Resolve tokenAddress via CIS-8004 agent_of; confirm owner + status=Active + card SHA-256 == metadata_hash.",
+          "verification": {
+            "service": "Concordium Agent Registry",
+            "verifyUrl": "https://agent-registry-mcp.concordium.com/v1/badge-check/44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG",
+            "mcp": "https://agent-registry-mcp.concordium.com/mcp",
+            "docs": "https://docs.concordium.com/en/mainnet/technical-reference/agent-registry/concordium-badge.html"
+          }
+        }
+      }
+    ]
+  }
+}
