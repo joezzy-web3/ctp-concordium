@@ -20,7 +20,7 @@ ENERGY=30000
 
 BIN="$(mktemp)"
 trap 'rm -f "$BIN"' EXIT
-echo -n "$HEX" | xxd -r -p > "$BIN"
+python3 -c "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))" "$HEX" > "$BIN"
 echo "Parameter: $(stat -c %s "$BIN") bytes, sha256 $(sha256sum "$BIN" | cut -c1-16)…"
 
 concordium-client contract update "$CONTRACT" \
