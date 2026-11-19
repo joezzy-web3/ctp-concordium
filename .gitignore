@@ -1,0 +1,10 @@
+# secrets: never commit keys, wallet exports or env files
+.env
+.env.*
+*.pem
+*.key
+*.export
+wallet*.json
+# build output
+target/
+node_modules/
