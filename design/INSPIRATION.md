@@ -12,3 +12,7 @@ Notes
 - Keep the Clear to Pay identity from the Jira app (navy and gold, the flag), so both hackathon entries look like one product.
 - Verdict colours are fixed meanings everywhere: green CLEARED, amber HELD, red REFUSED.
 - Respect reduced-motion: the hero falls back to a still frame.
+
+| Ref | What we take from it |
+|---|---|
+| 04 Bold headline (light grey, huge condensed type, one word in accent colour, glossy 3D objects) | Landing headline set the same way: "Payments that wait for **proof**", with "proof" in gold. 3D objects around it are ours: an invoice, a wax-sealed receipt, the tattered flag, a badge shield, a lock. Dark pill CTA with a gold corner. Strong option if the dark portals hero feels too heavy; we can pick at UI time. |
