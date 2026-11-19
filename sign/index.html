@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · Anchor the Agent Card (testnet)</title>
+<style>
+  :root { --navy:#10264A; --gold:#E6BE4F; --ok:#127A4A; --bad:#C42B1C; --mute:#55657C; --line:#D5DCD7; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--navy); max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p.sub { color: var(--mute); margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+  td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--mute); width: 34%; }
+  code { font-size: 12px; word-break: break-all; }
+  button { height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--navy); color: #fff; font: inherit; cursor: pointer; margin-right: 8px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .ok { background: #E5F2EA; color: var(--ok); } .bad { background: #FBECEA; color: var(--bad); } .info { background: #F1F3F6; color: var(--mute); }
+</style>
+</head>
+<body>
+<h1>Anchor the Clear to Pay Agent Card</h1>
+<p class="sub">Calls <code>setAgentURI</code> on the CIS-8004 Agent Registry on <b>testnet</b>, so the on-chain hash matches the hosted card. Your browser wallet shows the transaction and signs it; your key never leaves the wallet.</p>
+
+<table>
+  <tr><td>Network</td><td>Concordium testnet (genesis <code>4221332d…</code>)</td></tr>
+  <tr><td>Contract</td><td><code>&lt;12802,0&gt;</code> · <code>CIS-8004.setAgentURI</code></td></tr>
+  <tr><td>Agent</td><td>#1287 · <code>JyP9U25oUQ6KdnBBHdTYP</code></td></tr>
+  <tr><td>Owner (must sign)</td><td><code id="owner"></code></td></tr>
+  <tr><td>Card URL</td><td><code id="uri"></code></td></tr>
+  <tr><td>Hash of the card as served</td><td><code id="hash">computing…</code></td></tr>
+  <tr><td>Connected account</td><td><code id="acct">not connected</code></td></tr>
+</table>
+
+<button id="connect">Connect wallet</button>
+<button id="send" disabled>Sign and send</button>
+<div id="out"></div>
+
+<script type="module">
+// Wallet API helpers and SDK types, pinned to the versions this page was tested with.
+import { detectConcordiumProvider } from 'https://esm.sh/@concordium/browser-wallet-api-helpers@3.3.0?deps=@concordium/web-sdk@12.0.3';
+import { AccountTransactionType, CcdAmount, ContractAddress, ReceiveName, Energy } from 'https://esm.sh/@concordium/web-sdk@12.0.3';
+
+// ---- Fixed facts about this agent (testnet) ----
+const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
+const OWNER = '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG';
+const TOKEN_ID_HEX = '0705000000000000';          // agent #1287, TokenIdU64 little-endian
+const AGENT_URI = 'https://joezzy-web3.github.io/ctp-concordium/agent-card.json';
+const EXPECTED_HASH = 'b6567d9bdb984846f7f72a2769a42485888be98928b11398c6a58be1828e9588'; // agent-card.json v2
+const CONTRACT =ContractAddress.create(12802, 0);
+const RECEIVE = ReceiveName.fromString('CIS-8004.setAgentURI');
+const ENERGY = Energy.create(30000);
+
+// Parameter schema for setAgentURI, written by hand and verified with
+// @concordium/web-sdk 12.0.3 to serialize to exactly the bytes that the
+// hosted MCP tool `build_set_agent_uri` produced (107 bytes, MATCH true).
+//   struct { token_id: ByteList<U8>, agent_uri: Option<String<U32>>, metadata_hash: Option<[u8; 32]> }
+const PARAM_SCHEMA_B64 = 'FAADAAAACAAAAHRva2VuX2lkHQAJAAAAYWdlbnRfdXJpFQIAAAAEAAAATm9uZQIEAAAAU29tZQEBAAAAFgINAAAAbWV0YWRhdGFfaGFzaBUCAAAABAAAAE5vbmUCBAAAAFNvbWUBAQAAABMgAAAAAg==';
+
+const $ = (id) => document.getElementById(id);
+const say = (cls, html) => { $('out').innerHTML = `<div class="msg ${cls}">${html}</div>`; };
+$('owner').textContent = OWNER;
+$('uri').textContent = AGENT_URI;
+
+let provider = null;
+let account = null;
+let hashBytes = null;
+
+// 1. Hash the card exactly as it is served (no reformatting), in the browser.
+async function hashServedCard() {
+  const res = await fetch(AGENT_URI, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Card fetch failed: HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  hashBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  const hex = [...hashBytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  $('hash').textContent = hex;
+  if (hex !== EXPECTED_HASH) {
+    hashBytes = null; // never anchor a card we did not build and check
+    throw new Error('The served card does not match the card built in the repo (hash differs). Nothing will be sent.');
+  }
+}
+
+// 2. Connect the wallet and refuse anything that is not testnet + the owner account.
+async function connect() {
+  provider = await detectConcordiumProvider();
+  const accounts = await provider.requestAccounts();
+  account = accounts?.[0] ?? null;
+  $('acct').textContent = account ?? 'none';
+  const chain = (await provider.getSelectedChain()) ?? '';
+  if (!chain.startsWith(TESTNET_GENESIS_PREFIX)) {
+    say('bad', 'Your wallet is not on <b>testnet</b>. Switch the network in the wallet and connect again.');
+    return;
+  }
+  if (account !== OWNER) {
+    say('bad', 'The connected account is not the agent owner. Select account <code>44Fc…iWeG</code> in the wallet.');
+    return;
+  }
+  say('info', 'Wallet on testnet with the owner account. Check the hash above, then press <b>Sign and send</b>.');
+  $('send').disabled = !hashBytes;
+}
+
+// 3. Hand the transaction to the wallet. The wallet shows it; you approve.
+async function send() {
+  $('send').disabled = true;
+  const parameters = {
+    token_id: TOKEN_ID_HEX,
+    agent_uri: { Some: [AGENT_URI] },
+    metadata_hash: { Some: [Array.from(hashBytes)] },
+  };
+  try {
+    const txHash = await provider.sendTransaction(
+      account,
+      AccountTransactionType.Update,
+      { amount: CcdAmount.zero(), address: CONTRACT, receiveName: RECEIVE, maxContractExecutionEnergy: ENERGY },
+      parameters,
+      { type: 'parameter', value: PARAM_SCHEMA_B64 },
+    );
+    say('ok', `Sent. Transaction <code>${txHash}</code><br><a href="https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${txHash}" target="_blank" rel="noopener">View on testnet CCDScan</a>`);
+  } catch (err) {
+    say('bad', `Not sent: ${err?.message ?? err}`);
+    $('send').disabled = false;
+  }
+}
+
+$('connect').onclick = () => connect().catch((e) => say('bad', e.message ?? String(e)));
+$('send').onclick = send;
+hashServedCard().catch((e) => { $('hash').textContent = 'error'; say('bad', e.message); });
+</script>
+</body>
+</html>
