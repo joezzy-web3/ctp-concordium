@@ -9,15 +9,20 @@ import { printPO } from './po.js';
 const ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
 const SETUP_TX = '5ceebe7c6dc59eed13eaa21cb6518429bbfda509748b6c8962c4530d51827ae3';
 
-// ---------- sub-navigation ----------
-function subnav(sub) {
-  const item = (key, label) => h('a', { href: `#/buyer${key ? `/${key}` : ''}`, class: sub === key ? 'on' : null, 'aria-current': sub === key ? 'page' : null }, label);
-  return h('nav.subnav', { 'aria-label': 'Buyer sections' }, item('', 'Readiness'), item('new', 'New order'), item('orders', 'Orders'));
+// ---------- sidebar ----------
+const CONTRACT_URL = `https://testnet.ccdscan.io/?dcount=1&dentity=contract&dcontractAddressIndex=${ESCROW.index}&dcontractAddressSubIndex=${ESCROW.subindex}`;
+function sidebar(sub) {
+  const me = currentAccount();
+  const item = (key, label, ico) => h('a', { href: `#/buyer${key ? `/${key}` : ''}`, class: sub === key ? 'on' : null, 'aria-current': sub === key ? 'page' : null }, icon(ico, 18), label);
+  return h('aside.side',
+    h('div.who', h('span.avatar', 'B'), h('div', h('b', 'Buyer'), h('span.mono', me ? short(me) : 'Not connected'))),
+    h('nav', { 'aria-label': 'Buyer sections' }, item('', 'Dashboard', 'grid'), item('new', 'New order', 'plus'), item('orders', 'Orders', 'list')),
+    h('a.side-foot', { href: CONTRACT_URL, target: '_blank', rel: 'noopener' }, `Escrow <${ESCROW.index},${ESCROW.subindex}>`, icon('external', 14)));
 }
 
 export async function buyerView(sub = '') {
-  const body = sub === 'new' ? wizard() : sub === 'orders' ? await ordersView() : await readiness();
-  return h('div.space', subnav(sub), body);
+  const body = sub === 'new' ? wizard() : sub === 'orders' ? await ordersView() : await dashboard();
+  return h('div.space.with-side', sidebar(sub), h('div.space-main', body));
 }
 
 // ---------- readiness ----------
@@ -31,34 +36,70 @@ async function badge() {
   }
 }
 
-async function readiness() {
+const NEXT_STEP = {
+  counting: 'The receiver and approver count the delivery.',
+  revealing: 'The signers reveal their sealed counts.',
+  mismatch: 'The counts do not match the order: check with the signers.',
+  invoice: `Agent #${AGENT.id} submits the invoice.`,
+  approval: 'The supplier approves the invoice and its amount.',
+  amount: 'The invoice amount differs from the escrow: refund and reorder.',
+  hold: 'The supplier’s new payout account is still in its 72-hour hold.',
+  ready: `Agent #${AGENT.id} asks the contract to pay.`,
+};
+
+async function dashboard() {
   const [cfg, sup, orders, b] = await Promise.all([
     viewConfig().catch(() => null), viewSupplier(CAST.supplier).catch(() => undefined), listOrders().catch(() => null), badge(),
   ]);
+  if (!cfg || !orders) {
+    return h('section.panel', h('header.panel-h', h('h2', 'Dashboard')), h('p.err', icon('alert', 16), 'Could not read the escrow contract right now. Check your connection, then reload.'));
+  }
   const me = currentAccount();
-  const holdEnds = sup && cfg ? sup.payout_set_at + cfg.hold_ms : null;
-  const holdLeft = holdEnds ? holdEnds - Date.now() : null;
-  const open = (orders ?? []).filter((o) => !o.paid && !o.refunded);
-  const locked = open.reduce((s, o) => s + o.amount, 0n);
+  const supByAddr = { [CAST.supplier]: sup ?? null };
+  const open = orders.filter((o) => !o.paid && !o.refunded);
+  const paid = orders.filter((o) => o.paid);
+  const held = open.reduce((x, o) => x + o.amount, 0n);
+  const paidOut = paid.reduce((x, o) => x + o.amount, 0n);
+  const staged = open.map((o) => ({ o, st: orderStage(o, supByAddr[o.supplier], cfg.hold_ms) }));
+  const waiting = staged.filter(({ st }) => st.key !== 'ready');
 
+  // payout hold ring: how much of the 72 hours has passed
+  const start = sup ? sup.payout_set_at : null;
+  const end = start ? start + cfg.hold_ms : null;
+  const done = end ? Math.min(1, Math.max(0, (Date.now() - start) / cfg.hold_ms)) : 0;
+  const ring = h('div.ring', { style: { '--p': `${Math.round(done * 100)}%` }, role: 'img', 'aria-label': `${Math.round(done * 100)}% of the payout hold has passed` },
+    h('div.ring-in', h('b.num', end && end > Date.now() ? countdown(end - Date.now()) : 'Done'), h('span', end && end > Date.now() ? 'left' : 'hold passed')));
+
+  const tile = (cls, label, value, foot) => h(`div.tile.${cls}`, h('span', label), h('b.num', value), h('small', foot));
   const row = (tone, title, text, extra) => h('li.ready', h(`span.ready-ico.${tone}`, icon(tone === 'ok' ? 'check' : tone === 'hold' ? 'clock' : 'alert', 16)), h('div', h('b', title), h('span', text), extra));
-  return h('section.panel',
-    h('header.panel-h', h('h2', 'Readiness'), h('p', 'What this escrow needs before an order can clear, read live from the contract.')),
-    h('ul.ready-list',
-      cfg ? row(me === cfg.admin ? 'ok' : 'hold', 'Buyer account', me === cfg.admin ? `You are the buyer admin (${short(cfg.admin)}).` : `The buyer admin is ${short(cfg.admin)}. Connect that account to create orders.`)
-        : row('no', 'Escrow contract', 'Could not read the contract right now. Check your connection and reload.'),
-      b.known ? row(b.ok ? 'ok' : 'no', `Agent #${AGENT.id}`, b.ok ? 'Verified by Concordium: badge and card hash check out.' : `Badge does not check out: ${b.issues.join(', ') || 'unknown reason'}.`)
-        : row('hold', `Agent #${AGENT.id}`, 'Could not reach the registry from this browser.', h('a.inline', { href: `https://agent-registry-mcp.concordium.com/v1/check-badge/${AGENT.badge}?network=testnet`, target: '_blank', rel: 'noopener' }, 'Check the badge', icon('external', 14))),
-      row('ok', 'Receiver and approver', 'Listed on the contract in the one-transaction setup.', h('a.inline', { href: ccdscanTx(SETUP_TX), target: '_blank', rel: 'noopener' }, 'Setup transaction', icon('external', 14))),
-      sup ? row(holdLeft > 0 ? 'hold' : 'ok', `${CAST.supplierName}`, holdLeft > 0 ? `Registered. Its payout account can be paid in ${countdown(holdLeft)} (${fmtDate(holdEnds)}).` : `Registered, paid to its own account ${short(sup.payout)}. The 72-hour hold has passed.`)
-        : sup === null ? row('no', CAST.supplierName, 'Not registered on this escrow.') : row('hold', CAST.supplierName, 'Could not read the supplier from the contract right now.'),
-    ),
-    h('div.stats',
-      h('div.stat', h('span', 'Orders'), h('b.num', String(orders?.length ?? '–'))),
-      h('div.stat', h('span', 'Open'), h('b.num', String(open.length))),
-      h('div.stat', h('span', 'Held in escrow'), h('b.num', `${microToCcd(locked)} CCD`)),
-    ),
-    h('div.actions', h('a.btn.dark', { href: '#/buyer/new' }, 'New order', h('i', { 'aria-hidden': 'true' }))),
+
+  return h('div.dash',
+    h('header.dash-h', h('div', h('h2', 'Dashboard'), h('p', 'Everything here is read live from the escrow contract.')), h('a.btn.dark', { href: '#/buyer/new' }, 'New order', h('i', { 'aria-hidden': 'true' }))),
+    h('div.tiles',
+      tile('t-sage', 'Held in escrow', `${microToCcd(held)} CCD`, `${open.length} open ${open.length === 1 ? 'order' : 'orders'}`),
+      tile('t-amber', 'Waiting on someone', String(waiting.length), waiting.length ? 'see below who acts next' : 'nothing is stuck'),
+      tile('t-sky', 'Paid to suppliers', `${microToCcd(paidOut)} CCD`, `${paid.length} paid ${paid.length === 1 ? 'order' : 'orders'}`)),
+    h('div.dash-cols',
+      h('section.panel.attn',
+        h('div.panel-row', h('h3', 'Open orders'), h('a.inline', { href: '#/buyer/orders' }, 'All orders', icon('arrow', 14))),
+        staged.length ? h('ul.attn-list', staged.map(({ o, st }) => h('li',
+          h('a', { href: '#/buyer/orders' },
+            h('span.order-id.num', `#${o.id}`),
+            h('span.attn-what', h('b.num', `${microToCcd(o.amount)} CCD`), h('span', NEXT_STEP[st.key] ?? st.label)),
+            chip(st.tone, st.label)))))
+          : h('div.empty-s', h('p', 'No open orders. Create one and the amount locks in escrow until it clears.'))),
+      h('div.dash-side',
+        h('section.panel.hold',
+          h('h3', 'Supplier payout hold'),
+          sup ? [ring, h('p', end > Date.now() ? `${CAST.supplierName} can be paid from ${fmtDate(end)}.` : `${CAST.supplierName} can be paid now.`)]
+            : h('p', sup === null ? 'The supplier is not registered on this escrow.' : 'Could not read the supplier right now.')),
+        h('section.panel.checks',
+          h('h3', 'Readiness'),
+          h('ul.ready-list.compact',
+            row(me === cfg.admin ? 'ok' : 'hold', 'Buyer account', me === cfg.admin ? 'Connected as the buyer admin.' : `Connect ${short(cfg.admin)} to create orders.`),
+            b.known ? row(b.ok ? 'ok' : 'no', `Agent #${AGENT.id}`, b.ok ? 'Verified by Concordium.' : 'Badge does not check out.')
+              : row('hold', `Agent #${AGENT.id}`, 'Registry not reachable from here.', h('a.inline', { href: `https://agent-registry-mcp.concordium.com/v1/check-badge/${AGENT.badge}?network=testnet`, target: '_blank', rel: 'noopener' }, 'Check', icon('external', 14))),
+            row('ok', 'Receiver and approver', 'Listed on the contract.', h('a.inline', { href: ccdscanTx(SETUP_TX), target: '_blank', rel: 'noopener' }, 'Setup', icon('external', 14))))))),
   );
 }
 

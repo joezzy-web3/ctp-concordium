@@ -15,7 +15,7 @@ export function h(spec, props, ...children) {
   for (const [k, v] of Object.entries(props)) {
     if (v == null || v === false) continue;
     if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
     else if (k === 'dataset') Object.assign(el.dataset, v);
     else if (k === 'class') el.className += ` ${v}`;
     else if (k in el && k !== 'list' && k !== 'form') el[k] = v;
@@ -50,6 +50,8 @@ const ICONS = {
   plus: 'M10 4v12M4 10h12',
   x: 'M5 5l10 10M15 5L5 15',
   arrow: 'M4 10h12M11 5l5 5-5 5',
+  grid: 'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z',
+  list: 'M7 5h10M7 10h10M7 15h10M3 5h.01M3 10h.01M3 15h.01',
 };
 export function icon(name, size = 18) {
   const ns = 'http://www.w3.org/2000/svg';

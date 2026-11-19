@@ -25,3 +25,6 @@ id_rsa*
 *.secret
 credentials*.json
 .near-credentials/
+app/app.mock.js
+app/mock.html
+_t.html

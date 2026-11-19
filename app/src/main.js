@@ -48,7 +48,7 @@ function band(role) {
   const me = currentAccount();
   const actual = roleOf(me);
   const mismatch = me && role !== 'judge' && actual && actual !== role;
-  const open = store.get(`guide:${role}`, true);
+  const open = store.get(`guide:${role}`, false);
   const guideBtn = r.guide.length ? h('button.band-g', { type: 'button', 'aria-expanded': String(open), onclick: () => { store.set(`guide:${role}`, !open); band(role); } }, open ? 'Hide the guide' : 'Show the guide') : null;
   fill(el, 
     h('div.band-in',
