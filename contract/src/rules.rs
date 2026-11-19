@@ -19,7 +19,7 @@ pub enum Code {
     HeldCountMismatch,
     /// The invoice amount is not the escrowed order amount.
     HeldAmountMismatch,
-    /// The supplier has not approved this exact invoice (by its hash) from its own account.
+    /// The supplier has not approved this exact invoice (by its hash) for this exact amount, from its own account.
     HeldNoSupplierApproval,
     /// The supplier's payout account changed less than the hold period ago.
     HeldPayoutCoolOff,
@@ -54,7 +54,7 @@ pub struct Facts<'a, A> {
     pub order_amount: u64,
     /// Invoice amount, if an invoice was submitted.
     pub invoice_amount: Option<u64>,
-    /// True when the supplier approved the hash of the submitted invoice.
+    /// True when the supplier approved the hash AND the amount of the submitted invoice.
     pub supplier_approved: bool,
     pub reveals: &'a [Reveal<A>],
     /// When the supplier's payout account was last set (milliseconds).

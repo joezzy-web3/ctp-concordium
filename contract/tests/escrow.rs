@@ -65,7 +65,9 @@ fn commit_hash(qty: u64, salt: [u8; 32]) -> HashSha2256 {
 }
 
 /// Deploys, lists the signers and the agent, registers the supplier and funds one order.
-fn setup() -> T {
+fn setup() -> T { setup_with_order(PRICE) }
+
+fn setup_with_order(escrow: Amount) -> T {
     let mut chain = Chain::new();
     for a in [ADMIN, RECEIVER, APPROVER, OTHER_SIGNER, SUPPLIER, PAYOUT, NEW_PAYOUT, AGENT, STRANGER] {
         chain.create_account(Account::new(a, Amount::from_ccd(10_000)));
@@ -79,12 +81,17 @@ fn setup() -> T {
         param: OwnedParameter::from_serial(&InitParams { hold_ms: HOLD_MS }).unwrap(),
     }).expect("init");
     let mut t = T { chain, addr: init.contract_address };
-    t.ok(ADMIN, "add_signer", &SignerParams { account: RECEIVER, role: Role::Receiver });
-    t.ok(ADMIN, "add_signer", &SignerParams { account: APPROVER, role: Role::Approver });
-    t.ok(ADMIN, "add_signer", &SignerParams { account: OTHER_SIGNER, role: Role::Receiver });
-    t.ok(ADMIN, "add_agent", &AgentParams { account: AGENT, agent_token_id: 1287 });
-    t.ok(ADMIN, "register_supplier", &SupplierParams { supplier: SUPPLIER, payout: PAYOUT });
-    t.call(ADMIN, "create_order", &CreateOrderParams { order_id: ORDER, supplier: SUPPLIER, expected_qty: QTY, receiver: RECEIVER, approver: APPROVER }, PRICE).expect("create_order");
+    // The whole cast in one transaction.
+    t.ok(ADMIN, "setup", &SetupParams {
+        signers: vec![
+            SignerParams { account: RECEIVER, role: Role::Receiver },
+            SignerParams { account: APPROVER, role: Role::Approver },
+            SignerParams { account: OTHER_SIGNER, role: Role::Receiver },
+        ],
+        agents: vec![AgentParams { account: AGENT, agent_token_id: 1287 }],
+        suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: PAYOUT }],
+    });
+    t.call(ADMIN, "create_order", &CreateOrderParams { order_id: ORDER, supplier: SUPPLIER, expected_qty: QTY, receiver: RECEIVER, approver: APPROVER }, escrow).expect("create_order");
     t
 }
 
@@ -96,7 +103,7 @@ fn happy_path_until_execute(t: &mut T, qty_r: u64, qty_a: u64) {
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: qty_r, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: qty_a, salt: sa });
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
-    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
 }
 
 fn execute(t: &mut T) -> (Verdict, Vec<Code>, Option<AccountAddress>) {
@@ -147,7 +154,7 @@ fn invoice_without_supplier_approval_is_held() {
     t.wait(HOLD_MS);
     assert_eq!(execute(&mut t).1, vec![Code::HeldNoSupplierApproval]);
     // The supplier approving a different invoice does not help.
-    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: HashSha2256([0xcc; 32]) });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: HashSha2256([0xcc; 32]), amount: PRICE });
     assert_eq!(execute(&mut t).1, vec![Code::HeldNoSupplierApproval]);
 }
 
@@ -155,7 +162,7 @@ fn invoice_without_supplier_approval_is_held() {
 fn only_the_supplier_can_approve_its_invoice() {
     let mut t = setup();
     for who in [ADMIN, AGENT, STRANGER] {
-        assert_eq!(t.err(who, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE }), Error::NotSupplier);
+        assert_eq!(t.err(who, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::NotSupplier);
     }
 }
 
@@ -230,9 +237,10 @@ fn wrong_invoice_amount_is_held() {
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
     t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: Amount::from_ccd(12_500) });
-    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
     t.wait(HOLD_MS);
-    assert_eq!(execute(&mut t).1, vec![Code::HeldAmountMismatch]);
+    // The invoice amount differs from the escrow, and from what the supplier approved.
+    assert_eq!(execute(&mut t).1, vec![Code::HeldAmountMismatch, Code::HeldNoSupplierApproval]);
 }
 
 #[test]
@@ -259,4 +267,31 @@ fn hold_outside_the_allowed_range_is_refused_at_init() {
         });
         assert!(r.is_err(), "hold {hold_ms} should be refused");
     }
+}
+
+#[test]
+fn buyer_and_agent_cannot_underpay_the_supplier() {
+    // The supplier's invoice is for PRICE. The buyer escrows less and the agent submits
+    // the real invoice with the lower amount. The supplier approved PRICE, so it is held.
+    let mut t = setup_with_order(Amount::from_ccd(1_000));
+    let (sr, sa) = ([11u8; 32], [22u8; 32]);
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(QTY, sa) });
+    t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
+    t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: Amount::from_ccd(1_000) });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.wait(HOLD_MS);
+    let before = t.balance(PAYOUT);
+    assert_eq!(execute(&mut t), (Verdict::Held, vec![Code::HeldNoSupplierApproval], None));
+    assert_eq!(t.balance(PAYOUT), before);
+}
+
+#[test]
+fn setup_is_admin_only_and_refuses_a_supplier_twice() {
+    let mut t = setup();
+    let p = SetupParams { signers: vec![], agents: vec![], suppliers: vec![SupplierParams { supplier: STRANGER, payout: STRANGER }] };
+    assert_eq!(t.err(STRANGER, "setup", &p), Error::NotAdmin);
+    let again = SetupParams { signers: vec![], agents: vec![], suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: NEW_PAYOUT }] };
+    assert_eq!(t.err(ADMIN, "setup", &again), Error::SupplierExists);
 }

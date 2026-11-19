@@ -47,6 +47,13 @@ pub struct Invoice {
     pub amount: Amount,
 }
 
+/// What the supplier approved: this exact invoice, for this exact amount.
+#[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
+pub struct Approval {
+    pub invoice_hash: HashSha2256,
+    pub amount: Amount,
+}
+
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Order {
     pub supplier: AccountAddress,
@@ -58,8 +65,8 @@ pub struct Order {
     pub commits: Vec<Commit>,
     pub reveals: Vec<RevealedCount>,
     pub invoice: Option<Invoice>,
-    /// Hash of the invoice the supplier approved from its own account.
-    pub supplier_approval: Option<HashSha2256>,
+    /// The invoice and amount the supplier approved from its own account.
+    pub supplier_approval: Option<Approval>,
     pub paid: bool,
     pub refunded: bool,
 }
@@ -134,7 +141,9 @@ pub enum Event {
     CountCommitted { order_id: OrderId, signer: AccountAddress, role: Role },
     CountRevealed { order_id: OrderId, signer: AccountAddress, role: Role, qty: u64 },
     InvoiceSubmitted { order_id: OrderId, agent: AccountAddress, agent_token_id: u64, invoice_hash: HashSha2256, amount: Amount },
-    InvoiceApproved { order_id: OrderId, supplier: AccountAddress, invoice_hash: HashSha2256 },
+    InvoiceApproved { order_id: OrderId, supplier: AccountAddress, invoice_hash: HashSha2256, amount: Amount },
+    SignerSet { account: AccountAddress, role: Role },
+    AgentSet { account: AccountAddress, agent_token_id: u64 },
     Decision {
         order_id: OrderId,
         verdict: Verdict,
@@ -187,6 +196,16 @@ pub struct CreateOrderParams {
 pub struct ApproveParams {
     pub order_id: OrderId,
     pub invoice_hash: HashSha2256,
+    /// The amount the supplier agrees to be paid for this invoice.
+    pub amount: Amount,
+}
+
+/// Sets up the cast in one transaction.
+#[derive(Serialize, SchemaType)]
+pub struct SetupParams {
+    pub signers: Vec<SignerParams>,
+    pub agents: Vec<AgentParams>,
+    pub suppliers: Vec<SupplierParams>,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -260,12 +279,48 @@ fn init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<State
 
 // ---------- admin ----------
 
-#[receive(contract = "ctp_escrow", name = "add_signer", parameter = "SignerParams", error = "Error", mutable)]
-fn add_signer(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<()> {
+fn set_signer(host: &mut Host<State>, logger: &mut Logger, p: &SignerParams) -> ContractResult<()> {
+    let _ = host.state_mut().signers.insert(p.account, p.role);
+    logger.log(&Event::SignerSet { account: p.account, role: p.role })?;
+    Ok(())
+}
+
+fn set_agent(host: &mut Host<State>, logger: &mut Logger, p: &AgentParams) -> ContractResult<()> {
+    let _ = host.state_mut().agents.insert(p.account, p.agent_token_id);
+    logger.log(&Event::AgentSet { account: p.account, agent_token_id: p.agent_token_id })?;
+    Ok(())
+}
+
+fn add_supplier(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger, p: &SupplierParams) -> ContractResult<()> {
+    ensure!(host.state().suppliers.get(&p.supplier).is_none(), Error::SupplierExists);
+    let at = ctx.metadata().slot_time();
+    let _ = host.state_mut().suppliers.insert(p.supplier, Supplier { payout: p.payout, payout_set_at: at });
+    logger.log(&Event::SupplierRegistered { supplier: p.supplier, payout: p.payout, at })?;
+    Ok(())
+}
+
+/// Sets up signers, agents and suppliers in one transaction.
+#[receive(contract = "ctp_escrow", name = "setup", parameter = "SetupParams", error = "Error", mutable, enable_logger)]
+fn setup(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
+    ensure_admin(ctx, host)?;
+    let p: SetupParams = ctx.parameter_cursor().get()?;
+    for s in &p.signers {
+        set_signer(host, logger, s)?;
+    }
+    for a in &p.agents {
+        set_agent(host, logger, a)?;
+    }
+    for s in &p.suppliers {
+        add_supplier(ctx, host, logger, s)?;
+    }
+    Ok(())
+}
+
+#[receive(contract = "ctp_escrow", name = "add_signer", parameter = "SignerParams", error = "Error", mutable, enable_logger)]
+fn add_signer(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     ensure_admin(ctx, host)?;
     let p: SignerParams = ctx.parameter_cursor().get()?;
-    let _ = host.state_mut().signers.insert(p.account, p.role);
-    Ok(())
+    set_signer(host, logger, &p)
 }
 
 #[receive(contract = "ctp_escrow", name = "remove_signer", parameter = "AccountAddress", error = "Error", mutable)]
@@ -278,12 +333,11 @@ fn remove_signer(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult
 
 /// Registers an agent the buyer trusts to submit invoices. The off-chain badge gate
 /// (../gate/) checks its Verified by Concordium badge before the admin adds it.
-#[receive(contract = "ctp_escrow", name = "add_agent", parameter = "AgentParams", error = "Error", mutable)]
-fn add_agent(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<()> {
+#[receive(contract = "ctp_escrow", name = "add_agent", parameter = "AgentParams", error = "Error", mutable, enable_logger)]
+fn add_agent(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     ensure_admin(ctx, host)?;
     let p: AgentParams = ctx.parameter_cursor().get()?;
-    let _ = host.state_mut().agents.insert(p.account, p.agent_token_id);
-    Ok(())
+    set_agent(host, logger, &p)
 }
 
 #[receive(contract = "ctp_escrow", name = "remove_agent", parameter = "AccountAddress", error = "Error", mutable)]
@@ -300,11 +354,7 @@ fn remove_agent(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<
 fn register_supplier(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     ensure_admin(ctx, host)?;
     let p: SupplierParams = ctx.parameter_cursor().get()?;
-    ensure!(host.state().suppliers.get(&p.supplier).is_none(), Error::SupplierExists);
-    let at = ctx.metadata().slot_time();
-    let _ = host.state_mut().suppliers.insert(p.supplier, Supplier { payout: p.payout, payout_set_at: at });
-    logger.log(&Event::SupplierRegistered { supplier: p.supplier, payout: p.payout, at })?;
-    Ok(())
+    add_supplier(ctx, host, logger, &p)
 }
 
 #[receive(contract = "ctp_escrow", name = "create_order", parameter = "CreateOrderParams", error = "Error", mutable, payable, enable_logger)]
@@ -421,8 +471,9 @@ fn reveal_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
 
 // ---------- supplier: approve the invoice ----------
 
-/// The supplier approves, from its own account, the exact invoice (by hash) it sent.
-/// Without this, an agent cannot get an order paid with an invented invoice.
+/// The supplier approves, from its own account, the exact invoice (by hash) and the amount
+/// it agrees to be paid. Without this, an agent cannot get an invented invoice paid, and a
+/// buyer cannot pay less than the supplier approved.
 #[receive(contract = "ctp_escrow", name = "approve_invoice", parameter = "ApproveParams", error = "Error", mutable, enable_logger)]
 fn approve_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     let supplier = sender_account(ctx).map_err(|_| Error::NotSupplier)?;
@@ -431,9 +482,9 @@ fn approve_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
     ensure!(!order.paid, Error::OrderClosed);
     ensure!(order.supplier == supplier, Error::NotSupplier);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
-        o.supplier_approval = Some(p.invoice_hash);
+        o.supplier_approval = Some(Approval { invoice_hash: p.invoice_hash, amount: p.amount });
     }
-    logger.log(&Event::InvoiceApproved { order_id: p.order_id, supplier, invoice_hash: p.invoice_hash })?;
+    logger.log(&Event::InvoiceApproved { order_id: p.order_id, supplier, invoice_hash: p.invoice_hash, amount: p.amount })?;
     Ok(())
 }
 
@@ -475,7 +526,7 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
         expected_qty: order.expected_qty,
         order_amount: order.amount.micro_ccd,
         invoice_amount: Some(invoice.amount.micro_ccd),
-        supplier_approved: order.supplier_approval == Some(invoice.invoice_hash),
+        supplier_approved: order.supplier_approval == Some(Approval { invoice_hash: invoice.invoice_hash, amount: invoice.amount }),
         reveals: &reveals,
         payout_set_at: supplier.payout_set_at.timestamp_millis(),
         now: now.timestamp_millis(),
