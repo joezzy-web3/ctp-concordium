@@ -15,8 +15,9 @@ use rules::{Facts, Reveal};
 
 pub type OrderId = u64;
 
-/// At most this many signers can commit a count for one order.
-const MAX_COMMITS: usize = 8;
+/// Allowed range for the payout hold: at least 1 minute, at most 30 days.
+const MIN_HOLD_MS: u64 = 60 * 1000;
+const MAX_HOLD_MS: u64 = 30 * 24 * 3600 * 1000;
 
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Supplier {
@@ -49,11 +50,16 @@ pub struct Invoice {
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Order {
     pub supplier: AccountAddress,
+    /// The two people named for this order. Only they can count it.
+    pub receiver: AccountAddress,
+    pub approver: AccountAddress,
     pub expected_qty: u64,
     pub amount: Amount,
     pub commits: Vec<Commit>,
     pub reveals: Vec<RevealedCount>,
     pub invoice: Option<Invoice>,
+    /// Hash of the invoice the supplier approved from its own account.
+    pub supplier_approval: Option<HashSha2256>,
     pub paid: bool,
     pub refunded: bool,
 }
@@ -86,8 +92,15 @@ pub enum Error {
     SupplierExists,
     OrderClosed,
     ZeroAmount,
+    BadHold,
+    /// The receiver and approver of an order must be two different, currently listed signers in those roles.
+    BadOrderSigners,
+    /// Only the receiver and approver named on the order can count it.
+    NotOrderSigner,
+    /// The signer was removed or changed role after the order was created.
+    SignerNoLongerValid,
     AlreadyCommitted,
-    TooManyCommits,
+    NoInvoice,
     NotCommitted,
     AlreadyRevealed,
     /// Reveals open only after two people in two different roles have committed.
@@ -121,6 +134,7 @@ pub enum Event {
     CountCommitted { order_id: OrderId, signer: AccountAddress, role: Role },
     CountRevealed { order_id: OrderId, signer: AccountAddress, role: Role, qty: u64 },
     InvoiceSubmitted { order_id: OrderId, agent: AccountAddress, agent_token_id: u64, invoice_hash: HashSha2256, amount: Amount },
+    InvoiceApproved { order_id: OrderId, supplier: AccountAddress, invoice_hash: HashSha2256 },
     Decision {
         order_id: OrderId,
         verdict: Verdict,
@@ -165,6 +179,14 @@ pub struct CreateOrderParams {
     pub order_id: OrderId,
     pub supplier: AccountAddress,
     pub expected_qty: u64,
+    pub receiver: AccountAddress,
+    pub approver: AccountAddress,
+}
+
+#[derive(Serialize, SchemaType)]
+pub struct ApproveParams {
+    pub order_id: OrderId,
+    pub invoice_hash: HashSha2256,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -225,6 +247,7 @@ fn open_order(host: &Host<State>, order_id: OrderId) -> ContractResult<Order> {
 #[init(contract = "ctp_escrow", parameter = "InitParams", event = "Event")]
 fn init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<State> {
     let p: InitParams = ctx.parameter_cursor().get()?;
+    ensure!((MIN_HOLD_MS..=MAX_HOLD_MS).contains(&p.hold_ms), Reject::from(Error::BadHold));
     Ok(State {
         admin: ctx.init_origin(),
         hold_ms: p.hold_ms,
@@ -291,13 +314,19 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
     ensure!(amount > Amount::zero(), Error::ZeroAmount);
     ensure!(host.state().suppliers.get(&p.supplier).is_some(), Error::UnknownSupplier);
     ensure!(host.state().orders.get(&p.order_id).is_none(), Error::OrderExists);
+    ensure!(p.receiver != p.approver, Error::BadOrderSigners);
+    ensure!(host.state().signers.get(&p.receiver).map(|r| *r) == Some(Role::Receiver), Error::BadOrderSigners);
+    ensure!(host.state().signers.get(&p.approver).map(|r| *r) == Some(Role::Approver), Error::BadOrderSigners);
     let _ = host.state_mut().orders.insert(p.order_id, Order {
         supplier: p.supplier,
+        receiver: p.receiver,
+        approver: p.approver,
         expected_qty: p.expected_qty,
         amount,
         commits: Vec::new(),
         reveals: Vec::new(),
         invoice: None,
+        supplier_approval: None,
         paid: false,
         refunded: false,
     });
@@ -340,15 +369,28 @@ fn set_payout(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger)
 
 // ---------- signers: blind counts ----------
 
+/// The role this account holds on the order, if it is the named receiver or approver
+/// AND is still listed as a signer in that same role today.
+fn order_role(host: &Host<State>, order: &Order, signer: &AccountAddress) -> ContractResult<Role> {
+    let role = if *signer == order.receiver {
+        Role::Receiver
+    } else if *signer == order.approver {
+        Role::Approver
+    } else {
+        return Err(Error::NotOrderSigner);
+    };
+    ensure!(host.state().signers.get(signer).map(|r| *r) == Some(role), Error::SignerNoLongerValid);
+    Ok(role)
+}
+
 #[receive(contract = "ctp_escrow", name = "commit_count", parameter = "CommitParams", error = "Error", mutable, enable_logger)]
 fn commit_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     let signer = sender_account(ctx).map_err(|_| Error::NotSigner)?;
-    let role = host.state().signers.get(&signer).map(|r| *r).ok_or(Error::NotSigner)?;
     let p: CommitParams = ctx.parameter_cursor().get()?;
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
+    let role = order_role(host, &order, &signer)?;
     ensure!(order.commits.iter().all(|c| c.signer != signer), Error::AlreadyCommitted);
-    ensure!(order.commits.len() < MAX_COMMITS, Error::TooManyCommits);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.commits.push(Commit { signer, role, hash: p.hash });
     }
@@ -362,17 +404,36 @@ fn reveal_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     let p: RevealParams = ctx.parameter_cursor().get()?;
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
+    // Re-checked at reveal time: a signer removed after committing can no longer count.
+    let role = order_role(host, &order, &signer)?;
     let commit = order.commits.iter().find(|c| c.signer == signer).ok_or(Error::NotCommitted)?.clone();
     ensure!(order.reveals.iter().all(|r| r.signer != signer), Error::AlreadyRevealed);
-    // Blind: nobody reveals until two different people in two different roles have committed.
-    let two_roles = order.commits.iter().any(|a| order.commits.iter().any(|b| a.signer != b.signer && a.role != b.role));
-    ensure!(two_roles, Error::WaitingForSecondRole);
+    // Blind: nobody reveals until both named people have committed.
+    ensure!(order.commits.len() == 2, Error::WaitingForSecondRole);
     let h = crypto_primitives.hash_sha2_256(&rules::commit_preimage(p.order_id, p.qty, &p.salt));
     ensure!(h == commit.hash, Error::RevealDoesNotMatchCommit);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
-        o.reveals.push(RevealedCount { signer, role: commit.role, qty: p.qty });
+        o.reveals.push(RevealedCount { signer, role, qty: p.qty });
     }
-    logger.log(&Event::CountRevealed { order_id: p.order_id, signer, role: commit.role, qty: p.qty })?;
+    logger.log(&Event::CountRevealed { order_id: p.order_id, signer, role, qty: p.qty })?;
+    Ok(())
+}
+
+// ---------- supplier: approve the invoice ----------
+
+/// The supplier approves, from its own account, the exact invoice (by hash) it sent.
+/// Without this, an agent cannot get an order paid with an invented invoice.
+#[receive(contract = "ctp_escrow", name = "approve_invoice", parameter = "ApproveParams", error = "Error", mutable, enable_logger)]
+fn approve_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
+    let supplier = sender_account(ctx).map_err(|_| Error::NotSupplier)?;
+    let p: ApproveParams = ctx.parameter_cursor().get()?;
+    let order = open_order(host, p.order_id)?;
+    ensure!(!order.paid, Error::OrderClosed);
+    ensure!(order.supplier == supplier, Error::NotSupplier);
+    if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
+        o.supplier_approval = Some(p.invoice_hash);
+    }
+    logger.log(&Event::InvoiceApproved { order_id: p.order_id, supplier, invoice_hash: p.invoice_hash })?;
     Ok(())
 }
 
@@ -401,9 +462,11 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
     let caller_token = host.state().agents.get(&caller).map(|t| *t).ok_or(Error::NotAgent)?;
     let p: ExecuteParams = ctx.parameter_cursor().get()?;
     let order = open_order(host, p.order_id)?;
-    if let Some(inv) = &order.invoice {
-        ensure!(inv.agent == caller, Error::NotAgent);
-    }
+    // A paid order is final: no further decisions are logged for it.
+    ensure!(!order.paid, Error::OrderClosed);
+    // Only the agent that submitted the invoice, and is still registered, can ask for a decision.
+    let invoice = order.invoice.clone().ok_or(Error::NoInvoice)?;
+    ensure!(invoice.agent == caller, Error::NotAgent);
     let supplier = host.state().suppliers.get(&order.supplier).map(|s| s.clone()).ok_or(Error::UnknownSupplier)?;
     let now = ctx.metadata().slot_time();
     let reveals: Vec<Reveal<AccountAddress>> = order.reveals.iter().map(|r| Reveal { signer: r.signer, role: r.role, qty: r.qty }).collect();
@@ -411,7 +474,8 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
         paid: order.paid,
         expected_qty: order.expected_qty,
         order_amount: order.amount.micro_ccd,
-        invoice_amount: order.invoice.as_ref().map(|i| i.amount.micro_ccd),
+        invoice_amount: Some(invoice.amount.micro_ccd),
+        supplier_approved: order.supplier_approval == Some(invoice.invoice_hash),
         reveals: &reveals,
         payout_set_at: supplier.payout_set_at.timestamp_millis(),
         now: now.timestamp_millis(),

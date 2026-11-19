@@ -19,6 +19,8 @@ pub enum Code {
     HeldCountMismatch,
     /// The invoice amount is not the escrowed order amount.
     HeldAmountMismatch,
+    /// The supplier has not approved this exact invoice (by its hash) from its own account.
+    HeldNoSupplierApproval,
     /// The supplier's payout account changed less than the hold period ago.
     HeldPayoutCoolOff,
 }
@@ -52,6 +54,8 @@ pub struct Facts<'a, A> {
     pub order_amount: u64,
     /// Invoice amount, if an invoice was submitted.
     pub invoice_amount: Option<u64>,
+    /// True when the supplier approved the hash of the submitted invoice.
+    pub supplier_approved: bool,
     pub reveals: &'a [Reveal<A>],
     /// When the supplier's payout account was last set (milliseconds).
     pub payout_set_at: u64,
@@ -85,6 +89,9 @@ pub fn decide<A: PartialEq>(f: &Facts<A>) -> (Verdict, Vec<Code>) {
             codes.push(Code::HeldAmountMismatch);
         }
     }
+    if f.invoice_amount.is_some() && !f.supplier_approved {
+        codes.push(Code::HeldNoSupplierApproval);
+    }
     if f.now < f.payout_set_at.saturating_add(f.hold_ms) {
         codes.push(Code::HeldPayoutCoolOff);
     }
@@ -114,7 +121,7 @@ mod tests {
     fn r(signer: u8, role: Role, qty: u64) -> Reveal<u8> { Reveal { signer, role, qty } }
 
     fn facts<'a>(reveals: &'a [Reveal<u8>]) -> Facts<'a, u8> {
-        Facts { paid: false, expected_qty: 100, order_amount: 1_250, invoice_amount: Some(1_250), reveals, payout_set_at: 0, now: H72, hold_ms: H72 }
+        Facts { paid: false, expected_qty: 100, order_amount: 1_250, invoice_amount: Some(1_250), supplier_approved: true, reveals, payout_set_at: 0, now: H72, hold_ms: H72 }
     }
 
     #[test]
@@ -167,6 +174,14 @@ mod tests {
         let mut f = facts(&rv);
         f.invoice_amount = Some(12_500);
         assert_eq!(decide(&f).1, vec![Code::HeldAmountMismatch]);
+    }
+
+    #[test]
+    fn invoice_without_supplier_approval_is_held() {
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let mut f = facts(&rv);
+        f.supplier_approved = false;
+        assert_eq!(decide(&f).1, vec![Code::HeldNoSupplierApproval]);
     }
 
     #[test]

@@ -17,3 +17,4 @@ concordium-std = "11.0.0"
 
 [dev-dependencies]
 concordium-smart-contract-testing = "5.0.0"
+sha2 = "0.10"
