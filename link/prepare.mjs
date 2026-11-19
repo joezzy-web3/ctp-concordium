@@ -5,6 +5,9 @@
 //
 // 1. Loads the NEAR key from the file and refuses unless its public key equals --expect.
 //    The secret key is used only in memory to sign; it is never printed or written.
+//    Wiping it afterwards is best-effort: Node.js may keep copies (the parsed file, strings)
+//    until garbage collection. Run it on your own machine only, and prefer a hardware or
+//    wallet signer for mainnet keys.
 // 2. Asks the registry for the CIS-8 canonical bytes and rebuilds them from the spec;
 //    any difference stops the script.
 // 3. Signs them with the NEAR key (plain ed25519 over the raw bytes) and checks the signature.
@@ -40,7 +43,8 @@ let pkHex;
   if (typeof sk !== 'string' || !sk.startsWith('ed25519:')) die('key file has no ed25519 secret key');
   const raw = E.base58Decode(sk.slice(8));
   if (raw.length !== 64 && raw.length !== 32) die('unexpected secret key length');
-  seed = raw.subarray(0, 32);
+  seed = Buffer.from(raw.subarray(0, 32));
+  raw.fill(0);
   const priv = createPrivateKey({ key: Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]), format: 'der', type: 'pkcs8' });
   pkHex = createPublicKey(priv).export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
   if (pkHex !== E.nearPublicKeyHex(expect)) die('the key in this file is not the expected key');
@@ -55,7 +59,7 @@ const key = { namespace: NAMESPACE, key_type: KEY_TYPE, public_key_hex: pkHex };
 // ---- MCP helper ----
 async function call(name, args) {
   const res = await fetch(MCP, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(30000),
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
   });
@@ -90,7 +94,7 @@ console.log(`Canonical bytes match the spec (${theirs.length / 2} bytes, CIS-8 c
 // ---- 3. Sign and self-check ----
 const msgBytes = Buffer.from(theirs, 'hex');
 const signatureHex = sign(null, msgBytes, privateKey()).toString('hex');
-seed.fill(0); // done with the secret
+seed.fill(0); // best-effort wipe of our own buffer (other copies live until GC)
 if (!verify(null, msgBytes, publicKey, Buffer.from(signatureHex, 'hex'))) die('signature did not verify');
 console.log('Signed with the NEAR key; signature verifies.');
 

@@ -39,7 +39,12 @@ function fakeFetch({ reg = FIXTURE, regStatus = 200, card = CARD, cardStatus = 2
 }
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
-const run = (input, f) => checkCounterparty(input, { fetch: f, now });
+const cardVia = (f) => async (url) => {
+  const r = await f(url);
+  if (!r.ok) throw new Error(`card HTTP ${r.status}`);
+  return new Uint8Array(await r.arrayBuffer());
+};
+const run = (input, f) => checkCounterparty(input, { fetch: f, fetchCard: cardVia(f), now });
 
 test('our own registered agent #1287 is CLEARED, with evidence', async () => {
   const f = fakeFetch();

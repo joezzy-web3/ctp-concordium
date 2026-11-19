@@ -11,6 +11,7 @@
 
 import { createHash } from 'node:crypto';
 import { GATE_CODES as C, GATE_ORDER, gateVerdict } from './codes.js';
+import { safeFetchBytes } from './safeFetch.js';
 
 export const REGISTRY_URL = 'https://agent-registry-mcp.concordium.com';
 export const TESTNET_CHAIN = 'ccd:4221332d34e1694168c2a0c0b3fd0f27';
@@ -31,15 +32,6 @@ async function fetchWithTimeout(fetchImpl, url, ms) {
   }
 }
 
-/** Reads at most `limit` bytes of a response body; throws if it is larger. */
-async function readCapped(res, limit) {
-  const len = Number(res.headers?.get?.('content-length'));
-  if (Number.isFinite(len) && len > limit) throw new Error('card too large');
-  const buf = new Uint8Array(await res.arrayBuffer());
-  if (buf.byteLength > limit) throw new Error('card too large');
-  return buf;
-}
-
 /**
  * Checks a counterparty agent.
  * @param {object} input
@@ -48,7 +40,9 @@ async function readCapped(res, limit) {
  * @param {object} [opts]
  * @param {'testnet'|'mainnet'} [opts.network='testnet']
  * @param {string} [opts.expectedChain]  CAIP-2 chain id the registry must answer for
- * @param {Function} [opts.fetch]        injected for tests
+ * @param {Function} [opts.fetch]        registry fetch, injected for tests
+ * @param {Function} [opts.fetchCard]    card download (url) => Uint8Array; default refuses non-public
+ *                                       addresses, streams with a byte cap and one overall timeout
  * @param {() => Date} [opts.now]
  * @returns {Promise<{verdict:string, codes:string[], evidence:object}>}
  */
@@ -56,6 +50,7 @@ export async function checkCounterparty(input, opts = {}) {
   const network = opts.network ?? 'testnet';
   const expectedChain = opts.expectedChain ?? (network === 'testnet' ? TESTNET_CHAIN : null);
   const fetchImpl = opts.fetch ?? globalThis.fetch;
+  const fetchCard = opts.fetchCard ?? ((url) => safeFetchBytes(url, { timeoutMs: TIMEOUT_MS, maxBytes: MAX_CARD_BYTES }));
   const now = opts.now ?? (() => new Date());
   const fired = new Set();
   const evidence = { badge: input?.badge ?? null, network, checked_at: now().toISOString(), registry: REGISTRY_URL };
@@ -119,9 +114,8 @@ export async function checkCounterparty(input, opts = {}) {
     return finish();
   }
   try {
-    const res = await fetchWithTimeout(fetchImpl, uri, TIMEOUT_MS);
-    if (!res.ok) throw new Error(`card HTTP ${res.status}`);
-    const bytes = await readCapped(res, MAX_CARD_BYTES);
+    const bytes = await fetchCard(uri);
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength > MAX_CARD_BYTES) throw new Error('card too large');
     const ours = createHash('sha256').update(bytes).digest('hex');
     evidence.card_sha256 = ours;
     evidence.card_bytes = bytes.byteLength;

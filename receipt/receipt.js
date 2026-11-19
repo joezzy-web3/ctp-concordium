@@ -6,7 +6,11 @@
 // What goes on-chain: only a 36-byte tag + SHA-256, via Concordium's built-in
 // RegisterData transaction. Invoice data stays off-chain; a random salt in
 // every receipt means the hash reveals nothing about it.
-// Receipts can link to the previous one (prev), forming a tamper-evident log.
+// Receipts can point to the previous one (prev): a tamper-evident link, not a
+// complete log on its own (audit F-08). A RegisterData anchor proves that this
+// exact receipt existed at that time; it does not prove who issued it or that
+// the rules were followed (audit F-07). The authoritative record of a payment
+// decision is the escrow contract's Decision event (../contract/).
 //
 // The receipt also enforces the accountability rules at build time:
 // - it cannot say CLEARED unless the counterparty gate said CLEARED;
@@ -19,6 +23,55 @@ export const ANCHOR_TAG_HEX = '43545031'; // ASCII "CTP1": marks our RegisterDat
 const VERDICTS = new Set(['CLEARED', 'HELD', 'REFUSED', 'SEIZED']);
 const AMOUNT_RE = /^(0|[1-9][0-9]{0,15})(\.[0-9]{1,8})?$/;
 const HEX64 = /^[0-9a-f]{64}$/;
+
+
+const ROLE_SET = new Set(['receiver', 'approver']);
+const GATE_VERDICTS = new Set(['CLEARED', 'HELD', 'REFUSED']);
+const isStr = (x) => typeof x === 'string' && x.length > 0;
+
+/**
+ * Strict check of a complete receipt (audit F-07). Used by buildReceipt, the
+ * anchoring page and verifyReceipt, so a hand-made receipt that breaks a rule
+ * is refused everywhere. Returns the list of problems (empty when valid).
+ */
+export function validateReceipt(r) {
+  const p = [];
+  const req = (cond, msg) => { if (!cond) p.push(msg); };
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return ['not an object'];
+  const allowed = ['schema', 'invoice', 'counterparty', 'decision', 'signers', 'decided_by', 'decided_at', 'prev', 'salt'];
+  for (const k of Object.keys(r)) req(allowed.includes(k), `unexpected field ${k}`);
+  req(r.schema === SCHEMA, 'unknown schema');
+  const inv = r.invoice ?? {};
+  req(isStr(inv.id) && isStr(inv.supplier), 'invoice needs id and supplier');
+  req(typeof inv.amount === 'string' && AMOUNT_RE.test(inv.amount), 'invoice.amount must be a decimal string');
+  req(typeof inv.currency === 'string' && /^[A-Z]{3,5}$/.test(inv.currency), 'invoice.currency must be a code');
+  const cp = r.counterparty ?? {};
+  req(GATE_VERDICTS.has(cp.verdict), 'counterparty.verdict missing');
+  req(Array.isArray(cp.codes) && cp.codes.every(isStr), 'counterparty.codes must be strings');
+  if (cp.verdict === 'CLEARED') {
+    req(Array.isArray(cp.codes) && cp.codes.length === 0, 'a cleared counterparty has no codes');
+    req(isStr(cp.badge) && isStr(cp.owner) && cp.status === 'Active', 'a cleared counterparty needs badge, owner and Active status');
+    req(HEX64.test(cp.on_chain_hash ?? '') && cp.card_sha256 === cp.on_chain_hash, 'a cleared counterparty needs matching card and on-chain hashes');
+  }
+  const d = r.decision ?? {};
+  req(VERDICTS.has(d.verdict), 'decision.verdict invalid');
+  req(Array.isArray(d.codes) && d.codes.every(isStr), 'decision.codes must be strings');
+  if (Array.isArray(d.codes)) req(d.verdict === 'CLEARED' ? d.codes.length === 0 : d.codes.length > 0, 'CLEARED has no codes; any other verdict needs at least one');
+  const signers = Array.isArray(r.signers) ? r.signers : (p.push('signers must be a list'), []);
+  for (const s of signers) req(ROLE_SET.has(s?.role) && isStr(s?.account) && !Number.isNaN(Date.parse(s?.signed_at)), 'each signer needs role (receiver/approver), account, signed_at');
+  if (d.verdict === 'CLEARED') {
+    req(cp.verdict === 'CLEARED', 'cannot clear a payment when the sending agent did not pass the badge gate');
+    const accounts = new Set(signers.map((s) => s.account));
+    const roles = new Set(signers.map((s) => s.role));
+    req(accounts.size >= 2 && roles.size >= 2, 'cannot clear a payment without two different people in two different roles');
+  }
+  const by = r.decided_by ?? {};
+  req(Number.isSafeInteger(by.agent_id) && isStr(by.badge) && isStr(by.network), 'decided_by needs agent_id, badge, network');
+  req(isStr(r.decided_at) && !Number.isNaN(Date.parse(r.decided_at)), 'decided_at must be an ISO time');
+  req(r.prev === null || HEX64.test(r.prev ?? ''), 'prev must be a 64-char lowercase hex hash or null');
+  req(typeof r.salt === 'string' && /^[0-9a-f]{32}$/.test(r.salt), 'salt must be 32 lowercase hex chars');
+  return p;
+}
 
 function need(cond, msg) {
   if (!cond) throw new Error(`receipt: ${msg}`);
@@ -74,7 +127,7 @@ export function buildReceipt(d) {
   need(/^[0-9a-f]{32}$/.test(salt), 'salt must be 32 lowercase hex chars');
 
   const ev = gate.evidence ?? {};
-  return {
+  const receipt = {
     schema: SCHEMA,
     invoice: { id: inv.id, supplier: inv.supplier, amount: inv.amount, currency: inv.currency, po: inv.po ?? null },
     counterparty: {
@@ -96,6 +149,9 @@ export function buildReceipt(d) {
     prev: d.prev ?? null,
     salt,
   };
+  const problems = validateReceipt(receipt);
+  need(problems.length === 0, problems.join('; '));
+  return receipt;
 }
 
 /** SHA-256 (hex) of the receipt's canonical bytes. */
@@ -123,10 +179,15 @@ export async function verifyReceipt(receipt, onChainDataHex, expectedPrev) {
   } catch (e) {
     problems.push(`not a valid receipt: ${e.message}`);
   }
-  if (receipt?.schema !== SCHEMA) problems.push('unknown schema');
+  problems.push(...validateReceipt(receipt));
   const data = String(onChainDataHex ?? '').toLowerCase();
   if (!data.startsWith(ANCHOR_TAG_HEX) || data.length !== 72) problems.push('on-chain data is not a Clear to Pay anchor');
   else if (hash && data.slice(8) !== hash) problems.push('receipt was changed after it was anchored');
   if (expectedPrev !== undefined && (receipt?.prev ?? null) !== expectedPrev) problems.push('receipt is out of order in the log');
-  return { valid: problems.length === 0, hash, problems };
+  return {
+    valid: problems.length === 0,
+    hash,
+    problems,
+    proves: 'this receipt passes every rule check and existed unchanged when the RegisterData transaction was made; who issued it and the payment itself are proven by the escrow contract Decision event',
+  };
 }

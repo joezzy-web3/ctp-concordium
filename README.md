@@ -4,12 +4,22 @@
 
 Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**.
 
-## What it will do
-1. **The Clear to Pay agent is registered** in the Concordium Agent Registry (CIS-8004) with an Agent Card and the *Verified by Concordium* badge.
-2. **Badge-gated agents:** Clear to Pay refuses invoices from any agent whose badge does not check out (missing, revoked, or card hash mismatch).
-3. **Verified human signers:** storekeeper and weighbridge prove a role attribute with Concordium ID zero-knowledge proofs; no personal data is stored.
-4. **Escrow on testnet:** funds lock when an order is created and release only when blind-count delivery signatures and the supplier-signed invoice check out, after a 72-hour hold on new payout accounts.
-5. **Audit trail** built for EU AI Act Article 12 record keeping.
+## Status: live today vs in progress
+
+Every row marked live links to on-chain evidence or runs in the test suite. Rows in progress are not claimed as protections until they are deployed.
+
+| Piece | Status | Evidence |
+|---|---|---|
+| Agent #1287 registered (CIS-8004), Agent Card anchored, Verified by Concordium badge | **Live (testnet)** | registry `check-badge`: all 15 checks pass; card anchor tx below |
+| Cross-chain link to the Clear to Pay agent on NEAR (CIS-8) | **Live (testnet)** | CIS-8 checked the NEAR signature; registry confirmed the binding before attaching it (link tx below) |
+| Badge gate: refuse counterparty agents whose badge or card does not check out | **Live (off-chain code)** | `gate/`, `npm test` |
+| Receipts: canonical, salted, rule-checked, hash anchored with RegisterData | **Live (testnet)** | `receipt/`, first anchor tx in PLAN.md. Proves the receipt existed unchanged; the issuer and the payment are proven by the escrow contract once deployed |
+| Escrow contract: two named people in two roles count blind, supplier approves its own invoice, 72-hour hold on new payout accounts, pays only on CLEARED, logs every decision | **Built and tested, not deployed yet** | `contract/` (14 rule tests, 14 end-to-end tests) |
+| Contract checks the agent in the CIS-8004 registry itself | In progress | today the buyer registers only agents the badge gate cleared, and the contract re-checks registration at every decision |
+| Signers proven to be two different verified people (Concordium ID zero-knowledge proofs) | In progress | today: two different accounts in two different roles, each owned by an ID-verified Concordium identity |
+| Payments: x402 service fees; stablecoin payout | In progress | escrow pays in CCD first |
+
+The Agent Card describes the product as a whole; it will be re-anchored with the escrow contract address when the contract is deployed.
 
 ## Testnet references
 | What | Value |
@@ -30,7 +40,7 @@ MIT
 Before Clear to Pay accepts an invoice from another AI agent, it checks that agent's Verified by Concordium badge:
 
 ```bash
-npm test                                      # 15 offline tests
+npm test                                      # offline tests
 node gate/cli.js JyP9U25oUQ6KdnBBHdTYP         # live check of our own agent on testnet
 ```
 
@@ -39,7 +49,7 @@ The answer is `CLEARED`, `HELD` or `REFUSED`, with reason codes (`gate/codes.js`
 Design choices, and what protects the user:
 - **Two independent sources.** The registry service reads the chain; Clear to Pay fetches the card and hashes the raw bytes itself. A card edited after anchoring is refused even if another check says it is fine.
 - **Fails closed.** If the registry or the card cannot be reached, the agent is HELD, never CLEARED, so an outage can only delay a payment, not let one through.
-- **Careful with untrusted input.** Agent IDs are checked before they go into a URL; cards must be https, at most 256 KB, fetched with a timeout and no redirects.
+- **Careful with untrusted input.** The card URL is chosen by the agent being checked, so it is treated as hostile: Agent IDs are checked before they go into a URL; cards must be https, are fetched with no redirects, refused if they resolve to a private, loopback or link-local address (checked when the connection is made), counted byte by byte up to 256 KB, and given one timeout for the whole download.
 
 ## Accountability receipt
 
@@ -55,6 +65,7 @@ Anchor a receipt from the browser wallet at `anchor/` (https://joezzy-web3.githu
 Design choices, and what protects the user:
 - **Only a hash goes on-chain.** The 36-byte anchor is `CTP1` plus the receipt's SHA-256. Invoice details stay with the business, and a random salt in every receipt means the hash cannot be matched to a guessed invoice.
 - **The rules are enforced in the record itself.** A receipt cannot say CLEARED unless the sending agent passed the badge gate and two different people signed.
-- **Tamper-evident log.** Each receipt carries the hash of the one before it, so a receipt removed or reordered later shows up.
+- **Tamper-evident link.** Each receipt carries the hash of the one before it, so a receipt that was changed breaks the link to the next one. On its own this is a link, not a complete log: the escrow contract's `Decision` events are the authoritative, ordered record.
+- **What an anchor proves.** A RegisterData anchor proves that this exact receipt existed, unchanged, at that time, and the verifier refuses any receipt that breaks a rule (for example CLEARED without the badge gate or without two people in two roles). It does not by itself prove who issued the receipt; that is what the contract's `Decision` event is for.
 - **Same bytes everywhere.** Receipts use a strict canonical JSON (sorted keys, amounts as strings, no floats), so the command line and the browser compute the same hash.
 

@@ -19,8 +19,10 @@ const ENERGY = Energy.create(30000);
 //   struct { token_id: ByteList<U8>, agent_uri: Option<String<U32>>, metadata_hash: Option<[u8; 32]> }
 const PARAM_SCHEMA_B64 = 'FAADAAAACAAAAHRva2VuX2lkHQAJAAAAYWdlbnRfdXJpFQIAAAAEAAAATm9uZQIEAAAAU29tZQEBAAAAFgINAAAAbWV0YWRhdGFfaGFzaBUCAAAABAAAAE5vbmUCBAAAAFNvbWUBAQAAABMgAAAAAg==';
 
+import { say, code, bold, br, txLink } from '../../ui/say.js';
+
 const $ = (id) => document.getElementById(id);
-const say = (cls, html) => { $('out').innerHTML = `<div class="msg ${cls}">${html}</div>`; };
+
 $('owner').textContent = OWNER;
 $('uri').textContent = AGENT_URI;
 
@@ -50,19 +52,20 @@ async function connect() {
   $('acct').textContent = account ?? 'none';
   const chain = (await provider.getSelectedChain()) ?? '';
   if (!chain.startsWith(TESTNET_GENESIS_PREFIX)) {
-    say('bad', 'Your wallet is not on <b>testnet</b>. Switch the network in the wallet and connect again.');
+    say('bad', 'Your wallet is not on ', bold('testnet'), '. Switch the network in the wallet and connect again.');
     return;
   }
   if (account !== OWNER) {
-    say('bad', 'The connected account is not the agent owner. Select account <code>44Fc…iWeG</code> in the wallet.');
+    say('bad', 'The connected account is not the agent owner. Select account ', code('44Fc…iWeG'), ' in the wallet.');
     return;
   }
-  say('info', 'Wallet on testnet with the owner account. Check the hash above, then press <b>Sign and send</b>.');
+  say('info', 'Wallet on testnet with the owner account. Check the hash above, then press ', bold('Sign and send'), '.');
   $('send').disabled = !hashBytes;
 }
 
 // 3. Hand the transaction to the wallet. The wallet shows it; you approve.
 async function send() {
+  if (!hashBytes || !account || account !== OWNER) return;
   $('send').disabled = true;
   const parameters = {
     token_id: TOKEN_ID_HEX,
@@ -77,7 +80,7 @@ async function send() {
       parameters,
       { type: 'parameter', value: PARAM_SCHEMA_B64 },
     );
-    say('ok', `Sent. Transaction <code>${txHash}</code><br><a href="https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${txHash}" target="_blank" rel="noopener">View on testnet CCDScan</a>`);
+    say('ok', 'Sent. Transaction ', code(txHash), br(), txLink(txHash));
   } catch (err) {
     say('bad', `Not sent: ${err?.message ?? err}`);
     $('send').disabled = false;

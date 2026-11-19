@@ -6,7 +6,7 @@ const MCP = 'https://agent-registry-mcp.concordium.com/mcp';
 const b = JSON.parse(readFileSync('link/bundle.json', 'utf8'));
 const key = { namespace: b.near.namespace, key_type: b.near.key_type, public_key_hex: b.near.public_key_hex };
 async function call(name, args) {
-  const res = await fetch(MCP, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+  const res = await fetch(MCP, { method: 'POST', signal: AbortSignal.timeout(30000), headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { ...args, network: 'testnet' } } }) });
   const t = await res.text();
   const m = JSON.parse(t.slice(t.indexOf('{')).split('\n')[0]);

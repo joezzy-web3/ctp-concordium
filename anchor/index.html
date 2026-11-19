@@ -39,7 +39,12 @@
 <div id="out"></div>
 
 <script>
-  window.addEventListener('error', (e) => { document.getElementById('out').innerHTML = '<div class="msg bad">Page error: ' + (e.message || 'script failed to load') + '</div>'; }, true);
+  window.addEventListener('error', (e) => {
+    const box = document.createElement('div');
+    box.className = 'msg bad';
+    box.textContent = 'Page error: ' + (e.message || 'script failed to load');
+    document.getElementById('out').replaceChildren(box);
+  }, true);
 </script>
 <script type="module" src="app.js"></script>
 </body>

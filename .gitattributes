@@ -1,0 +1,5 @@
+agent-card.json -text
+link/bundle.json -text
+link/registry-responses.json -text
+test/fixtures/** -text
+*.sh text eol=lf

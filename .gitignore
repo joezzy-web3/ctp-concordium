@@ -12,3 +12,16 @@ node_modules/
 # demo receipts made locally
 receipts/
 __pycache__/
+
+# more key and credential formats (audit F-14)
+*.p12
+*.pfx
+*.jwk
+*.keystore
+id_ed25519*
+id_rsa*
+*-key.json
+*_key.json
+*.secret
+credentials*.json
+.near-credentials/

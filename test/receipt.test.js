@@ -124,3 +124,25 @@ test('receipts chain: each one points at the previous hash', async () => {
   const out = await verifyReceipt(second, await anchorDataHex(second), null);
   assert.ok(out.problems.includes('receipt is out of order in the log'));
 });
+
+test('verify refuses a hand-made CLEARED receipt that breaks the rules, even with a matching anchor (audit F-07)', async () => {
+  const { validateReceipt } = await import('../receipt/receipt.js');
+  const good = buildReceipt(base());
+  const forged = [
+    (r) => { r.counterparty.verdict = 'REFUSED'; r.counterparty.codes = ['REFUSED_OWNER_MISMATCH']; },
+    (r) => { r.signers = [r.signers[0]]; },
+    (r) => { r.signers[1].role = 'receiver'; },
+    (r) => { r.signers[1].account = r.signers[0].account; },
+    (r) => { r.counterparty.card_sha256 = 'ff'.repeat(32); },
+    (r) => { r.decision.codes = ['HELD_ONE_SIGNATURE']; },
+    (r) => { r.extra = 'x'; },
+  ];
+  for (const mutate of forged) {
+    const r = structuredClone(good);
+    mutate(r);
+    assert.ok(validateReceipt(r).length > 0, mutate.toString());
+    const v = await verifyReceipt(r, await anchorDataHex(r)); // anchored "honestly" for its own hash
+    assert.equal(v.valid, false, mutate.toString());
+  }
+  assert.deepEqual(validateReceipt(good), []);
+});
