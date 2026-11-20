@@ -214,3 +214,9 @@ html[data-dir="back"]::view-transition-old(root){animation-name:vt-out-r}html[da
 .order-id{font-variant-numeric:tabular-nums}
 .panel-h h2,.dash-h h2,.empty h2,.soon h2{text-wrap:balance}
 .btn:active{transform:scale(.96)}
+
+/* Order tools: agreed date, recount, ask for payment, give back */
+.order-tools{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.date-block p{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+.order-tools .actions{justify-content:flex-start;gap:10px;margin-top:10px}
+h3.sub-h{margin:28px 0 10px}

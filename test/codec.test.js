@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeOrder, decodeSupplier, orderStage, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
+import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, recountAllowed, readyToPay, orderStage, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
 import { createHash } from 'node:crypto';
 import { accountBytes } from '../link/encode.js';
 
@@ -22,12 +22,41 @@ test('decodes a full order exactly as the contract serialized it', async () => {
   assert.deepEqual(o.invoice, { agent: AG, agent_token_id: 1287n, invoice_hash: 'cd'.repeat(32), amount: 25000000n });
   assert.deepEqual(o.supplier_approval, { invoice_hash: 'cd'.repeat(32), amount: 25000000n });
   assert.equal(o.paid, false); assert.equal(o.refunded, false);
+  assert.equal(o.invoice_by, 1795117380000); assert.equal(o.accepted, true);
+  assert.deepEqual(o.date_proposal, { by: S, invoice_by: 1795203780000 });
+  assert.equal(o.recounts, 1);
+});
+
+test('decodes the contract config, including the registry it asks', async () => {
+  const BUYER = '4QzE6ZTUg2j5FCH4fxyvNLEvcmuY3w8PrTZ66qjqocycEmTthG';
+  assert.deepEqual(await decodeConfig(hex(F.config)), { admin: BUYER, pending_admin: AG, hold_ms: 60000, registry: { index: 12802, subindex: 0 } });
+});
+
+test('refund, recount and payment rules mirror the contract', async () => {
+  const o = await decodeOrder(hex(F.order_full));
+  const due = o.invoice_by;
+  const fresh = { ...o, accepted: false };
+  assert.equal(refundAllowed(fresh, due - 1), true, 'before the supplier accepts');
+  assert.equal(refundAllowed(o, due - 1), false, 'accepted, before the date');
+  assert.equal(refundAllowed(o, due + 1), true, 'after the date, not ready (one reveal)');
+  const R2 = { signer: AP, role: 'Approver', qty: 100n };
+  const ready = { ...o, reveals: [...o.reveals, R2], invoice: { ...o.invoice }, supplier_approval: { ...o.supplier_approval } };
+  assert.equal(readyToPay(ready), true);
+  assert.equal(refundAllowed(ready, due + 1), false, 'ready by the date: locked for the supplier');
+  const short = { ...ready, reveals: [o.reveals[0], { ...R2, qty: 90n }] };
+  assert.equal(recountAllowed(short, due - 1), true);
+  assert.equal(recountAllowed({ ...short, recounts: 2 }, due - 1), false, 'no recounts left');
+  assert.equal(recountAllowed(short, due + 1), false, 'past the date');
+  assert.equal(recountAllowed(ready, due - 1), false, 'counts agree');
+  assert.equal(orderStage({ ...o, accepted: false }, null, 0, due - 1).key, 'accept');
+  assert.equal(orderStage(o, null, 0, due + 1).key, 'expired');
 });
 
 test('decodes an empty, paid order', async () => {
   const o = await decodeOrder(hex(F.order_empty));
   assert.equal(o.expected_qty, 7n); assert.equal(o.amount, 1n);
   assert.deepEqual([o.commits, o.reveals, o.invoice, o.supplier_approval, o.paid], [[], [], null, null, true]);
+  assert.deepEqual([o.accepted, o.date_proposal, o.recounts], [false, null, 0]);
 });
 
 test('decodes a supplier record', async () => {
@@ -37,11 +66,13 @@ test('decodes a supplier record', async () => {
 test('refuses truncated or padded data', async () => {
   await assert.rejects(decodeOrder(hex(F.order_full).slice(0, -1)), /truncated/);
   await assert.rejects(decodeSupplier(hex(F.supplier + '00')), /extra/);
+  const badTag = F.order_empty.slice(0, -4) + '02' + F.order_empty.slice(-2);
+  await assert.rejects(decodeOrder(hex(badTag)), /option/);
 });
 
 test('order stage reads like a person would say it', async () => {
   const o = await decodeOrder(hex(F.order_full));
-  assert.equal(orderStage(o, null, 0).key, 'revealing');
+  assert.equal(orderStage(o, null, 0, 1000).key, 'revealing');
   o.reveals.push({ signer: AP, role: 'Approver', qty: 100n });
   const sup = { payout_set_at: 1000 };
   assert.equal(orderStage(o, sup, 500, 1200).key, 'hold');
