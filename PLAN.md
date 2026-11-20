@@ -36,7 +36,7 @@
 - Verifiable build of `e8da788` (CI run 44702936059; contract code from `01b697a`), module `ad60bdff1c57a8b54f684a159b149e21bfb0721f54a91263d3a0c184a28c7e52`, "Source and module match", 20 unit + 34 end-to-end tests. Init unchanged: `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it; it offers a 1-minute hold for test runs.
 - v3 self-audit (19 Nov night): each count seal now includes its signer's account (a copied seal never opens). v4 (20 Nov): agreed date accepted by the supplier, refund locked once accepted (until the date passes with the order not ready, or the supplier releases), buyer cannot reject an invoice the supplier approved, recounts (max 2, buyer or supplier), supplier or buyer can ask for payment, removal events, setup skips an existing supplier, two-step admin handover.
 - After deploy: Buyer, then Readiness, then "Set up the whole cast" (the contract checks Agent #1287 in the real registry), point the app at the new index. Final demo contract must be set up 72 h before recording; deadline Wed 9 Dec.
-- Not yet audited by a second AI: run docs/AUDIT_PROMPT_2026-11-19-v3.md (update it for v4 first).
+- Not yet audited by a second AI (the prompt is kept outside the repo).
 
 ## Demo cast (testnet accounts, public addresses)
 | Role | Account |
