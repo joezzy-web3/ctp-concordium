@@ -179,6 +179,25 @@ async function view(method, paramBytes) {
   }
   return res.returnValue.buffer;
 }
+/**
+ * Dry-runs one escrow entrypoint as `invoker` on the live state: the node runs the real
+ * contract code, but nothing is sent, signed or paid. Used by Judge mode.
+ * Returns { ok:true, returnValue, events } or { ok:false, error, explain }.
+ */
+export async function simulate(entrypoint, paramBytes, invoker) {
+  const res = await node.invokeContract({
+    contract: CONTRACT,
+    invoker: AccountAddress.fromBase58(invoker),
+    method: ReceiveName.fromString(`ctp_escrow.${entrypoint}`),
+    parameter: { buffer: paramBytes ?? new Uint8Array(0) },
+    energy: Energy.create(100000),
+  });
+  if (!res) throw new Error('The node could not run the dry run.');
+  if (res.tag === 'success') return { ok: true, returnValue: res.returnValue?.buffer ?? new Uint8Array(0), events: escrowEvents({ events: res.events }), energy: Number(res.usedEnergy?.value ?? 0) };
+  const name = res.reason?.tag === 'RejectedReceive' ? errorName(res.reason.rejectReason) : null;
+  return { ok: false, error: name ?? res.reason?.tag ?? 'Rejected', explain: name ? EXPLAIN[name] ?? name : 'The chain rejected it.', energy: Number(res.usedEnergy?.value ?? 0) };
+}
+
 const u64le = (n) => { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(n), true); return b; };
 const acctBytes = (a) => AccountAddress.fromBase58(a).decodedAddress;
 
