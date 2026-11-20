@@ -2,7 +2,7 @@
 //! Build it first:  cargo concordium build --schema-embed --out ctp_escrow.wasm.v1
 //! Then:            cargo test --test escrow
 use concordium_smart_contract_testing::*;
-use concordium_std::{AccountAddress, Amount, Duration, HashSha2256, Serial};
+use concordium_std::{AccountAddress, Amount, Duration, HashSha2256, Serial, Timestamp};
 use ctp_escrow::*;
 use sha2::{Digest, Sha256};
 
@@ -18,6 +18,9 @@ const STRANGER: AccountAddress = AccountAddress([9; 32]);
 
 const HOLD_MS: u64 = 72 * 3600 * 1000;
 const ORDER: OrderId = 42;
+/// The agreed deadline for the test order: 10 days after the chain starts.
+const DUE_MS: u64 = 10 * 24 * 3600 * 1000;
+const DUE: Timestamp = Timestamp::from_timestamp_millis(DUE_MS);
 const QTY: u64 = 100;
 const PRICE: Amount = Amount::from_ccd(1_250);
 const INVOICE: HashSha2256 = HashSha2256([0xaa; 32]);
@@ -66,6 +69,23 @@ impl T {
         }).expect("registry set");
     }
     fn wait(&mut self, ms: u64) { self.chain.tick_block_time(Duration::from_millis(ms)).unwrap(); }
+    /// Moves the chain clock past the order's agreed date.
+    fn past_due(&mut self) {
+        let now = self.chain.block_time().timestamp_millis();
+        if now <= DUE_MS { self.wait(DUE_MS - now + 1); }
+    }
+    fn order(&mut self) -> Order {
+        self.ok(STRANGER, "view_order", &ORDER).parse_return_value::<Order>().expect("order")
+    }
+    fn events(r: &ContractInvokeSuccess) -> Vec<Event> {
+        r.events().flat_map(|(_, evs)| evs.iter().filter_map(|e| e.parse::<Event>().ok()).collect::<Vec<_>>()).collect()
+    }
+    fn asked_by(&self, r: &ContractInvokeSuccess) -> AccountAddress {
+        for e in Self::events(r) {
+            if let Event::Decision { asked_by, .. } = e { return asked_by; }
+        }
+        panic!("no Decision event");
+    }
     fn decision(&self, r: &ContractInvokeSuccess) -> (Verdict, Vec<Code>, Option<AccountAddress>) {
         for (_, evs) in r.events() {
             for e in evs {
@@ -121,8 +141,22 @@ fn setup_with_order(escrow: Amount) -> T {
         agents: vec![AgentParams { account: AGENT, agent_token_id: 1287 }],
         suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: PAYOUT }],
     });
-    t.call(ADMIN, "create_order", &CreateOrderParams { order_id: ORDER, supplier: SUPPLIER, expected_qty: QTY, receiver: RECEIVER, approver: APPROVER }, escrow).expect("create_order");
+    t.call(ADMIN, "create_order", &order_params(ORDER), escrow).expect("create_order");
+    t.ok(SUPPLIER, "accept_order", &AcceptParams { order_id: ORDER, invoice_by: DUE });
     t
+}
+
+fn order_params(order_id: OrderId) -> CreateOrderParams {
+    CreateOrderParams { order_id, supplier: SUPPLIER, expected_qty: QTY, receiver: RECEIVER, approver: APPROVER, invoice_by: DUE }
+}
+
+/// Both named signers seal and unseal a count (no invoice).
+fn count(t: &mut T, qty_r: u64, qty_a: u64) {
+    let (sr, sa) = ([11u8; 32], [22u8; 32]);
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, qty_r, sr) });
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, qty_a, sa) });
+    t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: qty_r, salt: sr });
+    t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: qty_a, salt: sa });
 }
 
 /// Both named signers count `qty`, the agent submits, the supplier approves.
@@ -227,7 +261,7 @@ fn reveals_wait_for_both_commits_and_must_match_them() {
 #[test]
 fn order_signers_must_be_two_listed_people_in_the_right_roles() {
     let mut t = setup();
-    let p = |order_id, receiver, approver| CreateOrderParams { order_id, supplier: SUPPLIER, expected_qty: QTY, receiver, approver };
+    let p = |order_id, receiver, approver| CreateOrderParams { order_id, supplier: SUPPLIER, expected_qty: QTY, receiver, approver, invoice_by: DUE };
     for (id, r, a) in [(1, RECEIVER, RECEIVER), (2, APPROVER, RECEIVER), (3, STRANGER, APPROVER), (4, RECEIVER, OTHER_SIGNER)] {
         let e = t.call(ADMIN, "create_order", &p(id, r, a), PRICE).expect_err("bad signers");
         assert_eq!(e.parse_return_value::<Error>().unwrap(), Error::BadOrderSigners);
@@ -247,7 +281,7 @@ fn a_new_payout_account_restarts_the_hold_and_only_the_supplier_can_set_it() {
 }
 
 #[test]
-fn only_the_submitting_registered_agent_can_ask_for_payment() {
+fn only_the_submitting_agent_the_supplier_or_the_buyer_can_ask_for_payment() {
     let mut t = setup();
     assert_eq!(t.err(AGENT, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT }), Error::NoInvoice);
     assert_eq!(t.err(STRANGER, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::NotAgent);
@@ -274,12 +308,101 @@ fn wrong_invoice_amount_is_held() {
 }
 
 #[test]
-fn refund_returns_the_escrow_to_the_buyer() {
+fn the_buyer_can_refund_freely_until_the_supplier_accepts() {
     let mut t = setup();
+    t.call(ADMIN, "create_order", &order_params(7), PRICE).expect("second order");
+    let before = t.balance(ADMIN);
+    assert_eq!(t.err(STRANGER, "refund", &7u64), Error::NotAdmin);
+    t.ok(ADMIN, "refund", &7u64);
+    assert!(t.balance(ADMIN) > before + PRICE - Amount::from_ccd(1)); // minus the fee
+    // The accepted order is locked for the supplier.
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+}
+
+#[test]
+fn a_confirmed_delivery_with_an_approved_invoice_cannot_be_pulled_back() {
+    let mut t = setup();
+    happy_path_until_execute(&mut t, QTY, QTY);
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    // Even after the date: it was ready in time, so the money is the supplier's.
+    t.past_due();
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    // Nor can the buyer throw out the approved invoice to break it.
+    assert_eq!(t.err(ADMIN, "reject_invoice", &ORDER), Error::InvoiceApprovedBySupplier);
+    t.wait(HOLD_MS);
+    assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
+}
+
+#[test]
+fn after_the_date_an_unready_order_takes_nothing_new_and_the_buyer_can_refund() {
+    let mut t = setup();
+    count(&mut t, QTY, QTY);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    // The supplier never approved in time.
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    t.past_due();
+    assert_eq!(t.err(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::PastDeadline);
     let before = t.balance(ADMIN);
     t.ok(ADMIN, "refund", &ORDER);
-    assert!(t.balance(ADMIN) > before + PRICE - Amount::from_ccd(1)); // minus the fee
-    assert_eq!(t.err(STRANGER, "refund", &ORDER), Error::NotAdmin);
+    assert!(t.balance(ADMIN) > before + PRICE - Amount::from_ccd(1));
+    assert_eq!(t.err(AGENT, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT }), Error::OrderClosed);
+}
+
+#[test]
+fn no_counts_or_invoices_after_the_date() {
+    let mut t = setup();
+    t.past_due();
+    assert_eq!(t.err(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, [1; 32]) }), Error::PastDeadline);
+    assert_eq!(t.err(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::PastDeadline);
+}
+
+#[test]
+fn the_supplier_can_release_the_money_to_the_buyer() {
+    let mut t = setup();
+    assert_eq!(t.err(ADMIN, "release_to_buyer", &ORDER), Error::NotSupplier);
+    assert_eq!(t.err(STRANGER, "release_to_buyer", &ORDER), Error::NotSupplier);
+    let before = t.balance(ADMIN);
+    t.ok(SUPPLIER, "release_to_buyer", &ORDER);
+    assert_eq!(t.balance(ADMIN), before + PRICE);
+    assert!(t.order().refunded);
+}
+
+#[test]
+fn the_supplier_must_accept_before_approving_an_invoice() {
+    let mut t = setup();
+    t.call(ADMIN, "create_order", &order_params(7), PRICE).expect("second order");
+    assert_eq!(t.err(SUPPLIER, "approve_invoice", &ApproveParams { order_id: 7, invoice_hash: INVOICE, amount: PRICE }), Error::OrderNotAccepted);
+    assert_eq!(t.err(STRANGER, "accept_order", &AcceptParams { order_id: 7, invoice_by: DUE }), Error::NotSupplier);
+    t.ok(SUPPLIER, "accept_order", &AcceptParams { order_id: 7, invoice_by: DUE });
+    assert_eq!(t.err(SUPPLIER, "accept_order", &AcceptParams { order_id: 7, invoice_by: DUE }), Error::AlreadyAccepted);
+}
+
+#[test]
+fn the_date_is_agreed_by_both_sides() {
+    let mut t = setup();
+    let later = Timestamp::from_timestamp_millis(DUE_MS * 2);
+    let p = |invoice_by| DateParams { order_id: 7, invoice_by };
+    // A date in the past is refused at creation.
+    let past = CreateOrderParams { invoice_by: Timestamp::from_timestamp_millis(0), ..order_params(8) };
+    assert_eq!(t.call(ADMIN, "create_order", &past, PRICE).expect_err("past date").parse_return_value::<Error>().unwrap(), Error::BadDate);
+    // Before acceptance the buyer moves the date alone; the supplier must accept the current date.
+    t.call(ADMIN, "create_order", &order_params(7), PRICE).expect("order 7");
+    t.ok(ADMIN, "change_date", &p(later));
+    assert_eq!(t.err(SUPPLIER, "accept_order", &AcceptParams { order_id: 7, invoice_by: DUE }), Error::DateChanged);
+    t.ok(SUPPLIER, "accept_order", &AcceptParams { order_id: 7, invoice_by: later });
+    // After acceptance one side proposes and the other must confirm the same date.
+    let even_later = Timestamp::from_timestamp_millis(DUE_MS * 3);
+    assert_eq!(t.err(STRANGER, "change_date", &p(even_later)), Error::NotOrderParty);
+    assert_eq!(t.err(AGENT, "change_date", &p(even_later)), Error::NotOrderParty);
+    t.ok(ADMIN, "change_date", &p(even_later));
+    let view = |t: &mut T| t.ok(STRANGER, "view_order", &7u64).parse_return_value::<Order>().unwrap();
+    assert_eq!(view(&mut t).invoice_by, later);
+    // The same side repeating itself does not count as agreement.
+    t.ok(ADMIN, "change_date", &p(even_later));
+    assert_eq!(view(&mut t).invoice_by, later);
+    t.ok(SUPPLIER, "change_date", &p(even_later));
+    assert_eq!(view(&mut t).invoice_by, even_later);
+    assert_eq!(view(&mut t).date_proposal, None);
 }
 
 #[test]
@@ -318,12 +441,17 @@ fn buyer_and_agent_cannot_underpay_the_supplier() {
 }
 
 #[test]
-fn setup_is_admin_only_and_refuses_a_supplier_twice() {
+fn setup_is_admin_only_and_running_it_again_leaves_a_supplier_untouched() {
     let mut t = setup();
     let p = SetupParams { signers: vec![], agents: vec![], suppliers: vec![SupplierParams { supplier: STRANGER, payout: STRANGER }] };
     assert_eq!(t.err(STRANGER, "setup", &p), Error::NotAdmin);
+    t.wait(HOLD_MS);
     let again = SetupParams { signers: vec![], agents: vec![], suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: NEW_PAYOUT }] };
-    assert_eq!(t.err(ADMIN, "setup", &again), Error::SupplierExists);
+    t.ok(ADMIN, "setup", &again);
+    assert_eq!(t.err(ADMIN, "register_supplier", &SupplierParams { supplier: SUPPLIER, payout: NEW_PAYOUT }), Error::SupplierExists);
+    // Same payout account, hold not restarted.
+    happy_path_until_execute(&mut t, QTY, QTY);
+    assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
 }
 
 #[test]
@@ -386,7 +514,7 @@ fn a_junk_invoice_can_be_rejected_and_the_real_one_paid() {
 fn rejecting_clears_the_supplier_approval_too() {
     let mut t = setup();
     happy_path_until_execute(&mut t, QTY, QTY);
-    t.ok(ADMIN, "reject_invoice", &ORDER);
+    t.ok(SUPPLIER, "reject_invoice", &ORDER);
     assert_eq!(t.err(AGENT, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT }), Error::NoInvoice);
     t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
     t.wait(HOLD_MS);
@@ -405,4 +533,127 @@ fn a_signer_cannot_copy_the_other_signers_seal() {
     t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr });
     // The receiver's count and key are now public; replaying them does not open the copy.
     assert_eq!(t.err(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sr }), Error::RevealDoesNotMatchCommit);
+}
+
+#[test]
+fn the_supplier_or_the_buyer_can_ask_for_payment_when_the_agent_is_offline() {
+    let mut t = setup();
+    happy_path_until_execute(&mut t, QTY, QTY);
+    // Asking early changes nothing: the same rules hold the payment.
+    let r = t.ok(SUPPLIER, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
+    assert_eq!(t.decision(&r).1, vec![Code::HeldPayoutCoolOff]);
+    let r = t.ok(ADMIN, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
+    assert_eq!(t.asked_by(&r), ADMIN);
+    t.wait(HOLD_MS);
+    let r = t.ok(SUPPLIER, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
+    assert_eq!(t.decision(&r), (Verdict::Cleared, vec![], Some(PAYOUT)));
+    assert_eq!(t.asked_by(&r), SUPPLIER);
+}
+
+#[test]
+fn the_buyer_or_supplier_can_ask_for_a_recount_at_most_twice() {
+    let mut t = setup();
+    count(&mut t, QTY, QTY - 10);
+    for who in [AGENT, RECEIVER, STRANGER] {
+        assert_eq!(t.err(who, "recount", &ORDER), Error::NotOrderParty);
+    }
+    t.ok(SUPPLIER, "recount", &ORDER);
+    let o = t.order();
+    assert_eq!((o.commits.len(), o.reveals.len(), o.recounts), (0, 0, 1));
+    count(&mut t, QTY - 10, QTY);
+    t.ok(ADMIN, "recount", &ORDER);
+    count(&mut t, QTY, QTY - 1);
+    assert_eq!(t.err(SUPPLIER, "recount", &ORDER), Error::NoRecountsLeft);
+}
+
+#[test]
+fn a_recount_fixes_an_honest_miscount_and_is_refused_when_counts_agree() {
+    let mut t = setup();
+    assert_eq!(t.err(ADMIN, "recount", &ORDER), Error::RecountNotNeeded);
+    count(&mut t, QTY, QTY + 1);
+    t.ok(ADMIN, "recount", &ORDER);
+    count(&mut t, QTY, QTY);
+    assert_eq!(t.err(ADMIN, "recount", &ORDER), Error::RecountNotNeeded);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.wait(HOLD_MS);
+    assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
+}
+
+#[test]
+fn the_admin_is_handed_over_in_two_steps() {
+    let mut t = setup();
+    assert_eq!(t.err(STRANGER, "propose_admin", &STRANGER), Error::NotAdmin);
+    t.ok(ADMIN, "propose_admin", &NEW_PAYOUT);
+    assert_eq!(t.err(STRANGER, "accept_admin", &()), Error::NotPendingAdmin);
+    let r = t.ok(NEW_PAYOUT, "accept_admin", &());
+    assert!(T::events(&r).contains(&Event::AdminChanged { from: ADMIN, to: NEW_PAYOUT }));
+    assert_eq!(t.err(ADMIN, "add_signer", &SignerParams { account: STRANGER, role: Role::Receiver }), Error::NotAdmin);
+    t.ok(NEW_PAYOUT, "add_signer", &SignerParams { account: STRANGER, role: Role::Receiver });
+    // A pending proposal can be cancelled by proposing the current admin.
+    t.ok(NEW_PAYOUT, "propose_admin", &STRANGER);
+    t.ok(NEW_PAYOUT, "propose_admin", &NEW_PAYOUT);
+    assert_eq!(t.err(STRANGER, "accept_admin", &()), Error::NotPendingAdmin);
+}
+
+#[test]
+fn removals_are_logged() {
+    let mut t = setup();
+    let r = t.ok(ADMIN, "remove_signer", &RECEIVER);
+    assert!(T::events(&r).contains(&Event::SignerRemoved { account: RECEIVER }));
+    let r = t.ok(ADMIN, "remove_agent", &AGENT);
+    assert!(T::events(&r).contains(&Event::AgentRemoved { account: AGENT }));
+}
+
+/// The app's decoders (app/src/codec.js) are tested against test/fixtures/escrow-bytes.json.
+/// This checks those bytes are exactly what this contract serializes, for the demo cast.
+#[test]
+fn app_fixture_bytes_match_the_contract() {
+    fn acct(h: &str) -> AccountAddress {
+        let mut a = [0u8; 32];
+        for i in 0..32 { a[i] = u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap(); }
+        AccountAddress(a)
+    }
+    let hx = |b: Vec<u8>| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    let buyer = acct("c18d8baf7911c2673f65a215b5673e901a79a05eacbd5b9eb8ebbd6ef39b2ce9");
+    let r = acct("3900161da3685ee48a31571568a1261e2839719236ff21a07b9cccca4204f5bc");
+    let ap = acct("56d0603ba8cfcc2cd40be73f4878e67c94b63c81d4334fc45af61afb90550dd4");
+    let s = acct("94cd48982af6a75401e88b8b608aaf649ac58d1177fb5569a608a3365ff744ae");
+    let ag = acct("9278f55e8366c065c474c07146d2eedea12cdbe67ee9f9c532922aa9858011b8");
+    let ccd25 = Amount::from_micro_ccd(25_000_000);
+    let full = Order {
+        supplier: s, receiver: r, approver: ap, expected_qty: 100, amount: ccd25,
+        commits: vec![
+            Commit { signer: r, role: Role::Receiver, hash: HashSha2256([0x11; 32]) },
+            Commit { signer: ap, role: Role::Approver, hash: HashSha2256([0x22; 32]) },
+        ],
+        reveals: vec![RevealedCount { signer: r, role: Role::Receiver, qty: 100 }],
+        invoice: Some(Invoice { agent: ag, agent_token_id: 1287, invoice_hash: HashSha2256([0xcd; 32]), amount: ccd25 }),
+        supplier_approval: Some(Approval { invoice_hash: HashSha2256([0xcd; 32]), amount: ccd25 }),
+        paid: false, refunded: false,
+        invoice_by: Timestamp::from_timestamp_millis(1_795_117_380_000),
+        accepted: true,
+        date_proposal: Some(DateProposal { by: s, invoice_by: Timestamp::from_timestamp_millis(1_795_203_780_000) }),
+        recounts: 1,
+    };
+    let empty = Order {
+        supplier: s, receiver: r, approver: ap, expected_qty: 7, amount: Amount::from_micro_ccd(1),
+        commits: vec![], reveals: vec![], invoice: None, supplier_approval: None, paid: true, refunded: false,
+        invoice_by: Timestamp::from_timestamp_millis(1_795_117_380_000), accepted: false, date_proposal: None, recounts: 0,
+    };
+    let supplier = Supplier { payout: s, payout_set_at: Timestamp::from_timestamp_millis(1_795_117_380_000) };
+    let config = ConfigView { admin: buyer, pending_admin: Some(ag), hold_ms: 60_000, registry: ContractAddress { index: 12802, subindex: 0 } };
+    let got = [
+        ("order_full", hx(concordium_std::to_bytes(&full))),
+        ("order_empty", hx(concordium_std::to_bytes(&empty))),
+        ("supplier", hx(concordium_std::to_bytes(&supplier))),
+        ("config", hx(concordium_std::to_bytes(&config))),
+    ];
+    let fixture = include_str!("../../test/fixtures/escrow-bytes.json");
+    for (k, v) in &got {
+        println!("\"{k}\": \"{v}\",");
+    }
+    for (k, v) in &got {
+        assert!(fixture.contains(&format!("\"{k}\": \"{v}\"")), "fixture {k} is out of date");
+    }
 }

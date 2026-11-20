@@ -12,7 +12,7 @@ export const AGENT = { id: 1287, badge: 'JyP9U25oUQ6KdnBBHdTYP', owner: '44Fcwcy
 const CONTRACT = ContractAddress.create(ESCROW.index, ESCROW.subindex);
 
 // The contract's error variants in order; concordium-std gives the first one code -1.
-const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed', 'AgentNotVerified', 'RegistryUnavailable'];
+const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed', 'AgentNotVerified', 'RegistryUnavailable', 'PastDeadline', 'BadDate', 'AlreadyAccepted', 'OrderNotAccepted', 'RefundLocked', 'InvoiceApprovedBySupplier', 'RecountNotNeeded', 'NoRecountsLeft', 'NotPendingAdmin', 'NotOrderParty', 'DateChanged'];
 export const EXPLAIN = {
   NotAdmin: 'Only the buyer account can do this.',
   NotSigner: 'This account is not a listed signer.',
@@ -37,6 +37,17 @@ export const EXPLAIN = {
   TransferFailed: 'The payout transfer failed.',
   AgentNotVerified: 'The Concordium agent registry does not show this agent as active and owned by this account.',
   RegistryUnavailable: 'The contract could not read the agent registry, so it refused to be safe. Try again.',
+  PastDeadline: 'The agreed date has passed. Nothing new can be added unless both sides agree a new date.',
+  BadDate: 'Pick a date in the future.',
+  AlreadyAccepted: 'You already accepted this order.',
+  OrderNotAccepted: 'Accept the order first. Then you can approve its invoice.',
+  RefundLocked: 'The supplier accepted this order, so the money is locked for it. You can take it back only after the agreed date if the order is not ready, or if the supplier releases it.',
+  InvoiceApprovedBySupplier: 'The supplier approved this invoice and it matches the order. Only the supplier can reject it now.',
+  RecountNotNeeded: 'A recount is only possible when both counts are unsealed and do not match the order.',
+  NoRecountsLeft: 'Both recounts are used. If the delivery is still short, the money goes back after the agreed date.',
+  NotPendingAdmin: 'Only the account proposed as the new buyer admin can accept.',
+  NotOrderParty: 'Only the buyer or the supplier of this order can do this.',
+  DateChanged: 'The date on this order changed. Reload and accept the current date.',
 };
 export const errorName = (code) => ERRORS[-Number(code) - 1] ?? null;
 

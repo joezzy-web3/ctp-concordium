@@ -22,7 +22,7 @@ const ROLES = {
   ] },
   supplier: { name: 'Supplier', line: 'Approve your invoice and amount, watch your payout account and payments.', guide: [
     ['Approve the invoice', 'Pick the same invoice file you sent and confirm the amount you agreed.'],
-    ['Keep your payout account safe', 'Any change waits 72 hours before money can go there.'],
+    ['Keep your payout account safe', 'Any change waits out a hold (72 hours in production) before money can go there.'],
   ] },
   agent: { name: 'Agent', line: 'Agent #1287 submits invoices and asks for payment. It can never pay on its own.', guide: [
     ['Submit the invoice', 'The agent’s badge is checked before it reaches the contract.'],

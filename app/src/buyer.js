@@ -1,13 +1,13 @@
 // Buyer space: Readiness, New order (wizard with review and one signature), Orders.
-import { AGENT, ESCROW, currentAccount, listOrders, viewConfig, viewSupplier, ccdscanTx } from './chain.js';
-import { ccdToMicro, microToCcd, orderStage } from './codec.js';
+import { AGENT, ESCROW, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
+import { ccdToMicro, microToCcd, orderStage, invoiceApproved } from './codec.js';
+import { dateBlock, recountButton, askPaymentButton, refundControl, buyerCanReject, countsLine, dayEnd, defaultDue, iso, fmtDay } from './ordertools.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
-import { h, fill, icon, chip, countdown, fmtDate, short, store, notice } from './ui.js';
+import { h, fill, icon, chip, countdown, fmtDate, short, store, notice, holdText } from './ui.js';
 import { printPO } from './po.js';
 
 const ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
-const SETUP_TX = '5ceebe7c6dc59eed13eaa21cb6518429bbfda509748b6c8962c4530d51827ae3';
 
 // ---------- sidebar ----------
 const CONTRACT_URL = `https://testnet.ccdscan.io/?dcount=1&dentity=contract&dcontractAddressIndex=${ESCROW.index}&dcontractAddressSubIndex=${ESCROW.subindex}`;
@@ -37,13 +37,15 @@ async function badge() {
 }
 
 const NEXT_STEP = {
+  accept: 'The supplier accepts the order and its date.',
+  expired: 'The agreed date passed and the order was not ready: you can take the money back.',
   counting: 'The receiver and approver count the delivery.',
   revealing: 'The signers reveal their sealed counts.',
-  mismatch: 'The counts do not match the order: check with the signers.',
+  mismatch: 'The counts do not match: ask for a recount, or wait for the rest of the delivery.',
   invoice: `Agent #${AGENT.id} submits the invoice.`,
   approval: 'The supplier approves the invoice and its amount.',
   amount: 'The invoice amount differs from the escrow: refund and reorder.',
-  hold: 'The supplier’s new payout account is still in its 72-hour hold.',
+  hold: 'The supplier’s payout account is still in its hold.',
   ready: `Agent #${AGENT.id} asks the contract to pay.`,
 };
 
@@ -63,7 +65,7 @@ async function dashboard() {
   const staged = open.map((o) => ({ o, st: orderStage(o, supByAddr[o.supplier], cfg.hold_ms) }));
   const waiting = staged.filter(({ st }) => st.key !== 'ready');
 
-  // payout hold ring: how much of the 72 hours has passed
+  // payout hold ring: how much of the hold has passed
   const start = sup ? sup.payout_set_at : null;
   const end = start ? start + cfg.hold_ms : null;
   const done = end ? Math.min(1, Math.max(0, (Date.now() - start) / cfg.hold_ms)) : 0;
@@ -99,13 +101,29 @@ async function dashboard() {
             row(me === cfg.admin ? 'ok' : 'hold', 'Buyer account', me === cfg.admin ? 'Connected as the buyer admin.' : `Connect ${short(cfg.admin)} to create orders.`),
             b.known ? row(b.ok ? 'ok' : 'no', `Agent #${AGENT.id}`, b.ok ? 'Verified by Concordium.' : 'Badge does not check out.')
               : row('hold', `Agent #${AGENT.id}`, 'Registry not reachable from here.', h('a.inline', { href: `https://agent-registry-mcp.concordium.com/v1/check-badge/${AGENT.badge}?network=testnet`, target: '_blank', rel: 'noopener' }, 'Check', icon('external', 14))),
-            row('ok', 'Receiver and approver', 'Listed on the contract.', h('a.inline', { href: ccdscanTx(SETUP_TX), target: '_blank', rel: 'noopener' }, 'Setup', icon('external', 14))))))),
+            sup ? row('ok', 'Cast set up', `Supplier registered; its payout hold is ${holdText(cfg.hold_ms)}.`) : row('hold', 'Cast not set up', 'List the receiver, approver, agent and supplier in one approval.', setupButton(me === cfg.admin)))))),
   );
+}
+
+/** Lists the demo cast on the contract in one transaction. The contract checks Agent #1287
+ *  in the Concordium agent registry itself before accepting it. */
+function setupButton(isAdmin) {
+  return h('button.btn.dark.small', { type: 'button', onclick: async (e) => {
+    if (!isAdmin) return notice('no', 'Connect the buyer account first: only it can set up the cast.');
+    e.currentTarget.disabled = true;
+    const r = await act('setup', {
+      signers: [{ account: CAST.receiver, role: { Receiver: [] } }, { account: CAST.approver, role: { Approver: [] } }],
+      agents: [{ account: AGENT.owner, agent_token_id: AGENT.id }],
+      suppliers: [{ supplier: CAST.supplier, payout: CAST.supplier }],
+    }, { pending: 'Setting up the cast. ', done: `Cast set up. The contract checked Agent #${AGENT.id} in the Concordium registry and accepted it; the supplier's payout hold started now.` });
+    if (r.ok) location.reload();
+    else e.currentTarget.disabled = false;
+  } }, 'Set up the whole cast');
 }
 
 // ---------- new order wizard ----------
 const STEPS = ['Supplier', 'Order lines', 'Who counts', 'Review'];
-const blank = () => ({ step: 0, supplier: CAST.supplier, supplierName: CAST.supplierName, place: '', notes: '', lines: [{ item: '', qty: '', price: '' }], receiver: CAST.receiver, approver: CAST.approver });
+const blank = () => ({ step: 0, supplier: CAST.supplier, supplierName: CAST.supplierName, place: '', notes: '', due: defaultDue(), lines: [{ item: '', qty: '', price: '' }], receiver: CAST.receiver, approver: CAST.approver });
 const load = () => ({ ...blank(), ...store.get('ctp:draft', {}) });
 const save = (d) => store.set('ctp:draft', d);
 
@@ -128,6 +146,7 @@ function problems(d, step) {
     if (!d.supplierName.trim()) p.push('Enter the supplier’s name for the purchase order.');
   }
   if (step === 1 && !totals(d).ok) p.push('Each line needs an item, a whole quantity and a unit price in CCD.');
+  if (step === 1 && !(dayEnd(d.due) > Date.now())) p.push('Pick an agreed date in the future.');
   if (step === 2) {
     if (!ADDR_RE.test(d.receiver.trim()) || !ADDR_RE.test(d.approver.trim())) p.push('Enter both accounts.');
     else if (d.receiver.trim() === d.approver.trim()) p.push('The receiver and the approver must be two different people.');
@@ -185,6 +204,7 @@ function wizard() {
       h('button.btn.line.small', { type: 'button', onclick: () => { d.lines.push({ item: '', qty: '', price: '' }); save(d); paint(); } }, icon('plus', 16), 'Add a line'),
       tot,
       field('Deliver to', input('place', { placeholder: 'Apapa warehouse, Lagos' })),
+      field('Agreed date', input('due', { type: 'date' }), 'By the end of this day the delivery must be counted and the supplier’s invoice approved. The supplier agrees to it when accepting the order. If the order is not ready by then, you can take the money back.'),
       field('Notes for the supplier (optional)', input('notes')));
     void t;
   }
@@ -201,7 +221,7 @@ function wizard() {
     const idBox = h('span', 'This order locks in escrow');
     listOrders().then((os) => { d.orderId = (os.at(-1)?.id ?? 0) + 1; fill(idBox, 'Order ', h('b.num', `#${d.orderId}`), ' locks in escrow'); }).catch(() => fill(idBox, 'Could not read the next order number; reload before signing.'));
     const sec = (i, title, ...content) => h('section.rv', h('div.rv-h', h('h3', title), h('button.btn.text.small', { type: 'button', onclick: () => go(i) }, icon('edit', 16), 'Edit')), ...content);
-    const params = () => ({ order_id: d.orderId, supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() });
+    const params = () => ({ order_id: d.orderId, supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim(), invoice_by: iso(dayEnd(d.due)) });
     const sign = h('button.btn.gold.wide', { type: 'button', onclick: async () => {
       if (!d.orderId) return notice('no', 'Could not work out the next order number. Reload and try again.');
       if (currentAccount() !== CAST.buyer) notice('wait', 'This must be signed by the buyer account; the contract refuses anyone else.');
@@ -213,17 +233,17 @@ function wizard() {
     return h('div.review',
       h('div.rv-col',
         sec(0, 'Supplier', h('p', h('b', d.supplierName), h('br'), h('span.mono', short(d.supplier)))),
-        sec(1, 'Order lines', h('ul.rv-lines', d.lines.map((l) => h('li', h('span', `${l.item} × ${l.qty}`), h('b.num', `${microToCcd(BigInt(l.qty) * ccdToMicro(l.price))} CCD`)))), d.place ? h('p.mute', `Deliver to ${d.place}`) : null),
+        sec(1, 'Order lines', h('ul.rv-lines', d.lines.map((l) => h('li', h('span', `${l.item} × ${l.qty}`), h('b.num', `${microToCcd(BigInt(l.qty) * ccdToMicro(l.price))} CCD`)))), d.place ? h('p.mute', `Deliver to ${d.place}`) : null, h('p', 'Agreed date: ', h('b', fmtDay(dayEnd(d.due))))),
         sec(2, 'Who counts', h('p', `Receiver ${short(d.receiver)}`, h('br'), `Approver ${short(d.approver)}`))),
       h('aside.pay',
         idBox,
         h('div.big.num', `${microToCcd(t.micro)} CCD`),
-        h('p', 'Paid to the supplier only when both counts match, the supplier approves this amount, and its payout account has waited 72 hours.'),
+        h('p', 'Paid to the supplier only when both counts match, the supplier approves this amount, and its payout account has waited out its hold. Once the supplier accepts, the money is locked for it until the agreed date.'),
         sign,
         h('button.btn.out.wide', { type: 'button', onclick: () => printPO({ ...d, orderId: d.orderId, micro: t.micro, units: t.units }) }, icon('download', 16), 'Download purchase order (PDF)'),
         h('details.wallet', h('summary', 'What your wallet will sign'),
           h('p', `Contract <${ESCROW.index},${ESCROW.subindex}>, ctp_escrow.create_order, attaching ${microToCcd(t.micro)} CCD.`),
-          h('pre', JSON.stringify({ order_id: d.orderId ?? 'next', supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() }, null, 2)))));
+          h('pre', JSON.stringify({ order_id: d.orderId ?? 'next', supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim(), invoice_by: dayEnd(d.due) > 0 ? iso(dayEnd(d.due)) : '' }, null, 2)))));
   }
 
   function paint(errs = []) {
@@ -245,6 +265,7 @@ function wizard() {
 // ---------- orders ----------
 const TIMELINE = [
   ['funded', 'Funded'],
+  ['accepted', 'Supplier accepted'],
   ['counted', 'Both counted'],
   ['revealed', 'Counts revealed'],
   ['invoice', 'Invoice in'],
@@ -253,8 +274,8 @@ const TIMELINE = [
 ];
 
 function reached(o) {
-  const approved = o.invoice && o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount;
-  return { funded: true, counted: o.commits.length >= 2, revealed: o.reveals.length >= 2, invoice: Boolean(o.invoice), approved: Boolean(approved), paid: o.paid };
+  const approved = invoiceApproved(o);
+  return { funded: true, accepted: o.accepted, counted: o.commits.length >= 2, revealed: o.reveals.length >= 2, invoice: Boolean(o.invoice), approved: Boolean(approved), paid: o.paid };
 }
 
 async function ordersView() {
@@ -274,24 +295,22 @@ async function ordersView() {
       h('ol.timeline', TIMELINE.map(([k, label]) => h('li', { class: r[k] ? 'done' : null }, h('span.tl-dot', r[k] ? icon('check', 12) : null), label))),
       h('dl.facts',
         h('dt', 'Units ordered'), h('dd.num', o.expected_qty.toString()),
-        h('dt', 'Counts'), h('dd', o.reveals.length ? o.reveals.map((x) => `${x.role} ${x.qty}`).join(', ') : `${o.commits.length} of 2 committed`),
+        h('dt', 'Counts'), h('dd', countsLine(o)),
         h('dt', 'Receiver, approver'), h('dd.mono', `${short(o.receiver)}, ${short(o.approver)}`),
         h('dt', 'Supplier'), h('dd.mono', short(o.supplier)),
         st.until ? [h('dt', 'Payout hold ends'), h('dd', fmtDate(st.until))] : null),
+      o.paid || o.refunded ? null : dateBlock(o, currentAccount(), 'buyer'),
       h('div.actions',
+        askPaymentButton(o),
+        recountButton(o),
         po ? h('button.btn.line.small', { type: 'button', onclick: () => printPO({ ...po, orderId: o.id, micro: o.amount, units: o.expected_qty }) }, icon('download', 16), 'Purchase order') : null,
-        o.invoice && !o.paid && !o.refunded ? h('button.btn.text.small', { type: 'button', onclick: async (e) => {
+        buyerCanReject(o) ? h('button.btn.text.small', { type: 'button', onclick: async (e) => {
           if (!confirm(`Reject the invoice on order #${o.id}? It is cleared, with any supplier approval, so the right invoice can be submitted.`)) return;
           e.currentTarget.disabled = true;
           const res = await act('reject_invoice', o.id, { done: `Invoice on order #${o.id} rejected. The agent can submit the right one.` });
           if (res.ok) location.reload();
         } }, 'Reject invoice') : null,
-        !o.paid && !o.refunded ? h('button.btn.text.small.danger', { type: 'button', onclick: async (e) => {
-          if (!confirm(`Refund order #${o.id}? ${microToCcd(o.amount)} CCD goes back to the buyer and the order closes.`)) return;
-          e.currentTarget.disabled = true;
-          const res = await act('refund', o.id, { done: `Order #${o.id} refunded to the buyer.` });
-          if (res.ok) location.reload();
-        } }, 'Refund') : null));
+        refundControl(o)));
     return h('li.order',
       h('details', h('summary',
         h('span.order-id.num', `#${o.id}`),

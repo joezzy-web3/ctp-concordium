@@ -1,9 +1,10 @@
 // Supplier and Agent spaces.
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
-import { ccdToMicro, microToCcd, orderStage, toHex } from './codec.js';
+import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue } from './codec.js';
+import { dateBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
-import { h, fill, icon, chip, short, countdown, fmtDate, notice } from './ui.js';
+import { h, fill, icon, chip, short, countdown, fmtDate, notice, holdText } from './ui.js';
 
 const ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
 const fileHash = async (file) => toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())));
@@ -21,7 +22,7 @@ const unreachable = () => h('section.panel', h('p.err', icon('alert', 16), 'Coul
 // ---------------- supplier ----------------
 export async function supplierView() {
   const me = currentAccount();
-  const side = sidebar('S', me ? CAST.nameOf(me) : 'Supplier', me ? short(me) : 'Connect your wallet', 'Money goes only to the payout account you set yourself. Every change waits 72 hours.');
+  const side = sidebar('S', me ? CAST.nameOf(me) : 'Supplier', me ? short(me) : 'Connect your wallet', 'Money goes only to the payout account you set yourself. Every change waits out a hold before money can go there.');
   if (!me) return frame(side, h('section.panel.empty', h('h2', 'Connect your wallet'), h('p', 'Use the supplier account registered on the escrow.')));
   let sup, cfg, orders;
   try {
@@ -42,23 +43,39 @@ export async function supplierView() {
     left > 0 ? h('p', chip('hold', `Hold: ${countdown(left)} left`), ` Payments can go here from ${fmtDate(end)}.`) : h('p', chip('ok', 'Ready'), ' Payments can go here now.'),
     h('details.change',
       h('summary', 'Change payout account'),
-      h('p.fine', 'Only you can change it, and the 72-hour hold starts again. Nobody, including the buyer, can redirect a payment that is due now.'),
+      h('p.fine', `Only you can change it, and the ${holdText(cfg.hold_ms)} hold starts again. Nobody, including the buyer, can redirect a payment that is due now.`),
       h('div.count-row', newPayout, h('button.btn.line', { type: 'button', onclick: async () => {
         const v = newPayout.value.trim();
         if (!ADDR_RE.test(v)) return notice('no', 'Enter a Concordium account address.');
-        if (!confirm('Change your payout account? Payments wait 72 hours from now.')) return;
-        const r = await act('set_payout', v, { done: `Payout account changed to ${short(v)}. The 72-hour hold restarted.` });
+        if (!confirm(`Change your payout account? Payments wait ${holdText(cfg.hold_ms)} from now.`)) return;
+        const r = await act('set_payout', v, { done: `Payout account changed to ${short(v)}. The ${holdText(cfg.hold_ms)} hold restarted.` });
         if (r.ok) location.reload();
       } }, 'Change'))));
 
   // invoices
   const staged = orders.map((o) => ({ o, st: orderStage(o, sup, cfg.hold_ms) }));
-  const toApprove = staged.filter(({ o }) => o.invoice && !o.paid && !o.refunded);
-  const waiting = staged.filter(({ o }) => !o.invoice && !o.paid && !o.refunded);
+  const isOpen = ({ o }) => !o.paid && !o.refunded;
+  const toAccept = staged.filter((x) => isOpen(x) && !x.o.accepted);
+  const toApprove = staged.filter((x) => isOpen(x) && x.o.accepted && x.o.invoice);
+  const waiting = staged.filter((x) => isOpen(x) && x.o.accepted && !x.o.invoice);
+  const tools = (o) => h('div.order-tools', dateBlock(o, me, 'supplier'), h('div.actions', askPaymentButton(o, 'Ask for my payment'), recountButton(o), releaseButton(o)));
+
+  const acceptCard = ({ o }) => h('section.panel.count',
+    h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', 'New order: accept it to lock the money for you'), h('span', `${o.expected_qty} units`))),
+    h('div.big-amount.num', `${microToCcd(o.amount)} CCD`),
+    h('p', 'Agreed date: ', h('b', fmtDay(o.invoice_by)), '. By the end of that day the delivery must be counted and your invoice approved. Once you accept, the buyer cannot take this money back unless the date passes with the order not ready, or you give it back.'),
+    pastDue(o) ? h('p.err', icon('alert', 16), 'This date has passed. Ask the buyer for a new date before accepting.') : h('div.count-row',
+      h('button.btn.gold', { type: 'button', onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        const r = await act('accept_order', { order_id: o.id, invoice_by: iso(o.invoice_by) }, { done: `You accepted order #${o.id}. The money is locked for you until ${fmtDay(o.invoice_by)}.` });
+        if (r.ok) location.reload(); else e.currentTarget.disabled = false;
+      } }, icon('check', 18), 'Accept order and date')),
+    h('div.order-tools', dateBlock(o, me, 'supplier', { showDate: false }), h('div.actions', releaseButton(o))));
   const paid = staged.filter(({ o }) => o.paid);
 
   const approveCard = ({ o, st }) => {
-    const approved = o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount;
+    const approved = invoiceApproved(o) || (o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount);
+    const closed = pastDue(o) && !approved;
     const amountIn = h('input.num', { value: microToCcd(o.invoice.amount), inputMode: 'decimal', 'aria-label': 'Amount you agree to be paid, in CCD' });
     const fileState = h('p.live', 'Pick the invoice file you sent, to confirm it is the same one.');
     let fileOk = false;
@@ -72,7 +89,9 @@ export async function supplierView() {
       h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', approved ? 'Approved' : 'Invoice waiting for your approval'), h('span', chip(st.tone, st.label)))),
       h('div.big-amount.num', `${microToCcd(o.invoice.amount)} CCD`),
       h('p.fine', `Escrowed for this order: ${microToCcd(o.amount)} CCD. Invoice ${o.invoice.invoice_hash.slice(0, 8)}…, submitted by Agent #${o.invoice.agent_token_id ?? AGENT.id}.`),
-      approved ? null : [
+      h('p.fine', `Counts: ${countsLine(o)}.`),
+      closed ? h('p.err', icon('alert', 16), `The agreed date (${fmtDay(o.invoice_by)}) has passed, so approvals are closed. Ask the buyer to agree a new date.`) : null,
+      approved || closed ? null : [
         h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
         h('label.field', h('span', 'Amount you agree to be paid (CCD)'), amountIn),
         h('div.count-row', h('button.btn.gold', { type: 'button', onclick: async (e) => {
@@ -89,13 +108,19 @@ export async function supplierView() {
           e.currentTarget.disabled = true;
           const r = await act('reject_invoice', o.id, { done: `Invoice on order #${o.id} rejected.` });
           if (r.ok) location.reload();
-        } }, 'Not my invoice: reject it'))]);
+        } }, 'Not my invoice: reject it'))],
+      tools(o));
   };
+  const waitingCard = ({ o, st }) => h('section.panel.count',
+    h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', `${microToCcd(o.amount)} CCD escrowed for you`), h('span', chip(st.tone, st.label)))),
+    h('p.fine', `Counts: ${countsLine(o)}. Send your invoice to the buyer's agent; it submits the fingerprint and you approve it here.`),
+    tools(o));
 
   return frame(side,
     h('header.dash-h', h('div', h('h2', 'Your invoices'), h('p', 'Approve your own invoice and amount. Nobody can pay you less than you approve.'))),
+    toAccept.map(acceptCard),
     toApprove.length ? toApprove.map(approveCard) : h('section.panel.empty-s', h('p', 'No invoices waiting for your approval.')),
-    waiting.length ? h('section.panel', h('h3', 'Waiting for the invoice'), h('ul.plain', waiting.map(({ o, st }) => h('li', h('b.num', `#${o.id}`), ` ${microToCcd(o.amount)} CCD escrowed. `, chip(st.tone, st.label))))) : null,
+    waiting.length ? [h('h3.sub-h', 'Waiting for the invoice'), waiting.map(waitingCard)] : null,
     payout,
     paid.length ? h('section.panel', h('h3', 'Payments received'), h('ul.plain', paid.map(({ o }) => h('li', h('b.num', `#${o.id}`), ` ${microToCcd(o.amount)} CCD to ${short(sup.payout)}`)))) : null);
 }
@@ -136,7 +161,9 @@ export async function agentView() {
   const orderCard = (o) => {
     const st = orderStage(o, sups[o.supplier], cfg.hold_ms);
     let action;
-    if (!o.invoice) {
+    if (!o.invoice && pastDue(o)) {
+      action = h('p', 'The agreed date has passed, so no invoice can be submitted unless the buyer and supplier agree a new date.');
+    } else if (!o.invoice) {
       let hash = null;
       const out = h('p.live', 'Pick the supplier’s invoice file. Only its SHA-256 goes on-chain.');
       const amt = h('input.num', { value: microToCcd(o.amount), inputMode: 'decimal', 'aria-label': 'Invoice amount in CCD' });

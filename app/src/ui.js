@@ -52,6 +52,9 @@ const ICONS = {
   arrow: 'M4 10h12M11 5l5 5-5 5',
   grid: 'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z',
   list: 'M7 5h10M7 10h10M7 15h10M3 5h.01M3 10h.01M3 15h.01',
+  calendar: 'M3 5h14v12H3zM3 9h14M7 3v4M13 3v4',
+  refresh: 'M16 10a6 6 0 1 1-2-4.5M16 3v4h-4',
+  inbox: 'M3 11l2-7h10l2 7v5H3zM3 11h4l1 2h4l1-2h4',
 };
 export function icon(name, size = 18) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -89,6 +92,13 @@ export function countdown(ms) {
   return d ? `${d}d ${hrs}h` : hrs ? `${hrs}h ${min}m` : `${min}m`;
 }
 
+/** A hold length in words: "72 hours", "1 minute". */
+export function holdText(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m} minute${m === 1 ? '' : 's'}`;
+  const hrs = Math.round(m / 60);
+  return `${hrs} hour${hrs === 1 ? '' : 's'}`;
+}
 export const fmtDate = (ms) => new Date(ms).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 export const store = {
