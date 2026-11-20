@@ -38,7 +38,7 @@ async function badge() {
 
 const NEXT_STEP = {
   accept: 'The supplier accepts the order and its date.',
-  expired: 'The agreed date passed and the order was not ready: you can take the money back.',
+  expired: 'The latest date passed and the order was not ready: you can take the money back.',
   counting: 'The receiver and approver count the delivery.',
   revealing: 'The signers reveal their sealed counts.',
   mismatch: 'The counts do not match: ask for a recount, or wait for the rest of the delivery.',
@@ -146,7 +146,7 @@ function problems(d, step) {
     if (!d.supplierName.trim()) p.push('Enter the supplier’s name for the purchase order.');
   }
   if (step === 1 && !totals(d).ok) p.push('Each line needs an item, a whole quantity and a unit price in CCD.');
-  if (step === 1 && !(dayEnd(d.due) > Date.now())) p.push('Pick an agreed date in the future.');
+  if (step === 1 && !(dayEnd(d.due) > Date.now())) p.push('Pick a latest date in the future.');
   if (step === 2) {
     if (!ADDR_RE.test(d.receiver.trim()) || !ADDR_RE.test(d.approver.trim())) p.push('Enter both accounts.');
     else if (d.receiver.trim() === d.approver.trim()) p.push('The receiver and the approver must be two different people.');
@@ -204,7 +204,7 @@ function wizard() {
       h('button.btn.line.small', { type: 'button', onclick: () => { d.lines.push({ item: '', qty: '', price: '' }); save(d); paint(); } }, icon('plus', 16), 'Add a line'),
       tot,
       field('Deliver to', input('place', { placeholder: 'Apapa warehouse, Lagos' })),
-      field('Agreed date', input('due', { type: 'date' }), 'By the end of this day the delivery must be counted and the supplier’s invoice approved. The supplier agrees to it when accepting the order. If the order is not ready by then, you can take the money back.'),
+      field('Latest date for delivery and invoice', input('due', { type: 'date' }), 'The supplier can deliver and be paid any day before this. By the end of this day the delivery must be counted and the supplier’s invoice approved. The supplier agrees to it when accepting the order. If the order is not ready by then, you can take the money back.'),
       field('Notes for the supplier (optional)', input('notes')));
     void t;
   }
@@ -233,7 +233,7 @@ function wizard() {
     return h('div.review',
       h('div.rv-col',
         sec(0, 'Supplier', h('p', h('b', d.supplierName), h('br'), h('span.mono', short(d.supplier)))),
-        sec(1, 'Order lines', h('ul.rv-lines', d.lines.map((l) => h('li', h('span', `${l.item} × ${l.qty}`), h('b.num', `${microToCcd(BigInt(l.qty) * ccdToMicro(l.price))} CCD`)))), d.place ? h('p.mute', `Deliver to ${d.place}`) : null, h('p', 'Agreed date: ', h('b', fmtDay(dayEnd(d.due))))),
+        sec(1, 'Order lines', h('ul.rv-lines', d.lines.map((l) => h('li', h('span', `${l.item} × ${l.qty}`), h('b.num', `${microToCcd(BigInt(l.qty) * ccdToMicro(l.price))} CCD`)))), d.place ? h('p.mute', `Deliver to ${d.place}`) : null, h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(dayEnd(d.due))))),
         sec(2, 'Who counts', h('p', `Receiver ${short(d.receiver)}`, h('br'), `Approver ${short(d.approver)}`))),
       h('aside.pay',
         idBox,

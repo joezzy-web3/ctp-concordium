@@ -63,7 +63,7 @@ export async function supplierView() {
   const acceptCard = ({ o }) => h('section.panel.count',
     h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', 'New order: accept it to lock the money for you'), h('span', `${o.expected_qty} units`))),
     h('div.big-amount.num', `${microToCcd(o.amount)} CCD`),
-    h('p', 'Agreed date: ', h('b', fmtDay(o.invoice_by)), '. By the end of that day the delivery must be counted and your invoice approved. Once you accept, the buyer cannot take this money back unless the date passes with the order not ready, or you give it back.'),
+    h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(o.invoice_by)), '. You can deliver and be paid any day before it. By the end of that day the delivery must be counted and your invoice approved. Once you accept, the buyer cannot take this money back unless the date passes with the order not ready, or you give it back.'),
     pastDue(o) ? h('p.err', icon('alert', 16), 'This date has passed. Ask the buyer for a new date before accepting.') : h('div.count-row',
       h('button.btn.gold', { type: 'button', onclick: async (e) => {
         e.currentTarget.disabled = true;
@@ -90,7 +90,7 @@ export async function supplierView() {
       h('div.big-amount.num', `${microToCcd(o.invoice.amount)} CCD`),
       h('p.fine', `Escrowed for this order: ${microToCcd(o.amount)} CCD. Invoice ${o.invoice.invoice_hash.slice(0, 8)}…, submitted by Agent #${o.invoice.agent_token_id ?? AGENT.id}.`),
       h('p.fine', `Counts: ${countsLine(o)}.`),
-      closed ? h('p.err', icon('alert', 16), `The agreed date (${fmtDay(o.invoice_by)}) has passed, so approvals are closed. Ask the buyer to agree a new date.`) : null,
+      closed ? h('p.err', icon('alert', 16), `The latest date (${fmtDay(o.invoice_by)}) has passed, so approvals are closed. Ask the buyer to agree a new date.`) : null,
       approved || closed ? null : [
         h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
         h('label.field', h('span', 'Amount you agree to be paid (CCD)'), amountIn),
@@ -162,7 +162,7 @@ export async function agentView() {
     const st = orderStage(o, sups[o.supplier], cfg.hold_ms);
     let action;
     if (!o.invoice && pastDue(o)) {
-      action = h('p', 'The agreed date has passed, so no invoice can be submitted unless the buyer and supplier agree a new date.');
+      action = h('p', 'The latest date has passed, so no invoice can be submitted unless the buyer and supplier agree a new date.');
     } else if (!o.invoice) {
       let hash = null;
       const out = h('p.live', 'Pick the supplier’s invoice file. Only its SHA-256 goes on-chain.');

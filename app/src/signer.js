@@ -72,7 +72,7 @@ function card(o, me) {
   if (o.paid || o.refunded) {
     fill(body, h('p', o.paid ? 'Paid. Your count was part of it.' : 'This order was closed and the money went back to the buyer.'));
   } else if (pastDue(o) && !(myReveal && theirReveal)) {
-    fill(body, h('p', chip('hold', 'Counting closed'), ' The agreed date for this order has passed. Nothing more can be counted unless the buyer and supplier agree a new date.'));
+    fill(body, h('p', chip('hold', 'Counting closed'), ' The latest date for this order has passed. Nothing more can be counted unless the buyer and supplier agree a new date.'));
   } else if (!mine) {
     const input = h('input.count-in.num', { inputMode: 'numeric', 'aria-label': 'Units you counted', placeholder: '0', autocomplete: 'off' });
     const btn = h('button.btn.dark', { type: 'button', onclick: async () => {
