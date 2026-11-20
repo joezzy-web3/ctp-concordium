@@ -143,7 +143,7 @@ export const invoiceApproved = (o) => Boolean(o.invoice && o.supplier_approval &
 export const readyToPay = (o) => deliveryConfirmed(o) && invoiceApproved(o);
 export const pastDue = (o, now = Date.now()) => now > o.invoice_by;
 /** The buyer can take the money back: before the supplier accepts, or after the date if not ready. */
-export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o) && !repCounted(o)));
+export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o) && !(repCounted(o) && !deliveryConfirmed(o))));
 export const recountAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && !pastDue(o, now) && gateSealed(o) && !deliveryConfirmed(o) && o.recounts < MAX_RECOUNTS;
 /** Invoices and approvals: before the date, or any time after the referee ruled the goods delivered. */
 export const invoiceOpen = (o, now = Date.now()) => o.ruled_delivered || !pastDue(o, now);

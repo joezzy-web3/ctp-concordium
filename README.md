@@ -51,7 +51,7 @@ Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay
 
 Design choices, and what protects the user:
 - **The agent can be fooled; the money cannot.** A wrong, fake or edited invoice cannot change who is paid or how much: payment is fixed by the amount in escrow, the counts and the supplier's approval of that exact file's fingerprint.
-- **The supplier is protected from the buyer's own counters.** Once the supplier's rep has counted a delivery, the buyer cannot take the money back alone, even after the date; only the referee can. The buyer cannot throw out an invoice the supplier approved for the full amount.
+- **The supplier is protected from the buyer's own counters.** If the supplier's rep counted a delivery and the buyer's counters disagree or stay silent, the buyer cannot take the money back alone, even after the date; only the referee can. A confirmed delivery is the supplier's money as long as it approves its invoice by the agreed date. The buyer cannot throw out an invoice the supplier approved for the full amount.
 - **The buyer is protected from a false delivery.** The rep alone never confirms a delivery: the buyer's receiver must agree, and the buyer's approver can hold a payment by counting a different number. If the rep never counted, the buyer gets the money back after the date.
 - **Stalls have a way out.** A lost seal key can be replaced before anyone unseals, a miscount gets a recount (at most 2, opened by the buyer or supplier), a disagreement goes to the referee, and an offline agent is replaced by the supplier or buyer asking under the same rules.
 - **Fails safe.** If the contract cannot read the agent registry, it refuses.

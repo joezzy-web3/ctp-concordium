@@ -41,7 +41,7 @@ export const EXPLAIN = {
   BadDate: 'Pick a date in the future.',
   AlreadyAccepted: 'You already accepted this order.',
   OrderNotAccepted: 'Accept the order first. Then you can approve its invoice.',
-  RefundLocked: 'The supplier accepted this order, so the money is locked for it. You can take it back after the latest date only if the order is not ready and the supplier’s rep never counted a delivery; otherwise the referee decides, or the supplier releases it.',
+  RefundLocked: 'The supplier accepted this order, so the money is locked for it. You can take it back after the latest date if the order is not ready to pay and its delivery is not in dispute; a disputed delivery goes to the referee, or the supplier can release it.',
   InvoiceApprovedBySupplier: 'The supplier approved this invoice and it matches the order. Only the supplier can reject it now.',
   RecountNotNeeded: 'A recount is only possible once the receiver and the supplier’s rep have both sealed, and the delivery is not confirmed.',
   NoRecountsLeft: 'Both recounts are used. If the delivery is still short, the money goes back after the latest date.',

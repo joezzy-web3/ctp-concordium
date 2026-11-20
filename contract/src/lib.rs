@@ -672,16 +672,19 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
 }
 
 /// The buyer takes the escrow back. Allowed while the supplier has not accepted the order, or
-/// after the agreed date if the order was not ready to pay and the supplier's rep never
-/// counted a delivery. Once the rep has counted, only the referee can send the money back
-/// (`rule`), so the buyer's own counters cannot stall a delivery into a refund.
+/// after the agreed date if the order was not ready to pay and its delivery is not in dispute.
+/// While the supplier's rep has counted a delivery the counts do not confirm, only the referee
+/// can send the money back (`rule`), so the buyer's own counters cannot stall a delivery into a
+/// refund. A confirmed delivery whose invoice was not approved by the date can be refunded: the
+/// date was agreed by both sides.
 #[receive(contract = "ctp_escrow", name = "refund", parameter = "OrderId", error = "Error", mutable, enable_logger)]
 fn refund(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     ensure_admin(ctx, host)?;
     let order_id: OrderId = ctx.parameter_cursor().get()?;
     let order = open_order(host, order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
-    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order) && !rep_counted(&order);
+    let disputed = rep_counted(&order) && !delivery_confirmed(&order);
+    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order) && !disputed;
     ensure!(!order.accepted || expired, Error::RefundLocked);
     let admin = host.state().admin;
     close_and_refund(host, logger, order_id, order.amount, admin)

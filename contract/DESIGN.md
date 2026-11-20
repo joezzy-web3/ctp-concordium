@@ -5,7 +5,7 @@ The rules that decide whether a supplier gets paid run **on-chain**. The AI agen
 ## Roles
 | Role | Who | Can |
 |---|---|---|
-| Buyer admin | the buyer's Concordium account | set up signers, agents and suppliers (one `setup` transaction or one at a time); create and fund orders naming the counters, the agent, a referee and a latest date; take the money back before the supplier accepts, or after the date if nothing was delivered; ask for a recount; ask for payment; hand the admin role over in two steps |
+| Buyer admin | the buyer's Concordium account | set up signers, agents and suppliers (one `setup` transaction or one at a time); create and fund orders naming the counters, the agent, a referee and a latest date; take the money back before the supplier accepts, or after the date if the order is not ready to pay and its delivery is not in dispute; ask for a recount; ask for payment; hand the admin role over in two steps |
 | Receiver | the buyer's person at the gate | seal and unseal a blind count on orders that name them |
 | Approver | a second buyer person, inside | optionally seal and unseal a blind count; a different number holds the payment, silence never blocks it |
 | Supplier | the supplier's Concordium account | accept an order and name its delivery rep; agree date changes; approve its own invoice by hash; ask for a recount; ask for payment; give the money back; set its own payout account (starts the hold) |
@@ -25,7 +25,7 @@ Every Concordium account belongs to an identity verified by an identity provider
 6. **Decision.** The named agent (registered, re-checked in the registry, and holding the same agent token as on the invoice), the supplier, or the buyer calls `execute_payment(order_id, receipt_hash)`. The rules are the same whoever asks. The contract pays only on CLEARED; once paid, the order is final.
 7. **Recount.** Once both gate counters have sealed and the delivery is not confirmed, the buyer or the supplier can call `recount(order_id)`: everyone counts again, blind, in a new round. At most 2 recounts; every earlier count stays in the event history.
 8. **Dispute.** If the supplier's rep unsealed a count and the counts do not confirm the delivery (a counter disagreed, or the receiver never unsealed), the referee can `rule(order_id, Delivered | Refund)`. Delivered: the delivery counts as confirmed, and the invoice can still be submitted and approved even after the date. Refund: the money goes back to whoever funded the order.
-9. **The latest date.** By `invoice_by`, the delivery must be confirmed and an invoice approved. After it the contract takes no new counts, invoices or approvals (unless the referee ruled the goods delivered). If the order was ready to pay, the supplier is paid. If not and the rep never counted, the buyer can take the money back. If the rep counted, only the referee can send it back.
+9. **The latest date.** By `invoice_by`, the delivery must be confirmed and an invoice approved. After it the contract takes no new counts, invoices or approvals (unless the referee ruled the goods delivered). If the order was ready to pay, the supplier is paid. If not, the buyer can take the money back, except while a delivery the rep counted is in dispute: then only the referee can send it back.
 
 ## Rules checked by `execute_payment`
 Before any rule runs, the call is rejected outright (nothing logged) if: there is no invoice (`NoInvoice`); the caller is not the agent on the invoice (registered, verified, same token), the supplier or the buyer (`NotAgent`); or the order is already paid or refunded (`OrderClosed`).
@@ -45,7 +45,7 @@ On HELD the contract **logs the decision and pays nothing** (the call still succ
 
 ## Design choices, and what protects the user
 - **The AI is never in charge of money.** The agent can submit and ask; the contract checks counts, amounts, approvals and payout age itself.
-- **Each side has a counter the other side does not choose.** The buyer names the receiver, the supplier names its rep, and payment needs both counts. The buyer's own counters cannot stall a delivered order into a refund: once the rep has counted, only the referee can send the money back.
+- **Each side has a counter the other side does not choose.** The buyer names the receiver, the supplier names its rep, and payment needs both counts. The buyer's own counters cannot stall a delivered order into a refund: while a delivery the rep counted is in dispute, only the referee can send the money back.
 - **A referee for real disputes.** The contract cannot see a warehouse, so when the counts disagree, a neutral referee named on the order (and seen by the supplier before accepting) decides. Every ruling is an event on the record.
 - **The approver checks, but cannot stall.** A different number from the approver holds the payment; silence never blocks it.
 - **Blind counts by commit and reveal**, bound to the signer and the round, so no counter can copy another's number or reuse an old one.

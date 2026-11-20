@@ -83,7 +83,7 @@ export function refundControl(o) {
     ? 'Delivery confirmed and invoice approved: this money is the supplier’s.'
     : repCounted(o) && !deliveryConfirmed(o)
       ? 'The supplier’s delivery rep counted this delivery and the counts do not confirm it: only the referee can send the money back.'
-      : `Locked for the supplier until ${fmtDay(o.invoice_by)}. If the order is not ready by then and the supplier’s rep never counted a delivery, you can take it back.`;
+      : `Locked for the supplier until ${fmtDay(o.invoice_by)}. If the order is not ready to pay by then, and its delivery is not in dispute, you can take it back.`;
   return h('p.fine', icon('lock', 14), ' ', why);
 }
 

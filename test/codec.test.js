@@ -60,6 +60,7 @@ test('refund, recount and payment rules mirror the contract', async () => {
   assert.equal(readyToPay(ready), true);
   assert.equal(disputed(ready), false);
   assert.equal(refundAllowed(ready, due + 1), false, 'ready by the date: locked for the supplier');
+  assert.equal(refundAllowed({ ...ready, supplier_approval: null }, due + 1), true, 'confirmed, but no invoice approved by the agreed date');
   assert.equal(deliveryConfirmed({ ...ready, reveals: [...ready.reveals, RV('Approver', AP, 95n)] }), false, 'an approver who disagrees holds it');
   assert.equal(deliveryConfirmed({ ...ready, reveals: [...ready.reveals, RV('Approver', AP, 100n)] }), true);
   assert.equal(deliveryConfirmed({ ...repCounted, ruled_delivered: true }), true, 'a referee ruling settles the counts');
