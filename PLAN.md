@@ -27,6 +27,10 @@
 - Verifiable build of `1796a52` (CI run 44595683477), module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27`, "Source and module match", 16/16 end-to-end tests incl. the underpay attack.
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
+## Escrow v4 (test run): deployed 20 Nov 2026 10:56 Lagos at `<13098,0>`
+- Module `ad60bdff1c57a8b54f684a159b149e21bfb0721f54a91263d3a0c184a28c7e52` (verifiable build, CI run 44703255024), created by the buyer `4QzE6Z…TthG` in tx `3e08d66a1833f7076134fbb3c75f4500b5f32b910c2ffd20eca276a47f07dddf` (block 51055007). **Payout hold 1 minute**, so the whole flow can be tested in one sitting. The demo contract will be created again with the 72-hour hold.
+- The app and the console now point at `<13098,0>`.
+
 ## Escrow v4: ready to deploy (supersedes v3, never deployed)
 - Verifiable build of `e8da788` (CI run 44702936059; contract code from `01b697a`), module `ad60bdff1c57a8b54f684a159b149e21bfb0721f54a91263d3a0c184a28c7e52`, "Source and module match", 20 unit + 34 end-to-end tests. Init unchanged: `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it; it offers a 1-minute hold for test runs.
 - v3 self-audit (19 Nov night): each count seal now includes its signer's account (a copied seal never opens). v4 (20 Nov): agreed date accepted by the supplier, refund locked once accepted (until the date passes with the order not ready, or the supplier releases), buyer cannot reject an invoice the supplier approved, recounts (max 2, buyer or supplier), supplier or buyer can ask for payment, removal events, setup skips an existing supplier, two-step admin handover.
