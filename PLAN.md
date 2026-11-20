@@ -27,7 +27,7 @@
 - Verifiable build of `1796a52` (CI run 44595683477), module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27`, "Source and module match", 16/16 end-to-end tests incl. the underpay attack.
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
-## Escrow v5: ready to deploy (fixes from the 20 Nov audit)
+## Escrow v5: deployed 20 Nov 2026 19:23 Lagos at `<13102,0>` (module ae80470a, 1-minute hold; init tx adc57a828f6a70530d8999de4a0868a39ff1413493219f8ff8ec99aa71ee3ca1)
 - Approver is optional (individual buyers): branch `optional-approver`, CI run 44790283400, module `ae80470a9c3487d58ae93aad3dc6a7508da5a5e3624d1af154134eba0e9fefa6`, "Source and module match", 23 rule tests + 48 end-to-end tests. This is the module to deploy; it replaces the `160f7155` build below.
 - Superseded: verifiable build of branch `escrow-v5` (CI run 44787255174), module `160f7155f5d14c0ab6e016085dbee0b6c171968dd7125a054acad1e072cdbf96`, "Source and module match", 23 rule tests + 47 end-to-end tests. Init unchanged (`hold_ms`, `registry <12802,0>`).
 - What changed: supplier names a delivery rep at acceptance; delivery confirmed when receiver and rep agree (approver can hold by disagreeing); referee named per order rules disputes; counters fixed per order; reseal before unsealing and recount on missing unseal; one agent per order; date proposals by side with 7-day expiry; agent token checked at payment; round in the seal (CTP-count/v3); quantity > 0; refunds to the funder; SamePerson check on signer identity fingerprints (F-01 groundwork).
