@@ -1,6 +1,15 @@
 # F-01: the two signers are two different verified people
 
-Status: design draft (20 Nov 2026), to confirm at Concordium office hours on Tue 24 Nov. Nothing here is built yet.
+Status: built (20 Nov 2026). The contract side is live in escrow v5 `<13102,0>`; the proof page is `idcheck/` (Signer ID check). Questions below still go to office hours on Tue 24 Nov.
+
+## As built
+- **Page:** `idcheck/`. The buyer creates a proof request for one counter and anchors it with RegisterData. The counter opens the request link, and their wallet answers with `requestVerifiablePresentationV1`. The buyer pastes the answer link back.
+- **Checks:** `VerificationAuditRecordV1.createChecked` (context match, `verifyWithNode`, credentials active, request anchored, claims match the request), then the proof must be about exactly one credential of the counter's own account.
+- **Person tag:** `SHA-256("CTP-person/v1" ‖ escrow ‖ salt ‖ issuer ‖ document number)`. The salt is derived from the buyer wallet's deterministic signature on a fixed message, so only the buyer can recompute it and it never has to be stored.
+- **On-chain:** the audit record is anchored with RegisterData; `add_signer` records `person_tag` and `id_audit` (the audit anchor hash). `create_order` refuses `SamePerson` when the receiver and approver carry the same tag.
+- **Design choice:** tags are optional on the contract, so an individual buyer without an approver, or a buyer who has not run the check yet, still trades. Every tagged signer is a proven verified adult, and an audit record exists for each.
+- **No server:** request and answer travel as links after `#`, compressed, and never reach a server.
+- Tests: `test/idcheck.test.js`.
 
 ## Why
 Today the escrow requires two different **accounts** in two different roles (receiver and approver), named on each order, each sealing a blind count. Every Concordium account belongs to an ID-verified identity, but one person can hold several accounts. So a dishonest buyer, or one insider with two accounts, could play both signers. F-01 closes that: the two signers must be **two different verified people**, proven with Concordium ID, without putting their personal data on-chain.

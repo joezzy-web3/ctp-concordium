@@ -117,12 +117,15 @@ function walletButton(acct) {
 }
 
 $('#wallet').addEventListener('click', () => {
-  // Ask the wallet every time: it opens its window so you can connect or pick an account.
+  // Ask the wallet every time: when the site is not connected yet, the wallet opens its
+  // window. Once connected, the wallet answers at once without opening (a page cannot open
+  // a browser extension itself), so say how to switch accounts instead of doing nothing.
   const before = currentAccount();
-  const tip = before ? setTimeout(() => {
-    if (currentAccount() === before) notice('wait', h('b', 'To switch account, '), 'click the Concordium Wallet icon in your browser toolbar and pick another account. This page follows it.');
-  }, 4000) : null;
-  connect().catch((e) => { clearTimeout(tip); notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e)); });
+  const howToSwitch = () => notice('wait', h('b', 'To switch account, '), 'click the Concordium Wallet icon in your browser toolbar (the puzzle piece if it is hidden) and pick another account. This page follows it at once.');
+  const tip = before ? setTimeout(() => { if (currentAccount() === before) howToSwitch(); }, 4000) : null;
+  connect()
+    .then((a) => { if (before && a === before) { clearTimeout(tip); howToSwitch(); } })
+    .catch((e) => { clearTimeout(tip); notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e)); });
 });
 // Redraw the page when the connected account changes, so each role sees its own view at once.
 let shownFor;
