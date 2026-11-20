@@ -28,7 +28,8 @@
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
 ## Escrow v5: ready to deploy (fixes from the 20 Nov audit)
-- Verifiable build of branch `escrow-v5` (CI run 44787255174), module `160f7155f5d14c0ab6e016085dbee0b6c171968dd7125a054acad1e072cdbf96`, "Source and module match", 23 rule tests + 47 end-to-end tests. Init unchanged (`hold_ms`, `registry <12802,0>`).
+- Approver is optional (individual buyers): branch `optional-approver`, CI run 44790283400, module `ae80470a9c3487d58ae93aad3dc6a7508da5a5e3624d1af154134eba0e9fefa6`, "Source and module match", 23 rule tests + 48 end-to-end tests. This is the module to deploy; it replaces the `160f7155` build below.
+- Superseded: verifiable build of branch `escrow-v5` (CI run 44787255174), module `160f7155f5d14c0ab6e016085dbee0b6c171968dd7125a054acad1e072cdbf96`, "Source and module match", 23 rule tests + 47 end-to-end tests. Init unchanged (`hold_ms`, `registry <12802,0>`).
 - What changed: supplier names a delivery rep at acceptance; delivery confirmed when receiver and rep agree (approver can hold by disagreeing); referee named per order rules disputes; counters fixed per order; reseal before unsealing and recount on missing unseal; one agent per order; date proposals by side with 7-day expiry; agent token checked at payment; round in the seal (CTP-count/v3); quantity > 0; refunds to the funder; SamePerson check on signer identity fingerprints (F-01 groundwork).
 - Before the live run: a referee account (any account outside the cast) and, for F-01 later, a signer account under a second identity.
 
