@@ -109,7 +109,13 @@ function walletButton(acct) {
   b.classList.toggle('connected', Boolean(acct));
 }
 
-$('#wallet').addEventListener('click', () => connect().catch((e) => notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e))));
+$('#wallet').addEventListener('click', () => {
+  // Once the site is allowed, the wallet has nothing to ask, so it does not open. Say how to switch.
+  if (currentAccount()) {
+    return notice('wait', h('b', 'To switch account, use the wallet itself. '), 'Click the Concordium Wallet icon in your browser toolbar and pick another account. This page follows it.');
+  }
+  connect().catch((e) => notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e)));
+});
 // Redraw the page when the connected account changes, so each role sees its own view at once.
 let shownFor;
 onAccount((a) => {
