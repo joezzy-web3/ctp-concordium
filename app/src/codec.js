@@ -73,7 +73,7 @@ export async function decodeOrder(bytes) {
   const o = {};
   o.supplier = await acct(r);
   o.receiver = await acct(r);
-  o.approver = await acct(r);
+  o.approver = r.opt() ? await acct(r) : null; // optional: an individual buyer has none
   o.expected_qty = r.u64();
   o.amount = r.u64();
   o.commits = [];

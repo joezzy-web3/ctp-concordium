@@ -153,10 +153,11 @@ function problems(d, step) {
   if (step === 1 && !totals(d).ok) p.push('Each line needs an item, a whole quantity and a unit price in CCD.');
   if (step === 1 && !(dayEnd(d.due) > Date.now())) p.push('Pick a latest date in the future.');
   if (step === 2) {
-    if (!ADDR_RE.test(d.receiver.trim()) || !ADDR_RE.test(d.approver.trim())) p.push('Enter both accounts.');
-    else if (d.receiver.trim() === d.approver.trim()) p.push('The receiver and the approver must be two different people.');
+    if (!ADDR_RE.test(d.receiver.trim())) p.push('Enter the receiver’s account.');
+    else if (d.approver.trim() && !ADDR_RE.test(d.approver.trim())) p.push('Enter a full account for the approver, or leave it empty.');
+    else if (d.approver.trim() && d.receiver.trim() === d.approver.trim()) p.push('The receiver and the approver must be two different people.');
     if (!ADDR_RE.test((d.referee ?? '').trim())) p.push('Enter the referee’s account.');
-    else if ([d.receiver, d.approver, d.supplier, CAST.buyer, AGENT.owner].map((x) => x.trim()).includes(d.referee.trim())) p.push('The referee must be someone independent: not the buyer, the supplier, the two counters or the agent.');
+    else if ([d.receiver, d.approver, d.supplier, CAST.buyer, AGENT.owner].map((x) => x.trim()).filter(Boolean).includes(d.referee.trim())) p.push('The referee must be someone independent: not the buyer, the supplier, the two counters or the agent.');
   }
   return p;
 }
@@ -218,9 +219,9 @@ function wizard() {
 
   function stepCounters() {
     return h('div',
-      h('p.lead', 'At the gate, your receiver and the supplier’s delivery rep each count without seeing the other’s number. The contract pays when both match the order. Your approver can check inside: a different number holds the payment.'),
-      field('Receiver (counts at the gate)', input('receiver', { spellcheck: false, class: 'mono' })),
-      field('Approver (a second person, checks inside)', input('approver', { spellcheck: false, class: 'mono' })),
+      h('p.lead', 'At the gate, your receiver and the supplier’s delivery rep each count without seeing the other’s number. The contract pays when both match the order.'),
+      field('Receiver (counts at the gate)', input('receiver', { spellcheck: false, class: 'mono' }), 'Buying for yourself? Use your own account.'),
+      field('Approver (optional, recommended for companies)', input('approver', { spellcheck: false, class: 'mono', placeholder: 'Leave empty if you buy as an individual' }), 'A second person who checks the delivery inside. A different count holds the payment, which guards against your receiver colluding with the driver. Staying silent never blocks it.'),
       field('Referee', input('referee', { spellcheck: false, class: 'mono', placeholder: 'An independent account, for example an inspector' }), 'Settles a disputed delivery: if the supplier’s rep counted and the counts do not confirm it, only the referee can send the money back. The supplier sees who it is before accepting.'));
   }
 
@@ -229,7 +230,7 @@ function wizard() {
     const idBox = h('span', 'This order locks in escrow');
     listOrders().then((os) => { d.orderId = (os.at(-1)?.id ?? 0) + 1; fill(idBox, 'Order ', h('b.num', `#${d.orderId}`), ' locks in escrow'); }).catch(() => fill(idBox, 'Could not read the next order number; reload before signing.'));
     const sec = (i, title, ...content) => h('section.rv', h('div.rv-h', h('h3', title), h('button.btn.text.small', { type: 'button', onclick: () => go(i) }, icon('edit', 16), 'Edit')), ...content);
-    const params = () => ({ order_id: d.orderId, supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim(), invoice_by: iso(dayEnd(d.due)), agent: AGENT.owner, referee: d.referee.trim() });
+    const params = () => ({ order_id: d.orderId, supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() ? { Some: [d.approver.trim()] } : { None: [] }, invoice_by: iso(dayEnd(d.due)), agent: AGENT.owner, referee: d.referee.trim() });
     const sign = h('button.btn.gold.wide', { type: 'button', onclick: async () => {
       if (!d.orderId) return notice('no', 'Could not work out the next order number. Reload and try again.');
       if (currentAccount() !== CAST.buyer) notice('wait', 'This must be signed by the buyer account; the contract refuses anyone else.');
@@ -242,7 +243,7 @@ function wizard() {
       h('div.rv-col',
         sec(0, 'Supplier', h('p', h('b', d.supplierName), h('br'), h('span.mono', short(d.supplier)))),
         sec(1, 'Order lines', h('ul.rv-lines', d.lines.map((l) => h('li', h('span', `${l.item} × ${l.qty}`), h('b.num', `${microToCcd(BigInt(l.qty) * ccdToMicro(l.price))} CCD`)))), d.place ? h('p.mute', `Deliver to ${d.place}`) : null, h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(dayEnd(d.due))))),
-        sec(2, 'Who counts', h('p', `Receiver ${short(d.receiver)}`, h('br'), `Approver ${short(d.approver)}`, h('br'), `Referee ${short(d.referee)}`, h('br'), `Agent #${AGENT.id} submits the invoice`))),
+        sec(2, 'Who counts', h('p', `Receiver ${short(d.receiver)}`, h('br'), d.approver.trim() ? `Approver ${short(d.approver)}` : 'No approver (individual buyer)', h('br'), `Referee ${short(d.referee)}`, h('br'), `Agent #${AGENT.id} submits the invoice`))),
       h('aside.pay',
         idBox,
         h('div.big.num', `${microToCcd(t.micro)} CCD`),
@@ -251,7 +252,7 @@ function wizard() {
         h('button.btn.out.wide', { type: 'button', onclick: () => printPO({ ...d, orderId: d.orderId, micro: t.micro, units: t.units }) }, icon('download', 16), 'Download purchase order (PDF)'),
         h('details.wallet', h('summary', 'What your wallet will sign'),
           h('p', `Contract <${ESCROW.index},${ESCROW.subindex}>, ctp_escrow.create_order, attaching ${microToCcd(t.micro)} CCD.`),
-          h('pre', JSON.stringify({ order_id: d.orderId ?? 'next', supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim(), invoice_by: dayEnd(d.due) > 0 ? iso(dayEnd(d.due)) : '', agent: AGENT.owner, referee: (d.referee ?? '').trim() }, null, 2)))));
+          h('pre', JSON.stringify({ order_id: d.orderId ?? 'next', supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() || null, invoice_by: dayEnd(d.due) > 0 ? iso(dayEnd(d.due)) : '', agent: AGENT.owner, referee: (d.referee ?? '').trim() }, null, 2)))));
   }
 
   function paint(errs = []) {
@@ -304,7 +305,7 @@ async function ordersView() {
       h('dl.facts',
         h('dt', 'Units ordered'), h('dd.num', o.expected_qty.toString()),
         h('dt', 'Counts'), h('dd', countsLine(o)),
-        h('dt', 'Receiver, approver'), h('dd.mono', `${short(o.receiver)}, ${short(o.approver)}`),
+        h('dt', 'Receiver, approver'), h('dd.mono', `${short(o.receiver)}, ${o.approver ? short(o.approver) : 'no approver'}`),
         h('dt', 'Supplier’s rep'), h('dd.mono', o.rep ? short(o.rep) : 'named when the supplier accepts'),
         h('dt', 'Referee'), h('dd.mono', short(o.referee)),
         h('dt', 'Supplier'), h('dd.mono', short(o.supplier)),

@@ -41,7 +41,7 @@ Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay
 
 `contract/` holds the escrow; `contract/DESIGN.md` has every rule (it describes v5, deploying next). In the app, each person has their own space: buyer, delivery signers, supplier, agent and referee.
 
-1. The buyer creates the order, locks the money in the contract, names its receiver and approver, the agent and a referee, and sets the latest date for delivery and invoice.
+1. The buyer creates the order, locks the money in the contract, names its receiver (and, for a company, an approver), the agent and a referee, and sets the latest date for delivery and invoice. An individual buying for themselves is their own receiver.
 2. The supplier accepts the order and that date from its own account, and names its delivery rep (the driver).
 3. At the gate, the buyer's receiver and the supplier's rep each count and seal their number. Neither can see or copy the other's. The rep unloads only after the receiver has sealed: no count, no unload. The buyer's approver can check inside too.
 4. The agent named on the order submits the invoice's fingerprint and amount. The contract asks the Concordium agent registry whether the agent is active and owned by the caller.

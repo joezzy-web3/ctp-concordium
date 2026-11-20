@@ -97,9 +97,11 @@ pub struct SignerInfo {
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Order {
     pub supplier: AccountAddress,
-    /// The two people named for this order. Only they can count it.
+    /// The buyer's counter at the gate.
     pub receiver: AccountAddress,
-    pub approver: AccountAddress,
+    /// An optional second buyer-side person who checks inside. A company names one as its check
+    /// against an insider colluding with the driver; an individual buyer has none.
+    pub approver: Option<AccountAddress>,
     pub expected_qty: u64,
     pub amount: Amount,
     pub commits: Vec<Commit>,
@@ -311,7 +313,8 @@ pub struct CreateOrderParams {
     pub supplier: AccountAddress,
     pub expected_qty: u64,
     pub receiver: AccountAddress,
-    pub approver: AccountAddress,
+    /// Optional: companies name one, an individual buyer leaves it out.
+    pub approver: Option<AccountAddress>,
     /// The proposed deadline for delivery and an approved invoice. The supplier agrees to it by accepting.
     pub invoice_by: Timestamp,
     /// The one registered agent that may submit this order's invoice.
@@ -632,17 +635,20 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
     ensure!(host.state().suppliers.get(&p.supplier).is_some(), Error::UnknownSupplier);
     ensure!(host.state().orders.get(&p.order_id).is_none(), Error::OrderExists);
     ensure!(p.expected_qty > 0, Error::ZeroQuantity);
-    ensure!(p.receiver != p.approver, Error::BadOrderSigners);
     let receiver = host.state().signers.get(&p.receiver).map(|r| *r).ok_or(Error::BadOrderSigners)?;
-    let approver = host.state().signers.get(&p.approver).map(|r| *r).ok_or(Error::BadOrderSigners)?;
-    ensure!(receiver.role == Role::Receiver && approver.role == Role::Approver, Error::BadOrderSigners);
-    // Once both signers are proven with Concordium ID, they must be two different people.
-    if let (Some(a), Some(b)) = (receiver.person_tag, approver.person_tag) {
-        ensure!(a != b, Error::SamePerson);
+    ensure!(receiver.role == Role::Receiver, Error::BadOrderSigners);
+    if let Some(a) = p.approver {
+        ensure!(a != p.receiver, Error::BadOrderSigners);
+        let approver = host.state().signers.get(&a).map(|r| *r).ok_or(Error::BadOrderSigners)?;
+        ensure!(approver.role == Role::Approver, Error::BadOrderSigners);
+        // Once both signers are proven with Concordium ID, they must be two different people.
+        if let (Some(x), Some(y)) = (receiver.person_tag, approver.person_tag) {
+            ensure!(x != y, Error::SamePerson);
+        }
     }
     ensure!(host.state().agents.get(&p.agent).is_some(), Error::NotAgent);
     let admin = host.state().admin;
-    ensure!(![admin, p.supplier, p.receiver, p.approver, p.agent].contains(&p.referee), Error::BadReferee);
+    ensure!(![admin, p.supplier, p.receiver, p.agent].contains(&p.referee) && p.approver != Some(p.referee), Error::BadReferee);
     ensure!(p.invoice_by > ctx.metadata().slot_time(), Error::BadDate);
     let funder = sender_account(ctx).map_err(|_| Error::NotAdmin)?;
     let _ = host.state_mut().orders.insert(p.order_id, Order {
@@ -714,7 +720,7 @@ fn accept_order(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     ensure!(p.invoice_by == order.invoice_by, Error::DateChanged);
     before_deadline(ctx, &order)?;
     let admin = host.state().admin;
-    ensure!(![admin, order.receiver, order.approver, order.referee, order.agent].contains(&p.rep), Error::BadRep);
+    ensure!(![admin, order.receiver, order.referee, order.agent].contains(&p.rep) && order.approver != Some(p.rep), Error::BadRep);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.accepted = true;
         o.date_proposal = None;
@@ -833,7 +839,7 @@ fn set_payout(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger)
 fn order_role(order: &Order, signer: &AccountAddress) -> ContractResult<Role> {
     if *signer == order.receiver {
         Ok(Role::Receiver)
-    } else if *signer == order.approver {
+    } else if order.approver == Some(*signer) {
         Ok(Role::Approver)
     } else if order.rep == Some(*signer) {
         Ok(Role::SupplierRep)
