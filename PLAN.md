@@ -30,6 +30,7 @@
 ## Escrow v4 (test run): deployed 20 Nov 2026 10:56 Lagos at `<13098,0>`
 - Module `ad60bdff1c57a8b54f684a159b149e21bfb0721f54a91263d3a0c184a28c7e52` (verifiable build, CI run 44703255024), created by the buyer `4QzE6Z…TthG` in tx `3e08d66a1833f7076134fbb3c75f4500b5f32b910c2ffd20eca276a47f07dddf` (block 51055007). **Payout hold 1 minute**, so the whole flow can be tested in one sitting. The demo contract will be created again with the 72-hour hold.
 - The app and the console now point at `<13098,0>`.
+- **First full live run, 20 Nov 2026 (order #1, 5 CCD, 50 bags):** setup (the contract checked Agent #1287 in the real registry), order, supplier accepted the date, receiver and approver sealed and unsealed 50 each, agent submitted the invoice (registry checked again), supplier approved the same file's fingerprint, supplier asked for payment: CLEARED, 5 CCD to `45H8…ixMY` in tx `e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947`. Fee 15.26 CCD on testnet (contract creation cost 8.16 CCD), so measure energy per step in CI for the cost write-up.
 
 ## Escrow v4: ready to deploy (supersedes v3, never deployed)
 - Verifiable build of `e8da788` (CI run 44702936059; contract code from `01b697a`), module `ad60bdff1c57a8b54f684a159b149e21bfb0721f54a91263d3a0c184a28c7e52`, "Source and module match", 20 unit + 34 end-to-end tests. Init unchanged: `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it; it offers a 1-minute hold for test runs.
