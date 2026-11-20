@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Pay · Signer ID check (testnet)</title>
+<style>
+  :root { --navy:#10264A; --gold:#E6BE4F; --ok:#127A4A; --bad:#C42B1C; --mute:#55657C; --line:#D5DCD7; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--navy); max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 28px 0 6px; } p.sub { color: var(--mute); margin: 0 0 20px; }
+  label { display: block; font-size: 14px; color: var(--mute); margin: 12px 0 4px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; font: 14px ui-monospace, monospace; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  textarea { height: 90px; }
+  button { height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--navy); color: #fff; font: inherit; cursor: pointer; margin: 12px 8px 0 0; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .msg button { margin-top: 10px; }
+  .ok { background: #E5F2EA; color: var(--ok); } .bad { background: #FBECEA; color: var(--bad); } .info { background: #F1F3F6; color: var(--mute); }
+  code { font-size: 12px; word-break: break-all; } ul { padding-left: 20px; font-size: 14px; }
+  .note { font-size: 13px; color: var(--mute); }
+</style>
+</head>
+<body>
+<h1>Signer ID check</h1>
+<p class="sub">Escrow <code id="esc"></code> on Concordium testnet. Before a person counts deliveries, they prove with Concordium ID, in zero knowledge, that they are a verified adult. The escrow keeps only a salted fingerprint of who they are, and refuses an order whose receiver and approver are the same person.</p>
+
+<section id="buyerView" hidden>
+  <h2>1. Ask a counter for proof (buyer)</h2>
+  <label for="signer">Counter’s Concordium account</label>
+  <input id="signer" spellcheck="false" placeholder="The receiver’s or approver’s account">
+  <label for="role">Role on your orders</label>
+  <select id="role"><option>Receiver</option><option>Approver</option></select>
+  <button id="ask">Create proof request</button>
+  <div id="askOut"></div>
+
+  <h2>2. Check the answer and record it (buyer)</h2>
+  <label for="answer">Answer link from the counter</label>
+  <textarea id="answer" spellcheck="false" placeholder="Paste the link the counter sent back"></textarea>
+  <button id="checkBtn">Check proof</button>
+  <div id="chkOut"></div>
+
+  <h2>Verified from this browser</h2>
+  <ul id="list"></ul>
+  <p class="note">What is shared: the counter’s ID document issuer and number, to this page only, and a proof they are over 18. What goes on-chain: a fingerprint salted with a secret only the buyer’s wallet can make, and the hash of an audit record anyone can re-check with the record file. The document number is never stored.</p>
+</section>
+
+<section id="signerView" hidden>
+  <h2>Prove you are a verified person (counter)</h2>
+  <p>This request is for account <code id="forAcct"></code>, as <b id="forRole"></b>. Select that account in your Concordium wallet.</p>
+  <p class="note">Your wallet will ask you to share your ID document issuer and number with the buyer’s page, and prove you are over 18. Your name, birthday and everything else stay private. Only a salted fingerprint goes on-chain.</p>
+  <button id="prove">Prove with Concordium ID</button>
+  <div id="ansOut"></div>
+</section>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

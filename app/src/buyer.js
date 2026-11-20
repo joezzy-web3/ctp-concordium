@@ -103,8 +103,19 @@ async function dashboard() {
             row(me === cfg.admin ? 'ok' : 'hold', 'Buyer account', me === cfg.admin ? 'Connected as the buyer admin.' : `Connect ${short(cfg.admin)} to create orders.`),
             b.known ? row(b.ok ? 'ok' : 'no', `Agent #${AGENT.id}`, b.ok ? 'Verified by Concordium.' : 'Badge does not check out.')
               : row('hold', `Agent #${AGENT.id}`, 'Registry not reachable from here.', h('a.inline', { href: `https://agent-registry-mcp.concordium.com/v1/check-badge/${AGENT.badge}?network=testnet`, target: '_blank', rel: 'noopener' }, 'Check', icon('external', 14))),
-            sup ? row('ok', 'Cast set up', `Supplier registered; its payout hold is ${holdText(cfg.hold_ms)}.`) : row('hold', 'Cast not set up', 'List the receiver, approver, agent and supplier in one approval.', setupButton(me === cfg.admin)))))),
+            sup ? row('ok', 'Cast set up', `Supplier registered; its payout hold is ${holdText(cfg.hold_ms)}.`) : row('hold', 'Cast not set up', 'List the receiver, approver, agent and supplier in one approval.', setupButton(me === cfg.admin)),
+            idRow(row))))),
   );
+}
+
+/** Counters proven with Concordium ID (F-01), as recorded from this browser by the ID check page. */
+function idRow(row) {
+  const done = store.get(`ctp:idcheck:${ESCROW.index}`, []);
+  const roles = new Set(done.map((x) => x.role));
+  const go = h('a.inline', { href: '../idcheck/', target: '_blank', rel: 'noopener' }, done.length ? 'Check another' : 'Start', icon('external', 14));
+  return roles.has('Receiver') && roles.has('Approver')
+    ? row('ok', 'Counters ID-checked', 'Receiver and approver proved with Concordium ID. The contract refuses an order naming the same person twice.', go)
+    : row('hold', 'Counters not ID-checked', 'Have the receiver and approver prove with Concordium ID that they are two different verified people.', go);
 }
 
 /** Lists the demo cast on the contract in one transaction. The contract checks Agent #1287
