@@ -79,6 +79,25 @@ export async function connect() {
 }
 let listening = false;
 
+/** On page load: reuse the account this site was already allowed, without a wallet prompt. */
+export async function restore() {
+  try {
+    provider ??= await detectConcordiumProvider(1500);
+    const a = await provider.getMostRecentlySelectedAccount?.();
+    const chain = (await provider.getSelectedChain?.()) ?? '';
+    if (!a || !chain.startsWith(TESTNET_GENESIS_PREFIX)) return null;
+    setAccount(a);
+    if (!listening) {
+      listening = true;
+      provider.on?.('accountChanged', (x) => setAccount(x));
+      provider.on?.('accountDisconnected', () => setAccount(null));
+    }
+    return a;
+  } catch {
+    return null; // no wallet installed, or the site is not allowed yet: the Connect button handles it
+  }
+}
+
 /** Waits for finalization; resolves to { ok, tx, reason }. Gives up waiting after `ms`, never on the transaction. */
 export async function waitFinal(tx, ms = globalThis.CTP_WAIT_MS ?? 120000) {
   const limit = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), ms));

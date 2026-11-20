@@ -1,6 +1,6 @@
 // App shell: role tabs, role band with a short guide, wallet button, hash routes,
 // and smooth section changes with the browser's view transitions.
-import { connect, currentAccount, onAccount } from './chain.js';
+import { connect, currentAccount, onAccount, restore } from './chain.js';
 import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
@@ -110,6 +110,13 @@ function walletButton(acct) {
 }
 
 $('#wallet').addEventListener('click', () => connect().catch((e) => notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e))));
-onAccount((a) => { walletButton(a); const [role] = location.hash.replace(/^#\/?/, '').split('/'); band(role ?? ''); });
+// Redraw the page when the connected account changes, so each role sees its own view at once.
+let shownFor;
+onAccount((a) => {
+  walletButton(a);
+  if (shownFor !== undefined && a !== shownFor) render();
+  shownFor = a;
+});
 addEventListener('hashchange', render);
 render();
+restore();
