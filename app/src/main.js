@@ -4,7 +4,7 @@ import { connect, currentAccount, onAccount, restore } from './chain.js';
 import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
-import { placeholderView } from './placeholder.js';
+import { judgeView } from './judge.js';
 import { signerView } from './signer.js';
 import { supplierView, agentView } from './roles.js';
 
@@ -37,7 +37,7 @@ const routes = {
   signer: () => signerView(),
   supplier: () => supplierView(),
   agent: () => agentView(),
-  judge: () => placeholderView('judge'),
+  judge: () => judgeView(),
 };
 const ORDER = ['', 'buyer', 'signer', 'supplier', 'agent', 'judge'];
 

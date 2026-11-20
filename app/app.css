@@ -220,3 +220,15 @@ html[data-dir="back"]::view-transition-old(root){animation-name:vt-out-r}html[da
 .date-block p{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}
 .order-tools .actions{justify-content:flex-start;gap:10px;margin-top:10px}
 h3.sub-h{margin:28px 0 10px}
+
+/* Judge mode */
+.judge-intro h2{margin:0 0 8px}
+.judge-intro,.attack{margin-bottom:14px}
+.attack h3{margin:0 0 6px}
+.attack .btn{margin-top:6px}
+.verify-out:empty{display:none}
+.verify-out{margin-top:12px}
+.verify-ok,.verify-no{border-radius:14px;padding:12px 14px}
+.verify-ok{background:var(--ok-bg)}
+.verify-no{background:var(--hold-bg)}
+.verify-ok p,.verify-no p{margin:4px 0}
