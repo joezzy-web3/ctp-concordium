@@ -127,7 +127,7 @@ export function orderStage(o, supplier, holdMs, now = Date.now()) {
   if (o.paid) return { key: 'paid', label: 'Paid', tone: 'ok' };
   if (pastDue(o, now) && !readyToPay(o)) return { key: 'expired', label: 'Date passed, not ready: buyer can take the money back', tone: 'hold' };
   if (!o.accepted) return { key: 'accept', label: 'Waiting for the supplier to accept', tone: 'wait' };
-  if (o.commits.length < 2) return { key: 'counting', label: `Counting: ${o.commits.length} of 2 committed`, tone: 'wait' };
+  if (o.commits.length < 2) return { key: 'counting', label: `Counting: ${o.commits.length} of 2 sealed`, tone: 'wait' };
   if (o.reveals.length < 2) return { key: 'revealing', label: `Revealing: ${o.reveals.length} of 2`, tone: 'wait' };
   if (o.reveals.some((x) => x.qty !== o.expected_qty)) return { key: 'mismatch', label: o.recounts < MAX_RECOUNTS ? 'Counts do not match: recount possible' : 'Counts do not match, no recounts left', tone: 'hold' };
   if (!o.invoice) return { key: 'invoice', label: 'Waiting for the invoice', tone: 'wait' };

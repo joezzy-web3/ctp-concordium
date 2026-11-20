@@ -18,7 +18,7 @@ const ROLES = {
   signer: { name: 'Delivery signer', line: 'Count what arrived. Nobody sees your number until both of you have counted.', guide: [
     ['Count the delivery', 'On your own, before you talk to the other signer.'],
     ['Commit your count', 'Only a fingerprint of it goes on-chain. This browser keeps the secret that unlocks it.'],
-    ['Reveal when both have committed', 'The contract checks your number against your fingerprint.'],
+    ['Unseal when both have sealed', 'The contract checks your number against your seal.'],
   ] },
   supplier: { name: 'Supplier', line: 'Approve your invoice and amount, watch your payout account and payments.', guide: [
     ['Approve the invoice', 'Pick the same invoice file you sent and confirm the amount you agreed.'],
