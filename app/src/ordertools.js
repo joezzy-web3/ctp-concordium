@@ -2,6 +2,7 @@
 // asking for payment, and getting the money back. The contract enforces every rule;
 // these only offer what it would accept right now, and explain the rest.
 import { act } from './act.js';
+import { askForPayment } from './payreceipt.js';
 import { MAX_RECOUNTS, deliveryConfirmed, invoiceApproved, pastDue, readyToPay, recountAllowed, refundAllowed, microToCcd } from './codec.js';
 import { h, chip, icon, fmtDate, notice } from './ui.js';
 
@@ -60,7 +61,13 @@ export function recountButton(o) {
 /** Anyone on the order can ask; the contract applies the same rules whoever asks. */
 export function askPaymentButton(o, label = 'Ask for payment') {
   if (!readyToPay(o) || o.paid || o.refunded) return null;
-  return h('button.btn.gold.small', { type: 'button', onclick: (e) => run(e.currentTarget, 'execute_payment', { order_id: o.id, receipt_hash: '0'.repeat(64) }, `The contract recorded its decision for order #${o.id}. If it cleared, the supplier has been paid.`) }, label);
+  return h('button.btn.gold.small', { type: 'button', onclick: async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    const r = await askForPayment(o.id);
+    b.disabled = false;
+    if (r.ok) setTimeout(() => location.reload(), 2500);
+  } }, label);
 }
 
 /** Buyer: refund when the contract allows it, otherwise say why the money is locked. */

@@ -92,6 +92,31 @@ export async function decodeOrder(bytes) {
 
 export const MAX_RECOUNTS = 2;
 
+const VERDICTS = ['Cleared', 'Held', 'Seized'];
+const CODES = ['SeizedAlreadyPaid', 'HeldNoInvoice', 'HeldOneSignature', 'HeldCountMismatch', 'HeldAmountMismatch', 'HeldNoSupplierApproval', 'HeldPayoutCoolOff'];
+const DECISION_TAG = 10; // position of Decision in the contract's Event enum
+
+/** Decodes a contract event if it is a Decision; any other event gives null. */
+export async function decodeDecision(bytes) {
+  const r = new Reader(bytes);
+  if (r.u8() !== DECISION_TAG) return null;
+  const d = { order_id: Number(r.u64()) };
+  const v = r.u8();
+  if (v >= VERDICTS.length) throw new Error('bad verdict');
+  d.verdict = VERDICTS[v];
+  const n = r.u32();
+  if (n > CODES.length) throw new Error('too many codes');
+  d.codes = Array.from({ length: n }, () => { const c = r.u8(); if (c >= CODES.length) throw new Error('bad code'); return CODES[c]; });
+  d.agent = await acct(r);
+  d.agent_token_id = Number(r.u64());
+  d.receipt_hash = r.hex32();
+  d.paid_to = r.opt() ? await acct(r) : null;
+  d.at = Number(r.u64());
+  d.asked_by = await acct(r);
+  r.done();
+  return d;
+}
+
 /** Both named people unsealed, and both counts equal the ordered quantity. Same rule as the contract. */
 export const deliveryConfirmed = (o) => o.reveals.length === 2 && o.reveals[0].role !== o.reveals[1].role && o.reveals.every((x) => x.qty === o.expected_qty);
 /** The supplier approved the submitted invoice, for the full escrowed amount. */

@@ -1,5 +1,6 @@
 // Spaces still being built: point to the working console for now, honestly.
 import { h, icon } from './ui.js';
+import { verifyReceiptCard } from './payreceipt.js';
 
 const NEXT = {
   signer: ['Delivery signer space', 'Count, commit and reveal with live order status. Until it lands, signers can commit and reveal in the console.'],
@@ -10,8 +11,9 @@ const NEXT = {
 
 export function placeholderView(role) {
   const [title, text] = NEXT[role];
-  return h('section.panel.soon',
+  return [h('section.panel.soon',
     h('h2', title),
     h('p', text),
-    role !== 'judge' ? h('a.btn.line', { href: '../console/' }, 'Open the console', icon('external', 16)) : null);
+    role !== 'judge' ? h('a.btn.line', { href: '../console/' }, 'Open the console', icon('external', 16)) : null),
+  role === 'judge' ? verifyReceiptCard() : null];
 }

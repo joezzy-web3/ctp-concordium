@@ -642,12 +642,22 @@ fn app_fixture_bytes_match_the_contract() {
         invoice_by: Timestamp::from_timestamp_millis(1_795_117_380_000), accepted: false, date_proposal: None, recounts: 0,
     };
     let supplier = Supplier { payout: s, payout_set_at: Timestamp::from_timestamp_millis(1_795_117_380_000) };
+    let decision = Event::Decision {
+        order_id: 1, verdict: Verdict::Cleared, codes: vec![], agent: ag, agent_token_id: 1287,
+        receipt_hash: HashSha2256([0xab; 32]), paid_to: Some(s), at: Timestamp::from_timestamp_millis(1_795_181_528_000), asked_by: s,
+    };
+    let held = Event::Decision {
+        order_id: 1, verdict: Verdict::Held, codes: vec![Code::HeldNoSupplierApproval, Code::HeldPayoutCoolOff], agent: ag, agent_token_id: 1287,
+        receipt_hash: HashSha2256([0xab; 32]), paid_to: None, at: Timestamp::from_timestamp_millis(1_795_181_528_000), asked_by: ag,
+    };
     let config = ConfigView { admin: buyer, pending_admin: Some(ag), hold_ms: 60_000, registry: ContractAddress { index: 12802, subindex: 0 } };
     let got = [
         ("order_full", hx(concordium_std::to_bytes(&full))),
         ("order_empty", hx(concordium_std::to_bytes(&empty))),
         ("supplier", hx(concordium_std::to_bytes(&supplier))),
         ("config", hx(concordium_std::to_bytes(&config))),
+        ("decision_cleared", hx(concordium_std::to_bytes(&decision))),
+        ("decision_held", hx(concordium_std::to_bytes(&held))),
     ];
     let fixture = include_str!("../../test/fixtures/escrow-bytes.json");
     for (k, v) in &got {
