@@ -3,9 +3,10 @@
 // whose path comes from the environment. The key never leaves this process and is never
 // printed or returned.
 import { readFileSync } from 'node:fs';
+import { createPrivateKey, createPublicKey } from 'node:crypto';
 import {
   AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, Energy, Parameter, ReceiveName,
-  TransactionExpiry, TransactionHash, buildAccountSigner, parseWallet, signTransaction,
+  TransactionExpiry, TransactionHash, buildAccountSigner, buildBasicAccountSigner, parseWallet, signTransaction,
 } from '@concordium/web-sdk';
 import { ConcordiumGRPCNodeClient, credentials } from '@concordium/web-sdk/nodejs';
 import { decodeConfig, decodeOrder, decodeSupplier, decodeDecision } from '../app/src/codec.js';
@@ -46,13 +47,35 @@ export async function decisionsIn(raw) {
   return out;
 }
 
-/** Loads the agent's signer from a wallet export file. Refuses a file for any other account. */
+/** Public key (hex) of a raw Ed25519 private key given as 64 hex characters. */
+export function publicKeyOf(hex) {
+  const der = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), Buffer.from(hex, 'hex')]);
+  return createPublicKey(createPrivateKey({ key: der, format: 'der', type: 'pkcs8' })).export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
+}
+
+/**
+ * Loads the agent's signer. Accepts a Concordium wallet export file, or a file holding only
+ * the private key the wallet lets you copy (64 hex characters). A wallet export must be for
+ * the agent account; a bare key is checked against the account's on-chain keys before any
+ * send (see send below).
+ */
 export function loadAgentSigner(path, expectedAddress) {
   if (!path) throw new Error('CTP_AGENT_KEY_FILE is not set, so this server can read and dry-run but not send.');
+  let raw;
+  try { raw = readFileSync(path, 'utf8').trim(); } catch { throw new Error('Could not read the agent key file.'); }
+  if (/^[0-9a-f]{64}$/i.test(raw)) return { address: expectedAddress, signer: buildBasicAccountSigner(raw), publicKey: publicKeyOf(raw) };
   let wallet;
-  try { wallet = parseWallet(readFileSync(path, 'utf8')); } catch { throw new Error('Could not read the agent key file as a Concordium wallet export.'); }
+  try { wallet = parseWallet(raw); } catch { throw new Error('The agent key file is neither a Concordium wallet export nor a 64-character private key.'); }
   if (wallet.value.address !== expectedAddress) throw new Error(`The key file is for ${wallet.value.address.slice(0, 6)}…, not the agent account ${expectedAddress.slice(0, 6)}…. Nothing was sent.`);
-  return { address: wallet.value.address, signer: buildAccountSigner(wallet) };
+  return { address: wallet.value.address, signer: buildAccountSigner(wallet), publicKey: null };
+}
+
+/** Every verify key in an account's credentials, as lowercase hex. */
+export function accountVerifyKeys(info) {
+  const out = new Set();
+  const walk = (v) => { if (!v || typeof v !== 'object') return; if (typeof v.verifyKey === 'string') out.add(v.verifyKey.toLowerCase()); for (const x of Object.values(v)) walk(x); };
+  walk(info?.accountCredentials);
+  return out;
 }
 
 export function createEscrow({ escrow, agent, keyFile, client } = {}) {
@@ -75,8 +98,11 @@ export function createEscrow({ escrow, agent, keyFile, client } = {}) {
 
   /** Signs as the agent and sends; waits for finalization. */
   async function send(m, bytes, energy) {
-    const { address, signer } = loadAgentSigner(keyFile, agent.owner);
+    const { address, signer, publicKey } = loadAgentSigner(keyFile, agent.owner);
     const sender = AccountAddress.fromBase58(address);
+    if (publicKey && !accountVerifyKeys(await node.getAccountInfo(sender)).has(publicKey)) {
+      throw new Error(`That private key does not belong to the agent account ${address.slice(0, 6)}…. Nothing was sent.`);
+    }
     const { nonce } = await node.getNextAccountNonce(sender);
     const tx = {
       type: AccountTransactionType.Update,

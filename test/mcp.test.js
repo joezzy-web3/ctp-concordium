@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { makeTools } from '../mcp/tools.js';
-import { invoiceParams, executeParams, loadAgentSigner } from '../mcp/escrow.js';
+import { invoiceParams, executeParams, loadAgentSigner, publicKeyOf, accountVerifyKeys, createEscrow } from '../mcp/escrow.js';
 
 const A = (c) => `3${c.repeat(49)}`; // shape only; the tools never decode these
 const AGENT = { id: 1287, badge: 'B', owner: A('a') };
@@ -53,6 +53,42 @@ test('parameter bytes follow the contract structs', () => {
 
 test('without a key file the server cannot send', () => {
   assert.throws(() => loadAgentSigner(undefined, AGENT.owner), /CTP_AGENT_KEY_FILE/);
+});
+
+// RFC 8032 test vector 1: a public test key, not anyone's account.
+const TEST_SK = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
+const TEST_PK = 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
+
+test('a copied private key loads, with its public key for the on-chain check', () => {
+  assert.equal(publicKeyOf(TEST_SK), TEST_PK);
+  const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
+  const file = join(dir, 'agent.key');
+  writeFileSync(file, `${TEST_SK}\n`);
+  const s = loadAgentSigner(file, AGENT.owner);
+  assert.equal(s.publicKey, TEST_PK);
+  writeFileSync(file, 'not a key');
+  assert.throws(() => loadAgentSigner(file, AGENT.owner), /neither a Concordium wallet export nor/);
+});
+
+test('verify keys are read from account credentials', () => {
+  const info = { accountCredentials: { 0: { v: 0, value: { type: 'normal', contents: { credentialPublicKeys: { keys: { 0: { schemeId: 'Ed25519', verifyKey: TEST_PK.toUpperCase() } } } } } } } };
+  assert.ok(accountVerifyKeys(info).has(TEST_PK));
+});
+
+test('a key that does not belong to the agent account is never used to send', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
+  const file = join(dir, 'agent.key');
+  writeFileSync(file, TEST_SK);
+  let sent = false;
+  const client = {
+    getAccountInfo: async () => ({ accountCredentials: { 0: { value: { contents: { credentialPublicKeys: { keys: { 0: { verifyKey: 'ab'.repeat(32) } } } } } } } }),
+    getNextAccountNonce: async () => { sent = true; return { nonce: 1n }; },
+    sendAccountTransaction: async () => { sent = true; },
+  };
+  const owner = '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG';
+  const chain = createEscrow({ escrow: { index: 13102, subindex: 0 }, agent: { id: 1287, owner }, keyFile: file, client });
+  await assert.rejects(chain.send('execute_payment', executeParams(1, '00'.repeat(32)), 1000), /does not belong to the agent account/);
+  assert.equal(sent, false);
 });
 
 test('list and get describe the order and who acts next', async () => {

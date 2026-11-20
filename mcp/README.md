@@ -22,8 +22,16 @@ and sends nothing the contract would refuse.
 ## Set up (Windows with Ubuntu/WSL, Claude Desktop)
 
 1. In Ubuntu, update the repo and install: `cd ~/ctp-concordium && git pull && npm install`
-2. Export the **agent** account (`44Fcwc…`) from the Concordium wallet and save the file as
-   `~/.config/clear-to-pay/keys/agent.export`, then `chmod 600` it. Never open or share it.
+2. Give the server the **agent** account's key (`44Fcwc…`). Either save the wallet's export
+   file as `~/.config/clear-to-pay/keys/agent.export`, or copy the private key in the wallet
+   and save it without it ever showing on screen or in your shell history:
+
+   ```bash
+   mkdir -p ~/.config/clear-to-pay/keys && read -rsp "Paste the agent private key, then Enter: " K && printf '%s\n' "$K" > ~/.config/clear-to-pay/keys/agent.key && unset K && chmod 600 ~/.config/clear-to-pay/keys/agent.key && echo " saved"
+   ```
+
+   A bare key is checked against the agent account's keys on-chain before anything is sent.
+   Use whichever file you made as `CTP_AGENT_KEY_FILE` below. Never open or share it.
    Skip this step to run read-only (reads and dry runs only).
 3. Find two paths: `which node` and `echo $HOME`.
 4. In Windows, open `%APPDATA%\Claude\claude_desktop_config.json` (Claude Desktop:
@@ -35,7 +43,7 @@ and sends nothing the contract would refuse.
     "clear-to-pay": {
       "command": "wsl.exe",
       "args": ["-e", "env",
-        "CTP_AGENT_KEY_FILE=/home/YOU/.config/clear-to-pay/keys/agent.export",
+        "CTP_AGENT_KEY_FILE=/home/YOU/.config/clear-to-pay/keys/agent.key",
         "/PATH/FROM/which/node", "/home/YOU/ctp-concordium/mcp/server.js"]
     }
   }
