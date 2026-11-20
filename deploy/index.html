@@ -21,13 +21,13 @@
 </head>
 <body>
 <h1>Deploy the escrow contract</h1>
-<p class="sub">Step 1 deploys the verified module built by CI. Step 2 creates the contract with a 72-hour hold on new payout accounts. <b>The account that sends step 2 becomes the buyer admin.</b> Testnet only.</p>
+<p class="sub">Step 1 deploys the verified module built by CI. Step 2 creates the contract with the hold you choose on new payout accounts (72 hours for the demo, 1 minute for a test run). <b>The account that sends step 2 becomes the buyer admin.</b> Testnet only.</p>
 <table>
   <tr><td>Module file</td><td><input type="file" id="file" accept=".v1"></td></tr>
   <tr><td>Expected SHA-256</td><td><code id="expected"></code></td></tr>
   <tr><td>Your file's SHA-256</td><td><code id="sha">-</code></td></tr>
   <tr><td>Module reference</td><td><input type="text" id="ref" placeholder="filled in from the file, or paste a deployed module reference"></td></tr>
-  <tr><td>Payout hold</td><td><code id="hold"></code></td></tr>
+  <tr><td>Payout hold</td><td><select id="holdpick"><option value="prod">72 hours (demo and production)</option><option value="test">1 minute (test run: the whole flow in one sitting)</option></select></td></tr>
   <tr><td>Connected account</td><td><code id="acct">not connected</code></td></tr>
 </table>
 <button id="connect">Connect wallet</button>

@@ -8,7 +8,8 @@ const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
 const EXPECTED_MODULE_SHA256 = '14281bf5662547b4f99e66cc1de1df08ec9ec239b319da854ba27f6758f3207f';
 const DEPLOY_MODULE = 0; // AccountTransactionType.DeployModule
 const INIT_CONTRACT = 1; // AccountTransactionType.InitContract
-const HOLD_MS = 72 * 3600 * 1000; // 72 hours
+const HOLDS = { prod: 72 * 3600 * 1000, test: 60 * 1000 }; // 72 hours, or 1 minute for a test run
+const holdMs = () => HOLDS[$('holdpick').value] ?? HOLDS.prod;
 // Schema of InitParams { hold_ms: u64, registry: ContractAddress }
 const INIT_SCHEMA_B64 = 'FAACAAAABwAAAGhvbGRfbXMFCAAAAHJlZ2lzdHJ5DA==';
 const REGISTRY = { index: 12802, subindex: 0 }; // CIS-8004 Agent Registry on testnet
@@ -82,7 +83,7 @@ async function init() {
       account,
       INIT_CONTRACT,
       { amount: CcdAmount.zero(), moduleRef: ModuleReference.fromHexString(ref), initName: ContractName.fromString('ctp_escrow'), maxContractExecutionEnergy: Energy.create(30000) },
-      { hold_ms: HOLD_MS, registry: REGISTRY },
+      { hold_ms: holdMs(), registry: REGISTRY },
       { type: 'parameter', value: INIT_SCHEMA_B64 },
     );
     say('ok', 'Contract creation sent: ', code(tx), br(), txLink(tx), br(), 'The new contract address (index, subindex) is shown on CCDScan once finalized. This account is now the buyer admin.');
@@ -97,5 +98,4 @@ $('ref').oninput = refresh;
 $('connect').onclick = () => connect().catch((e) => say('bad', String(e.message ?? e)));
 $('deploy').onclick = deploy;
 $('init').onclick = init;
-$('hold').textContent = `${HOLD_MS} ms (72 hours)`;
 $('expected').textContent = EXPECTED_MODULE_SHA256;
