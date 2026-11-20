@@ -160,7 +160,7 @@ fn setup_with_order(escrow: Amount) -> T {
 }
 
 fn order_params(order_id: OrderId) -> CreateOrderParams {
-    CreateOrderParams { order_id, supplier: SUPPLIER, expected_qty: QTY, receiver: RECEIVER, approver: APPROVER, invoice_by: DUE, agent: AGENT, referee: REFEREE }
+    CreateOrderParams { order_id, supplier: SUPPLIER, expected_qty: QTY, receiver: RECEIVER, approver: Some(APPROVER), invoice_by: DUE, agent: AGENT, referee: REFEREE }
 }
 
 /// The two gate counters (buyer's receiver, supplier's rep) seal and unseal, in the current round.
@@ -277,7 +277,7 @@ fn reveals_wait_for_both_commits_and_must_match_them() {
 #[test]
 fn order_signers_must_be_two_listed_people_in_the_right_roles() {
     let mut t = setup();
-    let p = |order_id, receiver, approver| CreateOrderParams { receiver, approver, ..order_params(order_id) };
+    let p = |order_id, receiver, approver| CreateOrderParams { receiver, approver: Some(approver), ..order_params(order_id) };
     for (id, r, a) in [(1, RECEIVER, RECEIVER), (2, APPROVER, RECEIVER), (3, STRANGER, APPROVER), (4, RECEIVER, OTHER_SIGNER)] {
         let e = t.call(ADMIN, "create_order", &p(id, r, a), PRICE).expect_err("bad signers");
         assert_eq!(e.parse_return_value::<Error>().unwrap(), Error::BadOrderSigners);
@@ -826,7 +826,7 @@ fn app_fixture_bytes_match_the_contract() {
     let ag = acct("9278f55e8366c065c474c07146d2eedea12cdbe67ee9f9c532922aa9858011b8");
     let ccd25 = Amount::from_micro_ccd(25_000_000);
     let full = Order {
-        supplier: s, receiver: r, approver: ap, expected_qty: 100, amount: ccd25,
+        supplier: s, receiver: r, approver: Some(ap), expected_qty: 100, amount: ccd25,
         commits: vec![
             Commit { signer: r, role: Role::Receiver, hash: HashSha2256([0x11; 32]) },
             Commit { signer: ap, role: Role::Approver, hash: HashSha2256([0x22; 32]) },
@@ -844,7 +844,7 @@ fn app_fixture_bytes_match_the_contract() {
         funder: buyer, ruled_delivered: true,
     };
     let empty = Order {
-        supplier: s, receiver: r, approver: ap, expected_qty: 7, amount: Amount::from_micro_ccd(1),
+        supplier: s, receiver: r, approver: None, expected_qty: 7, amount: Amount::from_micro_ccd(1),
         commits: vec![], reveals: vec![], invoice: None, supplier_approval: None, paid: true, refunded: false,
         invoice_by: Timestamp::from_timestamp_millis(1_795_117_380_000), accepted: false, date_proposal: None, recounts: 0,
         agent: ag, referee: acct("0101010101010101010101010101010101010101010101010101010101010101"), rep: None, funder: buyer, ruled_delivered: false,
@@ -874,4 +874,27 @@ fn app_fixture_bytes_match_the_contract() {
     for (k, v) in &got {
         assert!(fixture.contains(&format!("\"{k}\": \"{v}\"")), "fixture {k} is out of date");
     }
+}
+
+#[test]
+fn an_individual_buyer_can_order_without_an_approver() {
+    // One person buying for themselves: they count at the gate, the supplier's driver counts,
+    // and both must agree. Nobody else can count.
+    let mut t = setup();
+    let solo = CreateOrderParams { approver: None, ..order_params(7) };
+    t.call(ADMIN, "create_order", &solo, PRICE).expect("individual order");
+    let o = t.ok(STRANGER, "view_order", &7u64).parse_return_value::<Order>().unwrap();
+    assert_eq!(o.approver, None);
+    t.ok(SUPPLIER, "accept_order", &AcceptParams { order_id: 7, invoice_by: DUE, rep: REP });
+    let h = |who: AccountAddress, salt: [u8; 32]| HashSha2256(Sha256::digest(rules::commit_preimage(7, 0, &who.0, QTY, &salt)).into());
+    assert_eq!(t.err(APPROVER, "commit_count", &CommitParams { order_id: 7, hash: h(APPROVER, [3; 32]) }), Error::NotOrderSigner);
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: 7, hash: h(RECEIVER, [1; 32]) });
+    t.ok(REP, "commit_count", &CommitParams { order_id: 7, hash: h(REP, [2; 32]) });
+    t.ok(RECEIVER, "reveal_count", &RevealParams { order_id: 7, qty: QTY, salt: [1; 32] });
+    t.ok(REP, "reveal_count", &RevealParams { order_id: 7, qty: QTY, salt: [2; 32] });
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: 7, invoice_hash: INVOICE, amount: PRICE });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: 7, invoice_hash: INVOICE, amount: PRICE });
+    t.wait(HOLD_MS);
+    let r = t.ok(AGENT, "execute_payment", &ExecuteParams { order_id: 7, receipt_hash: RECEIPT });
+    assert_eq!(t.decision(&r), (Verdict::Cleared, vec![], Some(PAYOUT)));
 }

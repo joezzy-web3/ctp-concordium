@@ -79,7 +79,7 @@ test('decodes an empty, paid order', async () => {
   const o = await decodeOrder(hex(F.order_empty));
   assert.equal(o.expected_qty, 7n); assert.equal(o.amount, 1n);
   assert.deepEqual([o.commits, o.reveals, o.invoice, o.supplier_approval, o.paid], [[], [], null, null, true]);
-  assert.deepEqual([o.accepted, o.date_proposal, o.recounts, o.rep, o.ruled_delivered, o.funder], [false, null, 0, null, false, BUYER]);
+  assert.deepEqual([o.approver, o.accepted, o.date_proposal, o.recounts, o.rep, o.ruled_delivered, o.funder], [null, false, null, 0, null, false, BUYER]);
 });
 
 test('decodes a supplier record', async () => {

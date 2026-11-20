@@ -69,7 +69,7 @@ export async function supplierView() {
       h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(o.invoice_by)), '. You can deliver and be paid any day before it. Once you accept, the buyer cannot take this money back unless the date passes with nothing delivered, or you give it back.'),
       h('dl.facts',
         h('dt', 'Buyer’s receiver (gate)'), h('dd.mono', short(o.receiver)),
-        h('dt', 'Buyer’s approver (inside)'), h('dd.mono', short(o.approver)),
+        h('dt', 'Buyer’s approver (inside)'), h('dd.mono', o.approver ? short(o.approver) : 'none (individual buyer)'),
         h('dt', 'Referee for disputes'), h('dd.mono', short(o.referee))),
       pastDue(o) ? h('p.err', icon('alert', 16), 'This date has passed. Ask the buyer for a new date before accepting.') : [
         h('div.field', h('label', 'Your delivery rep (the driver, who counts at the gate)'), repIn,
