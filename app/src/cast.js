@@ -17,8 +17,8 @@ export const CAST = {
   supplier: '45H81t8SBw5z84LjPcX3VFZRWPrcEKv3bTbao8yC5hbP2BixMY',
   supplierName: 'Lagos Foods Ltd',
   agent: AGENT.owner,
-  /** Set to the demo referee's account once it exists (a second identity). */
-  referee: '',
+  /** The demo referee: an independent account outside the cast. */
+  referee: '3LCLzA5KpFWKpuPUEQvzMhYe2x46aC5Yr763gwvJHvTT8MoTJ9',
   nameOf: (a) => (PEOPLE[a]?.name ?? 'Account').replace(' (demo supplier)', ''),
 };
 
