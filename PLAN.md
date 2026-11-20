@@ -27,9 +27,11 @@
 - Verifiable build of `1796a52` (CI run 44595683477), module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27`, "Source and module match", 16/16 end-to-end tests incl. the underpay attack.
 - Console UX pass after deploy, from the NEAR console: Review pane showing exactly what the wallet signs, order wizard with Edit per section and one signed transaction, PO as printable PDF, re-read the contract before signing, invite links for suppliers and signers.
 
-## Escrow v3: ready to deploy
-- Verifiable build of `fa403c2` (CI run 44629173275), module `14281bf5662547b4f99e66cc1de1df08ec9ec239b319da854ba27f6758f3207f`, "Source and module match", 20 unit + 22 end-to-end tests. Init takes `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it.
-- After deploy: setup in one transaction (supplier hold restarts), point the app at the new index. Final demo contract must be set up 72 h before recording; deadline Wed 9 Dec.
+## Escrow v4: ready to deploy (supersedes v3, never deployed)
+- Verifiable build of `01b697a` (CI run 44702589298), module `965cf30563cdbd238ed3f0090588a9e864c8af11ef07c39a529ef58c84bd2e28`, "Source and module match", 20 unit + 34 end-to-end tests. Init unchanged: `hold_ms` and `registry: <12802,0>`. Deploy page pinned to it; it offers a 1-minute hold for test runs.
+- v3 self-audit (19 Nov night): each count seal now includes its signer's account (a copied seal never opens). v4 (20 Nov): agreed date accepted by the supplier, refund locked once accepted (until the date passes with the order not ready, or the supplier releases), buyer cannot reject an invoice the supplier approved, recounts (max 2, buyer or supplier), supplier or buyer can ask for payment, removal events, setup skips an existing supplier, two-step admin handover.
+- After deploy: Buyer, then Readiness, then "Set up the whole cast" (the contract checks Agent #1287 in the real registry), point the app at the new index. Final demo contract must be set up 72 h before recording; deadline Wed 9 Dec.
+- Not yet audited by a second AI: run docs/AUDIT_PROMPT_2026-11-19-v3.md (update it for v4 first).
 
 ## Demo cast (testnet accounts, public addresses)
 | Role | Account |
