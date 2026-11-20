@@ -13,9 +13,9 @@ pub enum Code {
     SeizedAlreadyPaid,
     /// No invoice has been submitted for the order.
     HeldNoInvoice,
-    /// Fewer than two revealed counts from two different people in two different roles.
+    /// The two gate counts are not both unsealed: the buyer's receiver and the supplier's delivery rep.
     HeldOneSignature,
-    /// The revealed counts differ from each other or from the ordered quantity.
+    /// An unsealed count differs from the ordered quantity (the receiver's, the rep's, or the approver's).
     HeldCountMismatch,
     /// The invoice amount is not the escrowed order amount.
     HeldAmountMismatch,
@@ -32,11 +32,13 @@ pub enum Verdict {
     Seized,
 }
 
-/// The role a signer holds in the buying team.
+/// Who counts a delivery. The receiver (at the gate) and the approver (inside) are chosen by
+/// the buyer; the delivery rep is chosen by the supplier when it accepts the order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, concordium_std::Serialize, concordium_std::SchemaType)]
 pub enum Role {
     Receiver,
     Approver,
+    SupplierRep,
 }
 
 /// One revealed blind count: who, in which role, and the number.
@@ -57,15 +59,26 @@ pub struct Facts<'a, A> {
     /// True when the supplier approved the hash AND the amount of the submitted invoice.
     pub supplier_approved: bool,
     pub reveals: &'a [Reveal<A>],
+    /// The order's referee ruled that the goods were delivered (settles a count dispute).
+    pub ruled_delivered: bool,
     /// When the supplier's payout account was last set (milliseconds).
     pub payout_set_at: u64,
     pub now: u64,
     pub hold_ms: u64,
 }
 
-/// True when two reveals come from different accounts in different roles.
-fn two_people_two_roles<A: PartialEq>(reveals: &[Reveal<A>]) -> bool {
-    reveals.iter().enumerate().any(|(i, a)| reveals[i + 1..].iter().any(|b| a.signer != b.signer && a.role != b.role))
+fn count_of<A>(reveals: &[Reveal<A>], role: Role) -> Option<u64> {
+    reveals.iter().find(|r| r.role == role).map(|r| r.qty)
+}
+
+/// Delivery is confirmed when the buyer's receiver (at the gate) and the supplier's delivery
+/// rep both unsealed the ordered quantity, and the buyer's approver (inside), if it unsealed,
+/// agrees. Each side has a counter the other side does not choose. The approver can stop a
+/// payment only by unsealing a different number, never by staying silent.
+pub fn delivery_confirmed<A>(reveals: &[Reveal<A>], expected_qty: u64) -> bool {
+    count_of(reveals, Role::Receiver) == Some(expected_qty)
+        && count_of(reveals, Role::SupplierRep) == Some(expected_qty)
+        && count_of(reveals, Role::Approver).map_or(true, |q| q == expected_qty)
 }
 
 /// Applies every rule and returns the verdict with all codes that fired, in rule order.
@@ -78,11 +91,13 @@ pub fn decide<A: PartialEq>(f: &Facts<A>) -> (Verdict, Vec<Code>) {
     if f.invoice_amount.is_none() {
         codes.push(Code::HeldNoInvoice);
     }
-    if !two_people_two_roles(f.reveals) {
-        codes.push(Code::HeldOneSignature);
-    }
-    if f.reveals.is_empty() || f.reveals.iter().any(|r| r.qty != f.expected_qty) {
-        codes.push(Code::HeldCountMismatch);
+    if !f.ruled_delivered {
+        if count_of(f.reveals, Role::Receiver).is_none() || count_of(f.reveals, Role::SupplierRep).is_none() {
+            codes.push(Code::HeldOneSignature);
+        }
+        if f.reveals.iter().any(|r| r.qty != f.expected_qty) {
+            codes.push(Code::HeldCountMismatch);
+        }
     }
     if let Some(amount) = f.invoice_amount {
         if amount != f.order_amount {
@@ -100,16 +115,18 @@ pub fn decide<A: PartialEq>(f: &Facts<A>) -> (Verdict, Vec<Code>) {
 }
 
 /// The bytes a signer hashes to commit a blind count:
-/// `"CTP-count/v2" ‖ order_id (u64 LE) ‖ signer account (32 bytes) ‖ qty (u64 LE) ‖ salt (32 bytes)`.
-/// The signer's own account is inside the seal, so a seal copied by the other signer
-/// never opens for them: each person must count and seal for themselves.
-pub fn commit_preimage(order_id: u64, signer: &[u8; 32], qty: u64, salt: &[u8; 32]) -> [u8; 92] {
-    let mut out = [0u8; 92];
-    out[..12].copy_from_slice(b"CTP-count/v2");
+/// `"CTP-count/v3" ‖ order_id (u64 LE) ‖ round (u8) ‖ signer account (32 bytes) ‖ qty (u64 LE) ‖ salt (32 bytes)`.
+/// The signer's own account is inside the seal, so a seal copied from another signer never
+/// opens for anyone else. The count round is inside too, so a seal from an earlier round
+/// (whose count is already public) cannot be reused after a recount.
+pub fn commit_preimage(order_id: u64, round: u8, signer: &[u8; 32], qty: u64, salt: &[u8; 32]) -> [u8; 93] {
+    let mut out = [0u8; 93];
+    out[..12].copy_from_slice(b"CTP-count/v3");
     out[12..20].copy_from_slice(&order_id.to_le_bytes());
-    out[20..52].copy_from_slice(signer);
-    out[52..60].copy_from_slice(&qty.to_le_bytes());
-    out[60..].copy_from_slice(salt);
+    out[20] = round;
+    out[21..53].copy_from_slice(signer);
+    out[53..61].copy_from_slice(&qty.to_le_bytes());
+    out[61..].copy_from_slice(salt);
     out
 }
 
@@ -124,12 +141,12 @@ mod tests {
     fn r(signer: u8, role: Role, qty: u64) -> Reveal<u8> { Reveal { signer, role, qty } }
 
     fn facts<'a>(reveals: &'a [Reveal<u8>]) -> Facts<'a, u8> {
-        Facts { paid: false, expected_qty: 100, order_amount: 1_250, invoice_amount: Some(1_250), supplier_approved: true, reveals, payout_set_at: 0, now: H72, hold_ms: H72 }
+        Facts { paid: false, expected_qty: 100, order_amount: 1_250, invoice_amount: Some(1_250), supplier_approved: true, reveals, ruled_delivered: false, payout_set_at: 0, now: H72, hold_ms: H72 }
     }
 
     #[test]
     fn clears_when_every_rule_passes() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         assert_eq!(decide(&facts(&rv)), (Verdict::Cleared, vec![]));
     }
 
@@ -140,32 +157,59 @@ mod tests {
     }
 
     #[test]
-    fn same_person_twice_is_held() {
-        let rv = [r(A, Role::Receiver, 100), r(A, Role::Approver, 100)];
+    fn two_buyer_counts_without_the_supplier_rep_are_held() {
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
         assert_eq!(decide(&facts(&rv)).1, vec![Code::HeldOneSignature]);
     }
 
     #[test]
-    fn two_people_same_role_is_held() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Receiver, 100)];
+    fn the_rep_alone_is_held() {
+        let rv = [r(B, Role::SupplierRep, 100)];
         assert_eq!(decide(&facts(&rv)).1, vec![Code::HeldOneSignature]);
+    }
+
+    #[test]
+    fn a_silent_approver_cannot_block() {
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
+        assert_eq!(decide(&facts(&rv)), (Verdict::Cleared, vec![]));
+        assert!(delivery_confirmed(&rv, 100));
+    }
+
+    #[test]
+    fn an_approver_who_disagrees_holds_the_payment() {
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100), r(3, Role::Approver, 95)];
+        assert_eq!(decide(&facts(&rv)).1, vec![Code::HeldCountMismatch]);
+        assert!(!delivery_confirmed(&rv, 100));
+        let agree = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100), r(3, Role::Approver, 100)];
+        assert!(delivery_confirmed(&agree, 100));
+    }
+
+    #[test]
+    fn a_referee_ruling_settles_the_counts_but_not_the_invoice() {
+        let rv = [r(A, Role::Receiver, 40), r(B, Role::SupplierRep, 100)];
+        let mut f = facts(&rv);
+        assert_eq!(decide(&f).1, vec![Code::HeldCountMismatch]);
+        f.ruled_delivered = true;
+        assert_eq!(decide(&f), (Verdict::Cleared, vec![]));
+        f.supplier_approved = false;
+        assert_eq!(decide(&f).1, vec![Code::HeldNoSupplierApproval]);
     }
 
     #[test]
     fn counts_that_disagree_are_held() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 90)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 90)];
         assert_eq!(decide(&facts(&rv)).1, vec![Code::HeldCountMismatch]);
     }
 
     #[test]
     fn counts_that_agree_but_differ_from_the_order_are_held() {
-        let rv = [r(A, Role::Receiver, 80), r(B, Role::Approver, 80)];
+        let rv = [r(A, Role::Receiver, 80), r(B, Role::SupplierRep, 80)];
         assert_eq!(decide(&facts(&rv)).1, vec![Code::HeldCountMismatch]);
     }
 
     #[test]
     fn no_invoice_is_held() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         let mut f = facts(&rv);
         f.invoice_amount = None;
         assert_eq!(decide(&f).1, vec![Code::HeldNoInvoice]);
@@ -173,7 +217,7 @@ mod tests {
 
     #[test]
     fn wrong_amount_is_held() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         let mut f = facts(&rv);
         f.invoice_amount = Some(12_500);
         assert_eq!(decide(&f).1, vec![Code::HeldAmountMismatch]);
@@ -181,7 +225,7 @@ mod tests {
 
     #[test]
     fn invoice_without_supplier_approval_is_held() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         let mut f = facts(&rv);
         f.supplier_approved = false;
         assert_eq!(decide(&f).1, vec![Code::HeldNoSupplierApproval]);
@@ -189,7 +233,7 @@ mod tests {
 
     #[test]
     fn new_payout_account_waits_the_full_hold() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         let mut f = facts(&rv);
         f.payout_set_at = 10;
         f.now = 10 + H72 - 1;
@@ -200,7 +244,7 @@ mod tests {
 
     #[test]
     fn already_paid_is_seized_and_nothing_else_matters() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         let mut f = facts(&rv);
         f.paid = true;
         assert_eq!(decide(&f), (Verdict::Seized, vec![Code::SeizedAlreadyPaid]));
@@ -212,12 +256,12 @@ mod tests {
         let mut f = facts(&rv);
         f.invoice_amount = None;
         f.payout_set_at = f.now;
-        assert_eq!(decide(&f).1, vec![Code::HeldNoInvoice, Code::HeldOneSignature, Code::HeldCountMismatch, Code::HeldPayoutCoolOff]);
+        assert_eq!(decide(&f).1, vec![Code::HeldNoInvoice, Code::HeldOneSignature, Code::HeldPayoutCoolOff]);
     }
 
     #[test]
     fn hold_cannot_overflow() {
-        let rv = [r(A, Role::Receiver, 100), r(B, Role::Approver, 100)];
+        let rv = [r(A, Role::Receiver, 100), r(B, Role::SupplierRep, 100)];
         let mut f = facts(&rv);
         f.payout_set_at = u64::MAX;
         assert_eq!(decide(&f).1, vec![Code::HeldPayoutCoolOff]);
@@ -225,11 +269,12 @@ mod tests {
 
     #[test]
     fn commit_preimage_layout() {
-        let p = commit_preimage(7, &[3u8; 32], 100, &[9u8; 32]);
-        assert_eq!(&p[..12], b"CTP-count/v2");
+        let p = commit_preimage(7, 2, &[3u8; 32], 100, &[9u8; 32]);
+        assert_eq!(&p[..12], b"CTP-count/v3");
         assert_eq!(&p[12..20], &7u64.to_le_bytes());
-        assert_eq!(&p[20..52], &[3u8; 32]);
-        assert_eq!(&p[52..60], &100u64.to_le_bytes());
-        assert_eq!(&p[60..], &[9u8; 32]);
+        assert_eq!(p[20], 2);
+        assert_eq!(&p[21..53], &[3u8; 32]);
+        assert_eq!(&p[53..61], &100u64.to_le_bytes());
+        assert_eq!(&p[61..], &[9u8; 32]);
     }
 }

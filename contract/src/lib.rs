@@ -21,6 +21,8 @@ const MIN_HOLD_MS: u64 = 60 * 1000;
 const MAX_HOLD_MS: u64 = 30 * 24 * 3600 * 1000;
 /// How many times the buyer or supplier can ask the signers to count again.
 pub const MAX_RECOUNTS: u8 = 2;
+/// A proposed date change lapses after this long if the other side has not confirmed it.
+const PROPOSAL_TTL_MS: u64 = 7 * 24 * 3600 * 1000;
 
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Supplier {
@@ -57,11 +59,39 @@ pub struct Approval {
     pub amount: Amount,
 }
 
+/// The two sides of an order. A date proposal belongs to a side, not to an account, so a
+/// change of buyer admin cannot turn the buyer's own proposal into a confirmation.
+#[derive(Serialize, SchemaType, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    Buyer,
+    Supplier,
+}
+
 /// A new "invoice by" date proposed by one side, waiting for the other side to confirm.
+/// It lapses at `expires`.
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct DateProposal {
-    pub by: AccountAddress,
+    pub by: Side,
     pub invoice_by: Timestamp,
+    pub expires: Timestamp,
+}
+
+/// A referee's ruling on a disputed delivery.
+#[derive(Serialize, SchemaType, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ruling {
+    /// The goods were delivered: the delivery counts as confirmed.
+    Delivered,
+    /// They were not: the money goes back to whoever funded the order.
+    Refund,
+}
+
+/// A listed signer: its role, and (once proven with Concordium ID) a salted fingerprint of
+/// the person behind the account plus the hash of the anchored verification audit record.
+#[derive(Serialize, SchemaType, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SignerInfo {
+    pub role: Role,
+    pub person_tag: Option<HashSha2256>,
+    pub id_audit: Option<HashSha2256>,
 }
 
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
@@ -88,6 +118,17 @@ pub struct Order {
     pub date_proposal: Option<DateProposal>,
     /// Recounts used so far (at most MAX_RECOUNTS).
     pub recounts: u8,
+    /// The one registered agent that may put an invoice on this order.
+    pub agent: AccountAddress,
+    /// The neutral referee named on the order, seen by the supplier before it accepts.
+    /// It settles a dispute once the supplier's delivery rep has counted.
+    pub referee: AccountAddress,
+    /// The supplier's delivery rep, named by the supplier when it accepts. It counts at the gate.
+    pub rep: Option<AccountAddress>,
+    /// The account that funded the order; refunds go back to it.
+    pub funder: AccountAddress,
+    /// The referee ruled that the goods were delivered.
+    pub ruled_delivered: bool,
 }
 
 #[derive(Serial, DeserialWithState)]
@@ -99,7 +140,7 @@ pub struct State<S = StateApi> {
     hold_ms: u64,
     /// The CIS-8004 Agent Registry asked about every agent, at registration and at every use.
     registry: ContractAddress,
-    signers: StateMap<AccountAddress, Role, S>,
+    signers: StateMap<AccountAddress, SignerInfo, S>,
     /// Account that owns a registered agent -> its CIS-8004 agent token id.
     agents: StateMap<AccountAddress, u64, S>,
     suppliers: StateMap<AccountAddress, Supplier, S>,
@@ -163,6 +204,20 @@ pub enum Error {
     NotOrderParty,
     /// To accept, confirm the order's current date (it may have changed).
     DateChanged,
+    /// An order must be for at least one unit.
+    ZeroQuantity,
+    /// The referee must be someone other than the buyer, supplier, signers and agent.
+    BadReferee,
+    /// The delivery rep must be someone other than the buyer, its signers, the referee and the agent.
+    BadRep,
+    /// Only the referee named on the order can rule.
+    NotReferee,
+    /// A ruling is only for a delivery the supplier's rep counted that the counts do not confirm.
+    NoDispute,
+    /// Only the agent named on the order can submit its invoice.
+    NotOrderAgent,
+    /// The two signers on an order are proven to be the same person.
+    SamePerson,
 }
 
 impl From<LogError> for Error {
@@ -185,13 +240,13 @@ pub type ContractResult<A> = Result<A, Error>;
 pub enum Event {
     SupplierRegistered { supplier: AccountAddress, payout: AccountAddress, at: Timestamp },
     PayoutChanged { supplier: AccountAddress, payout: AccountAddress, at: Timestamp },
-    OrderCreated { order_id: OrderId, supplier: AccountAddress, expected_qty: u64, amount: Amount, invoice_by: Timestamp },
+    OrderCreated { order_id: OrderId, supplier: AccountAddress, expected_qty: u64, amount: Amount, invoice_by: Timestamp, agent: AccountAddress, referee: AccountAddress },
     CountCommitted { order_id: OrderId, signer: AccountAddress, role: Role },
     CountRevealed { order_id: OrderId, signer: AccountAddress, role: Role, qty: u64 },
     InvoiceSubmitted { order_id: OrderId, agent: AccountAddress, agent_token_id: u64, invoice_hash: HashSha2256, amount: Amount },
     InvoiceApproved { order_id: OrderId, supplier: AccountAddress, invoice_hash: HashSha2256, amount: Amount },
     InvoiceRejected { order_id: OrderId, by: AccountAddress, invoice_hash: HashSha2256 },
-    SignerSet { account: AccountAddress, role: Role },
+    SignerSet { account: AccountAddress, role: Role, person_tag: Option<HashSha2256>, id_audit: Option<HashSha2256> },
     AgentSet { account: AccountAddress, agent_token_id: u64 },
     Decision {
         order_id: OrderId,
@@ -206,7 +261,7 @@ pub enum Event {
         asked_by: AccountAddress,
     },
     Refunded { order_id: OrderId, amount: Amount, by: AccountAddress },
-    OrderAccepted { order_id: OrderId, invoice_by: Timestamp },
+    OrderAccepted { order_id: OrderId, invoice_by: Timestamp, rep: AccountAddress },
     DateProposed { order_id: OrderId, by: AccountAddress, invoice_by: Timestamp },
     DateChanged { order_id: OrderId, invoice_by: Timestamp },
     RecountStarted { order_id: OrderId, recount: u8, by: AccountAddress },
@@ -214,6 +269,8 @@ pub enum Event {
     AgentRemoved { account: AccountAddress },
     AdminProposed { account: AccountAddress },
     AdminChanged { from: AccountAddress, to: AccountAddress },
+    Ruled { order_id: OrderId, ruling: Ruling, by: AccountAddress },
+    DateProposalCleared { order_id: OrderId },
 }
 
 // ---------- parameters ----------
@@ -230,6 +287,10 @@ pub struct InitParams {
 pub struct SignerParams {
     pub account: AccountAddress,
     pub role: Role,
+    /// Salted fingerprint of the person, from a Concordium ID proof (docs/F01_SIGNER_IDENTITY.md).
+    pub person_tag: Option<HashSha2256>,
+    /// Hash of the anchored verification audit record for that proof.
+    pub id_audit: Option<HashSha2256>,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -253,13 +314,25 @@ pub struct CreateOrderParams {
     pub approver: AccountAddress,
     /// The proposed deadline for delivery and an approved invoice. The supplier agrees to it by accepting.
     pub invoice_by: Timestamp,
+    /// The one registered agent that may submit this order's invoice.
+    pub agent: AccountAddress,
+    /// A neutral referee for delivery disputes, shown to the supplier before it accepts.
+    pub referee: AccountAddress,
 }
 
-/// The supplier accepts the order at this exact date (so a last-moment change cannot slip in).
+/// The supplier accepts the order at this exact date (so a last-moment change cannot slip in)
+/// and names its delivery rep, who counts at the gate.
 #[derive(Serialize, SchemaType)]
 pub struct AcceptParams {
     pub order_id: OrderId,
     pub invoice_by: Timestamp,
+    pub rep: AccountAddress,
+}
+
+#[derive(Serialize, SchemaType)]
+pub struct RuleParams {
+    pub order_id: OrderId,
+    pub ruling: Ruling,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -360,9 +433,24 @@ fn open_order(host: &Host<State>, order_id: OrderId) -> ContractResult<Order> {
     Ok(order)
 }
 
-/// Both named people unsealed, and both counts equal the ordered quantity.
+fn reveals_of(o: &Order) -> Vec<Reveal<AccountAddress>> {
+    o.reveals.iter().map(|r| Reveal { signer: r.signer, role: r.role, qty: r.qty }).collect()
+}
+
+/// The receiver and the supplier's rep both unsealed the ordered quantity and any approver
+/// count agrees (rules::delivery_confirmed), or the referee ruled the goods delivered.
 fn delivery_confirmed(o: &Order) -> bool {
-    o.reveals.len() == 2 && o.reveals[0].role != o.reveals[1].role && o.reveals.iter().all(|r| r.qty == o.expected_qty)
+    o.ruled_delivered || rules::delivery_confirmed(&reveals_of(o), o.expected_qty)
+}
+
+/// The supplier's delivery rep has unsealed a count: the supplier claims a delivery.
+fn rep_counted(o: &Order) -> bool {
+    o.reveals.iter().any(|r| r.role == Role::SupplierRep)
+}
+
+/// Both gate counters (the buyer's receiver and the supplier's rep) have sealed this round.
+fn gate_sealed(o: &Order) -> bool {
+    o.commits.iter().any(|c| c.role == Role::Receiver) && o.commits.iter().any(|c| c.role == Role::SupplierRep)
 }
 
 /// The supplier approved the submitted invoice, and it is for the full escrowed amount.
@@ -381,6 +469,11 @@ fn before_deadline(ctx: &ReceiveContext, o: &Order) -> ContractResult<()> {
     Ok(())
 }
 
+/// Invoices and approvals: before the date, or any time once the referee ruled the goods delivered.
+fn invoice_window(ctx: &ReceiveContext, o: &Order) -> ContractResult<()> {
+    if o.ruled_delivered { Ok(()) } else { before_deadline(ctx, o) }
+}
+
 /// The buyer (admin) or the supplier of this order.
 fn order_party(ctx: &ReceiveContext, host: &Host<State>, o: &Order) -> ContractResult<AccountAddress> {
     let who = sender_account(ctx).map_err(|_| Error::NotOrderParty)?;
@@ -388,13 +481,15 @@ fn order_party(ctx: &ReceiveContext, host: &Host<State>, o: &Order) -> ContractR
     Ok(who)
 }
 
-/// Returns the escrow to the buyer and closes the order.
+/// Returns the escrow to the account that funded the order, and closes the order.
 fn close_and_refund(host: &mut Host<State>, logger: &mut Logger, order_id: OrderId, amount: Amount, by: AccountAddress) -> ContractResult<()> {
+    let mut funder = None;
     if let Some(mut o) = host.state_mut().orders.get_mut(&order_id) {
         o.refunded = true;
+        funder = Some(o.funder);
     }
-    let admin = host.state().admin;
-    host.invoke_transfer(&admin, amount)?;
+    let to = funder.ok_or(Error::UnknownOrder)?;
+    host.invoke_transfer(&to, amount)?;
     logger.log(&Event::Refunded { order_id, amount, by })?;
     Ok(())
 }
@@ -420,8 +515,9 @@ fn init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<State
 // ---------- admin ----------
 
 fn set_signer(host: &mut Host<State>, logger: &mut Logger, p: &SignerParams) -> ContractResult<()> {
-    let _ = host.state_mut().signers.insert(p.account, p.role);
-    logger.log(&Event::SignerSet { account: p.account, role: p.role })?;
+    ensure!(p.role != Role::SupplierRep, Error::BadOrderSigners);
+    let _ = host.state_mut().signers.insert(p.account, SignerInfo { role: p.role, person_tag: p.person_tag, id_audit: p.id_audit });
+    logger.log(&Event::SignerSet { account: p.account, role: p.role, person_tag: p.person_tag, id_audit: p.id_audit })?;
     Ok(())
 }
 
@@ -535,10 +631,20 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
     ensure!(amount > Amount::zero(), Error::ZeroAmount);
     ensure!(host.state().suppliers.get(&p.supplier).is_some(), Error::UnknownSupplier);
     ensure!(host.state().orders.get(&p.order_id).is_none(), Error::OrderExists);
+    ensure!(p.expected_qty > 0, Error::ZeroQuantity);
     ensure!(p.receiver != p.approver, Error::BadOrderSigners);
-    ensure!(host.state().signers.get(&p.receiver).map(|r| *r) == Some(Role::Receiver), Error::BadOrderSigners);
-    ensure!(host.state().signers.get(&p.approver).map(|r| *r) == Some(Role::Approver), Error::BadOrderSigners);
+    let receiver = host.state().signers.get(&p.receiver).map(|r| *r).ok_or(Error::BadOrderSigners)?;
+    let approver = host.state().signers.get(&p.approver).map(|r| *r).ok_or(Error::BadOrderSigners)?;
+    ensure!(receiver.role == Role::Receiver && approver.role == Role::Approver, Error::BadOrderSigners);
+    // Once both signers are proven with Concordium ID, they must be two different people.
+    if let (Some(a), Some(b)) = (receiver.person_tag, approver.person_tag) {
+        ensure!(a != b, Error::SamePerson);
+    }
+    ensure!(host.state().agents.get(&p.agent).is_some(), Error::NotAgent);
+    let admin = host.state().admin;
+    ensure!(![admin, p.supplier, p.receiver, p.approver, p.agent].contains(&p.referee), Error::BadReferee);
     ensure!(p.invoice_by > ctx.metadata().slot_time(), Error::BadDate);
+    let funder = sender_account(ctx).map_err(|_| Error::NotAdmin)?;
     let _ = host.state_mut().orders.insert(p.order_id, Order {
         supplier: p.supplier,
         receiver: p.receiver,
@@ -555,21 +661,30 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
         accepted: false,
         date_proposal: None,
         recounts: 0,
+        agent: p.agent,
+        referee: p.referee,
+        rep: None,
+        funder,
+        ruled_delivered: false,
     });
-    logger.log(&Event::OrderCreated { order_id: p.order_id, supplier: p.supplier, expected_qty: p.expected_qty, amount, invoice_by: p.invoice_by })?;
+    logger.log(&Event::OrderCreated { order_id: p.order_id, supplier: p.supplier, expected_qty: p.expected_qty, amount, invoice_by: p.invoice_by, agent: p.agent, referee: p.referee })?;
     Ok(())
 }
 
-/// The buyer takes the escrow back. Allowed while the supplier has not accepted the order,
-/// or after the agreed date if the order was not ready to pay by then. Once the supplier has
-/// accepted, the money is locked for it: a confirmed delivery with an approved invoice is paid.
+/// The buyer takes the escrow back. Allowed while the supplier has not accepted the order, or
+/// after the agreed date if the order was not ready to pay and its delivery is not in dispute.
+/// While the supplier's rep has counted a delivery the counts do not confirm, only the referee
+/// can send the money back (`rule`), so the buyer's own counters cannot stall a delivery into a
+/// refund. A confirmed delivery whose invoice was not approved by the date can be refunded: the
+/// date was agreed by both sides.
 #[receive(contract = "ctp_escrow", name = "refund", parameter = "OrderId", error = "Error", mutable, enable_logger)]
 fn refund(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
     ensure_admin(ctx, host)?;
     let order_id: OrderId = ctx.parameter_cursor().get()?;
     let order = open_order(host, order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
-    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order);
+    let disputed = rep_counted(&order) && !delivery_confirmed(&order);
+    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order) && !disputed;
     ensure!(!order.accepted || expired, Error::RefundLocked);
     let admin = host.state().admin;
     close_and_refund(host, logger, order_id, order.amount, admin)
@@ -598,11 +713,14 @@ fn accept_order(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     ensure!(!order.accepted, Error::AlreadyAccepted);
     ensure!(p.invoice_by == order.invoice_by, Error::DateChanged);
     before_deadline(ctx, &order)?;
+    let admin = host.state().admin;
+    ensure!(![admin, order.receiver, order.approver, order.referee, order.agent].contains(&p.rep), Error::BadRep);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.accepted = true;
         o.date_proposal = None;
+        o.rep = Some(p.rep);
     }
-    logger.log(&Event::OrderAccepted { order_id: p.order_id, invoice_by: order.invoice_by })?;
+    logger.log(&Event::OrderAccepted { order_id: p.order_id, invoice_by: order.invoice_by, rep: p.rep })?;
     Ok(())
 }
 
@@ -614,9 +732,21 @@ fn change_date(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
     let by = order_party(ctx, host, &order)?;
-    ensure!(p.invoice_by > ctx.metadata().slot_time(), Error::BadDate);
-    let other_agreed = matches!(&order.date_proposal, Some(d) if d.by != by && d.invoice_by == p.invoice_by);
-    let buyer_alone = !order.accepted && by == host.state().admin;
+    let side = if by == host.state().admin { Side::Buyer } else { Side::Supplier };
+    let now = ctx.metadata().slot_time();
+    // Proposing the current date withdraws your own pending proposal.
+    if p.invoice_by == order.invoice_by {
+        if matches!(&order.date_proposal, Some(d) if d.by == side) {
+            if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
+                o.date_proposal = None;
+            }
+            logger.log(&Event::DateProposalCleared { order_id: p.order_id })?;
+        }
+        return Ok(());
+    }
+    ensure!(p.invoice_by > now, Error::BadDate);
+    let other_agreed = matches!(&order.date_proposal, Some(d) if d.by != side && d.invoice_by == p.invoice_by && now <= d.expires);
+    let buyer_alone = !order.accepted && side == Side::Buyer;
     let mut o = host.state_mut().orders.get_mut(&p.order_id).ok_or(Error::UnknownOrder)?;
     if other_agreed || buyer_alone {
         o.invoice_by = p.invoice_by;
@@ -624,15 +754,16 @@ fn change_date(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger
         drop(o);
         logger.log(&Event::DateChanged { order_id: p.order_id, invoice_by: p.invoice_by })?;
     } else {
-        o.date_proposal = Some(DateProposal { by, invoice_by: p.invoice_by });
+        let expires = Timestamp::from_timestamp_millis(now.timestamp_millis().saturating_add(PROPOSAL_TTL_MS));
+        o.date_proposal = Some(DateProposal { by: side, invoice_by: p.invoice_by, expires });
         drop(o);
         logger.log(&Event::DateProposed { order_id: p.order_id, by, invoice_by: p.invoice_by })?;
     }
     Ok(())
 }
 
-/// The buyer or the supplier asks both signers to count again, when both counts are
-/// unsealed but do not confirm the delivery (an honest miscount, or the rest delivered).
+/// The buyer or the supplier asks everyone to count again, once both gate counts are sealed and
+/// the delivery is not confirmed: an honest miscount, the rest delivered, or a lost seal key.
 /// At most MAX_RECOUNTS times; every earlier count stays in the event history.
 #[receive(contract = "ctp_escrow", name = "recount", parameter = "OrderId", error = "Error", mutable, enable_logger)]
 fn recount(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
@@ -641,7 +772,7 @@ fn recount(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) ->
     ensure!(!order.paid, Error::OrderClosed);
     let by = order_party(ctx, host, &order)?;
     before_deadline(ctx, &order)?;
-    ensure!(order.reveals.len() == 2 && !delivery_confirmed(&order), Error::RecountNotNeeded);
+    ensure!(gate_sealed(&order) && !delivery_confirmed(&order), Error::RecountNotNeeded);
     ensure!(order.recounts < MAX_RECOUNTS, Error::NoRecountsLeft);
     let recount = order.recounts + 1;
     if let Some(mut o) = host.state_mut().orders.get_mut(&order_id) {
@@ -651,6 +782,30 @@ fn recount(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) ->
     }
     logger.log(&Event::RecountStarted { order_id, recount, by })?;
     Ok(())
+}
+
+/// The order's referee settles a disputed delivery: the supplier's rep counted, but the counts
+/// do not confirm it (a counter disagreed or stayed silent). Delivered: the delivery counts as
+/// confirmed and the invoice can still be submitted and approved after the date. Refund: the
+/// money goes back to whoever funded the order.
+#[receive(contract = "ctp_escrow", name = "rule", parameter = "RuleParams", error = "Error", mutable, enable_logger)]
+fn rule(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
+    let by = sender_account(ctx).map_err(|_| Error::NotReferee)?;
+    let p: RuleParams = ctx.parameter_cursor().get()?;
+    let order = open_order(host, p.order_id)?;
+    ensure!(!order.paid, Error::OrderClosed);
+    ensure!(order.referee == by, Error::NotReferee);
+    ensure!(rep_counted(&order) && !delivery_confirmed(&order), Error::NoDispute);
+    logger.log(&Event::Ruled { order_id: p.order_id, ruling: p.ruling, by })?;
+    match p.ruling {
+        Ruling::Delivered => {
+            if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
+                o.ruled_delivered = true;
+            }
+            Ok(())
+        }
+        Ruling::Refund => close_and_refund(host, logger, p.order_id, order.amount, by),
+    }
 }
 
 // ---------- supplier ----------
@@ -672,18 +827,19 @@ fn set_payout(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger)
 
 // ---------- signers: blind counts ----------
 
-/// The role this account holds on the order, if it is the named receiver or approver
-/// AND is still listed as a signer in that same role today.
-fn order_role(host: &Host<State>, order: &Order, signer: &AccountAddress) -> ContractResult<Role> {
-    let role = if *signer == order.receiver {
-        Role::Receiver
+/// The role this account holds on the order. The counters are fixed per order: the buyer's
+/// receiver and approver when it is created, the supplier's rep when it is accepted. Removing
+/// a signer from the list later does not change an order already under way.
+fn order_role(order: &Order, signer: &AccountAddress) -> ContractResult<Role> {
+    if *signer == order.receiver {
+        Ok(Role::Receiver)
     } else if *signer == order.approver {
-        Role::Approver
+        Ok(Role::Approver)
+    } else if order.rep == Some(*signer) {
+        Ok(Role::SupplierRep)
     } else {
-        return Err(Error::NotOrderSigner);
-    };
-    ensure!(host.state().signers.get(signer).map(|r| *r) == Some(role), Error::SignerNoLongerValid);
-    Ok(role)
+        Err(Error::NotOrderSigner)
+    }
 }
 
 #[receive(contract = "ctp_escrow", name = "commit_count", parameter = "CommitParams", error = "Error", mutable, enable_logger)]
@@ -693,9 +849,13 @@ fn commit_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
     before_deadline(ctx, &order)?;
-    let role = order_role(host, &order, &signer)?;
-    ensure!(order.commits.iter().all(|c| c.signer != signer), Error::AlreadyCommitted);
+    let role = order_role(&order, &signer)?;
+    // A signer may replace their own seal (for example after losing its key) until anyone has
+    // unsealed in this round; after that a seal is final.
+    let resealing = order.commits.iter().any(|c| c.signer == signer);
+    ensure!(!resealing || order.reveals.is_empty(), Error::AlreadyCommitted);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
+        o.commits.retain(|c| c.signer != signer);
         o.commits.push(Commit { signer, role, hash: p.hash });
     }
     logger.log(&Event::CountCommitted { order_id: p.order_id, signer, role })?;
@@ -709,13 +869,12 @@ fn reveal_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
     before_deadline(ctx, &order)?;
-    // Re-checked at reveal time: a signer removed after committing can no longer count.
-    let role = order_role(host, &order, &signer)?;
+    let role = order_role(&order, &signer)?;
     let commit = order.commits.iter().find(|c| c.signer == signer).ok_or(Error::NotCommitted)?.clone();
     ensure!(order.reveals.iter().all(|r| r.signer != signer), Error::AlreadyRevealed);
-    // Blind: nobody reveals until both named people have committed.
-    ensure!(order.commits.len() == 2, Error::WaitingForSecondRole);
-    let h = crypto_primitives.hash_sha2_256(&rules::commit_preimage(p.order_id, &signer.0, p.qty, &p.salt));
+    // Blind: nobody unseals until both gate counters (receiver and supplier's rep) have sealed.
+    ensure!(gate_sealed(&order), Error::WaitingForSecondRole);
+    let h = crypto_primitives.hash_sha2_256(&rules::commit_preimage(p.order_id, order.recounts, &signer.0, p.qty, &p.salt));
     ensure!(h == commit.hash, Error::RevealDoesNotMatchCommit);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.reveals.push(RevealedCount { signer, role, qty: p.qty });
@@ -737,7 +896,7 @@ fn approve_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
     ensure!(!order.paid, Error::OrderClosed);
     ensure!(order.supplier == supplier, Error::NotSupplier);
     ensure!(order.accepted, Error::OrderNotAccepted);
-    before_deadline(ctx, &order)?;
+    invoice_window(ctx, &order)?;
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.supplier_approval = Some(Approval { invoice_hash: p.invoice_hash, amount: p.amount });
     }
@@ -775,8 +934,9 @@ fn submit_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Log
     let p: InvoiceParams = ctx.parameter_cursor().get()?;
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
+    ensure!(order.agent == agent, Error::NotOrderAgent);
     ensure!(order.invoice.is_none(), Error::InvoiceExists);
-    before_deadline(ctx, &order)?;
+    invoice_window(ctx, &order)?;
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.invoice = Some(Invoice { agent, agent_token_id, invoice_hash: p.invoice_hash, amount: p.amount });
     }
@@ -798,6 +958,7 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
         // The agent that submitted the invoice: still registered here, and re-checked in the
         // registry at every decision, so a revoked or transferred agent is refused at once.
         let token = host.state().agents.get(&caller).map(|t| *t).ok_or(Error::NotAgent)?;
+        ensure!(token == invoice.agent_token_id, Error::NotAgent);
         verify_agent(host, token, &caller)?;
     } else {
         // The supplier or the buyer can ask too, so payment never stalls on an offline agent.
@@ -806,7 +967,7 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
     }
     let supplier = host.state().suppliers.get(&order.supplier).map(|s| s.clone()).ok_or(Error::UnknownSupplier)?;
     let now = ctx.metadata().slot_time();
-    let reveals: Vec<Reveal<AccountAddress>> = order.reveals.iter().map(|r| Reveal { signer: r.signer, role: r.role, qty: r.qty }).collect();
+    let reveals = reveals_of(&order);
     let facts = Facts {
         paid: order.paid,
         expected_qty: order.expected_qty,
@@ -814,6 +975,7 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
         invoice_amount: Some(invoice.amount.micro_ccd),
         supplier_approved: order.supplier_approval == Some(Approval { invoice_hash: invoice.invoice_hash, amount: invoice.amount }),
         reveals: &reveals,
+        ruled_delivered: order.ruled_delivered,
         payout_set_at: supplier.payout_set_at.timestamp_millis(),
         now: now.timestamp_millis(),
         hold_ms: host.state().hold_ms,

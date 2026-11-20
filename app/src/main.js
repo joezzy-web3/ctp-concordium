@@ -5,6 +5,7 @@ import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
 import { judgeView } from './judge.js';
+import { refereeView } from './referee.js';
 import { signerView } from './signer.js';
 import { supplierView, agentView } from './roles.js';
 
@@ -15,12 +16,14 @@ const ROLES = {
     ['Review, then sign once', 'The amount locks in escrow. Download the purchase order to send the supplier.'],
     ['Watch it clear', 'Orders shows each one live: counting, invoice, supplier approval, hold, paid.'],
   ] },
-  signer: { name: 'Delivery signer', line: 'Count what arrived. Nobody sees your number until both of you have counted.', guide: [
-    ['Count the delivery', 'On your own, before you talk to the other signer.'],
-    ['Commit your count', 'Only a fingerprint of it goes on-chain. This browser keeps the secret that unlocks it.'],
-    ['Unseal when both have sealed', 'The contract checks your number against your seal.'],
+  signer: { name: 'Delivery signer', line: 'Count what arrived: the buyer’s receiver and the supplier’s rep at the gate, the approver inside.', guide: [
+    ['Count the delivery', 'On your own, before you talk to anyone else who counts.'],
+    ['Seal your count', 'Only a fingerprint of it goes on-chain. This browser keeps the key that unlocks it.'],
+    ['No count, no unload', 'The supplier’s rep unloads only after the buyer’s receiver has sealed.'],
+    ['Unseal when the gate counts are sealed', 'The contract checks your number against your seal.'],
   ] },
-  supplier: { name: 'Supplier', line: 'Approve your invoice and amount, watch your payout account and payments.', guide: [
+  supplier: { name: 'Supplier', line: 'Accept orders, name your delivery rep, approve your invoice, and get paid.', guide: [
+    ['Accept the order', 'Check the date, the buyer’s counters and the referee, and name your delivery rep.'],
     ['Approve the invoice', 'Pick the same invoice file you sent and confirm the amount you agreed.'],
     ['Keep your payout account safe', 'Any change waits out a hold (72 hours in production) before money can go there.'],
   ] },
@@ -28,6 +31,7 @@ const ROLES = {
     ['Submit the invoice', 'The agent’s badge is checked before it reaches the contract.'],
     ['Ask for payment', 'The contract runs every rule and answers cleared or held, with the reasons.'],
   ] },
+  referee: { name: 'Referee', line: 'Settle a disputed delivery: the supplier’s rep counted, but the counts do not confirm it.', guide: [] },
   judge: { name: 'Judge mode', line: 'Try the attacks that empty company accounts today, against the real contract.', guide: [] },
 };
 
@@ -37,9 +41,10 @@ const routes = {
   signer: () => signerView(),
   supplier: () => supplierView(),
   agent: () => agentView(),
+  referee: () => refereeView(),
   judge: () => judgeView(),
 };
-const ORDER = ['', 'buyer', 'signer', 'supplier', 'agent', 'judge'];
+const ORDER = ['', 'buyer', 'signer', 'supplier', 'agent', 'referee', 'judge'];
 
 // ---------- shell ----------
 function band(role) {
@@ -49,7 +54,8 @@ function band(role) {
   if (!r) { fill(el, h('div.band-in', h('b', 'Choose who you are'), h('span', 'Each role sees only its own part. The contract refuses anyone else.'))); return; }
   const me = currentAccount();
   const actual = roleOf(me);
-  const mismatch = me && role !== 'judge' && actual && actual !== role;
+  // A supplier can be its own delivery rep, and anyone can be named referee on an order.
+  const mismatch = me && !['judge', 'referee'].includes(role) && actual && actual !== role && !(role === 'signer' && actual === 'supplier');
   const open = store.get(`guide:${role}`, false);
   const guideBtn = r.guide.length ? h('button.band-g', { type: 'button', 'aria-expanded': String(open), onclick: () => { store.set(`guide:${role}`, !open); band(role); } }, open ? 'Hide the guide' : 'Show the guide') : null;
   fill(el, 
@@ -76,6 +82,7 @@ function pickView() {
     tile('signer', 'Delivery signer', 'Count what arrived, blind.'),
     tile('supplier', 'Supplier', 'Approve your invoice and amount.'),
     tile('agent', 'Agent', 'Submit invoices, ask for payment.'),
+    tile('referee', 'Referee', 'Settle a disputed delivery.'),
     tile('judge', 'Judge mode', 'Try to fool it on the real contract.'),
   );
 }

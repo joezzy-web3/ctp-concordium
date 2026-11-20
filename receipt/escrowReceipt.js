@@ -16,13 +16,13 @@
 
 import { canonicalBytes, sha256Hex } from './canonical.js';
 
-export const ESCROW_SCHEMA = 'ctp.escrow-receipt/v1';
+export const ESCROW_SCHEMA = 'ctp.escrow-receipt/v2';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const MICRO = /^(0|[1-9][0-9]{0,19})$/;
 const ACCT = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
-const ROLES = ['Approver', 'Receiver'];
-const KEYS = ['schema', 'network', 'escrow', 'order_id', 'supplier', 'amount_micro', 'expected_qty', 'invoice_by', 'counts', 'recounts', 'invoice', 'supplier_approval', 'payout_account', 'asked_by', 'asked_at'];
+const ROLES = ['Approver', 'Receiver', 'SupplierRep'];
+const KEYS = ['schema', 'network', 'escrow', 'order_id', 'supplier', 'amount_micro', 'expected_qty', 'invoice_by', 'counts', 'recounts', 'ruled_delivered', 'invoice', 'supplier_approval', 'payout_account', 'asked_by', 'asked_at'];
 
 const iso = (ms) => new Date(Number(ms)).toISOString();
 
@@ -49,6 +49,7 @@ export function buildEscrowReceipt({ network, escrow, orderId, order: o, payout,
     invoice_by: iso(o.invoice_by),
     counts: [...o.reveals].map((x) => ({ role: x.role, account: x.signer, qty: String(x.qty) })).sort((a, b) => a.role.localeCompare(b.role)),
     recounts: Number(o.recounts ?? 0),
+    ruled_delivered: Boolean(o.ruled_delivered),
     invoice: o.invoice ? { sha256: o.invoice.invoice_hash, amount_micro: String(o.invoice.amount), agent: o.invoice.agent, agent_token_id: Number(o.invoice.agent_token_id) } : null,
     supplier_approval: o.supplier_approval ? { sha256: o.supplier_approval.invoice_hash, amount_micro: String(o.supplier_approval.amount) } : null,
     payout_account: payout,
@@ -75,9 +76,11 @@ export function validateEscrowReceipt(r) {
   req(MICRO.test(r.amount_micro ?? ''), 'amount_micro must be a whole number string');
   req(MICRO.test(r.expected_qty ?? ''), 'expected_qty must be a whole number string');
   req(!Number.isNaN(Date.parse(r.invoice_by)), 'invoice_by must be an ISO time');
-  req(Array.isArray(r.counts) && r.counts.length <= 2, 'counts must be a list of at most two');
+  req(Array.isArray(r.counts) && r.counts.length <= 3, 'counts must be a list of at most three');
+  req(new Set((r.counts ?? []).map((c) => c?.role)).size === (r.counts ?? []).length, 'one count per role');
   for (const c of r.counts ?? []) req(ROLES.includes(c?.role) && ACCT.test(c?.account ?? '') && MICRO.test(c?.qty ?? ''), 'each count needs role, account and qty');
   req(Number.isSafeInteger(r.recounts) && r.recounts >= 0, 'recounts must be a whole number');
+  req(typeof r.ruled_delivered === 'boolean', 'ruled_delivered must be true or false');
   if (r.invoice !== null) req(HEX64.test(r.invoice?.sha256 ?? '') && MICRO.test(r.invoice?.amount_micro ?? '') && ACCT.test(r.invoice?.agent ?? '') && Number.isSafeInteger(r.invoice?.agent_token_id), 'invoice needs sha256, amount_micro, agent and agent_token_id');
   if (r.supplier_approval !== null) req(HEX64.test(r.supplier_approval?.sha256 ?? '') && MICRO.test(r.supplier_approval?.amount_micro ?? ''), 'supplier_approval needs sha256 and amount_micro');
   req(ACCT.test(r.payout_account ?? ''), 'payout_account must be an account address');
@@ -105,4 +108,25 @@ export async function checkReceiptAgainstDecision(r, d, escrow) {
   req(!r.invoice || (r.invoice.agent === d.agent && r.invoice.agent_token_id === Number(d.agent_token_id)), 'a different agent submitted the invoice');
   if (d.verdict === 'Cleared') req(d.paid_to === r.payout_account, 'the money went to a different account than the receipt shows');
   return p;
+}
+
+/**
+ * Compares the facts in a receipt with the order as the contract holds it now (view_order).
+ * A paid order no longer changes, so for a CLEARED decision every difference is a problem.
+ * For a HELD decision the order may have moved on since, so differences are only notes.
+ */
+export function compareReceiptWithOrder(r, o) {
+  const diffs = [];
+  const same = (a, b, what) => { if (a !== b) diffs.push(what); };
+  same(r.supplier, o.supplier, 'the supplier differs from the order on-chain');
+  same(r.amount_micro, String(o.amount), 'the escrowed amount differs from the order on-chain');
+  same(r.expected_qty, String(o.expected_qty), 'the ordered quantity differs from the order on-chain');
+  const counts = [...o.reveals].map((x) => `${x.role}:${x.signer}:${x.qty}`).sort().join('|');
+  same(r.counts.map((c) => `${c.role}:${c.account}:${c.qty}`).sort().join('|'), counts, 'the counts differ from those on-chain');
+  same(r.ruled_delivered, Boolean(o.ruled_delivered), 'the referee ruling differs from the order on-chain');
+  same(r.invoice?.sha256 ?? null, o.invoice?.invoice_hash ?? null, 'the invoice fingerprint differs from the order on-chain');
+  same(r.invoice?.amount_micro ?? null, o.invoice ? String(o.invoice.amount) : null, 'the invoice amount differs from the order on-chain');
+  same(r.supplier_approval?.sha256 ?? null, o.supplier_approval?.invoice_hash ?? null, 'the supplier approval differs from the order on-chain');
+  same(r.supplier_approval?.amount_micro ?? null, o.supplier_approval ? String(o.supplier_approval.amount) : null, 'the approved amount differs from the order on-chain');
+  return diffs;
 }

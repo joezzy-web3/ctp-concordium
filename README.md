@@ -16,11 +16,10 @@ Every row marked live links to on-chain evidence or runs in the test suite. Rows
 | Cross-chain link to the Clear to Pay agent on NEAR (CIS-8) | **Live (testnet)** | CIS-8 checked the NEAR signature; registry confirmed the binding before attaching it (link tx below) |
 | Escrow contract v4: two named people in two roles count blind (each seal bound to its signer), the supplier accepts the order and its latest date, approves its own invoice and amount, payout hold on new payout accounts, pays only on CLEARED, logs every decision | **Live (testnet)**, full order paid on 20 Nov 2026 | `<13098,0>`, module `ad60bdff…a28c7e52` = verifiable build ([first payment](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947)); 20 rule tests, 34 end-to-end tests |
 | The contract checks the agent in the CIS-8004 registry itself, when the agent is added and at every invoice and payment request | **Live (testnet)** | it read the real registry for Agent #1287 at setup and again at the invoice in the first live order; end-to-end tests cover revoked, transferred and hijacked agents |
-| Money locked for the supplier once it accepts; the buyer can take it back only after the latest date if the order is not ready, or if the supplier gives it back | **Live (testnet)** | end-to-end tests: refund refused after acceptance, allowed before it and after an unready date |
-| Recounts (at most 2) and payment requests by the supplier or buyer, so an honest miscount or an offline agent never blocks a payment | **Live (testnet)** | end-to-end tests |
+| Escrow v5 (built and tested, deploying next): each side has a counter the other does not choose (buyer's receiver, supplier's delivery rep), a referee for disputes, one agent per order, seals bound to signer and round, refunds to the funder | **Built and tested** | 23 rule tests, 47 end-to-end tests on the compiled contract, one per attack from the 20 Nov audit |
 | Payment receipts: the receipt's fingerprint is written into the contract's own Decision event | **Live (testnet)** | `receipt/escrowReceipt.js`, `npm test`; check a receipt in the app under Judge mode |
 | Badge gate: refuse counterparty agents whose badge or card does not check out | **Live (off-chain code)** | `gate/`, `npm test` |
-| Signers proven to be two different verified people (Concordium ID zero-knowledge proofs) | In progress | today: two different accounts in two different roles, named on each order, each owned by an ID-verified Concordium identity |
+| Signers proven to be two different verified people (Concordium ID zero-knowledge proofs) | In progress | the v5 contract already refuses an order whose two signers carry the same proven identity fingerprint; the wallet proof step comes next (`docs/F01_SIGNER_IDENTITY.md`) |
 | Payments: x402 service fees; stablecoin payout | In progress | escrow pays in CCD first |
 
 The Agent Card describes the product as a whole; it will be re-anchored with the escrow contract address once the final demo contract is deployed.
@@ -40,28 +39,30 @@ Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay
 
 ## How a payment clears (escrow contract)
 
-`contract/` holds the escrow; `contract/DESIGN.md` has every rule. In the app, each person has their own space: buyer, delivery signers, supplier and agent.
+`contract/` holds the escrow; `contract/DESIGN.md` has every rule (it describes v5, deploying next). In the app, each person has their own space: buyer, delivery signers, supplier, agent and referee.
 
-1. The buyer creates the order, locks the money in the contract, names the receiver and approver, and sets the latest date for delivery and invoice.
-2. The supplier accepts the order and that date from its own account.
-3. The receiver and approver each count the delivery and seal their number. Neither can see or copy the other's; each seal carries its signer's own account.
-4. The agent submits the invoice's fingerprint and amount. The contract asks the Concordium agent registry whether the agent is active and owned by the caller.
+1. The buyer creates the order, locks the money in the contract, names its receiver and approver, the agent and a referee, and sets the latest date for delivery and invoice.
+2. The supplier accepts the order and that date from its own account, and names its delivery rep (the driver).
+3. At the gate, the buyer's receiver and the supplier's rep each count and seal their number. Neither can see or copy the other's. The rep unloads only after the receiver has sealed: no count, no unload. The buyer's approver can check inside too.
+4. The agent named on the order submits the invoice's fingerprint and amount. The contract asks the Concordium agent registry whether the agent is active and owned by the caller.
 5. The supplier approves that exact invoice and amount.
-6. The agent, the supplier or the buyer asks for the decision. The contract pays only when everything matches and the payout account has waited out its hold, and records a Decision event either way.
+6. The agent, the supplier or the buyer asks for the decision. The contract pays only when the receiver's and the rep's counts match the order, the approver (if it counted) agrees, the supplier approved, and the payout account has waited out its hold. It records a Decision event either way.
+7. If the counts disagree after the rep has counted, the referee decides: delivered, or money back.
 
 Design choices, and what protects the user:
-- **The agent can be fooled; the money cannot.** A wrong, fake or edited invoice cannot change who is paid or how much: payment is fixed by the amount in escrow, two blind counts and the supplier's approval of that exact file's fingerprint.
-- **Fair to both sides.** Once the supplier accepts, the buyer cannot pull the money back unless the agreed date passes with the order not ready. The buyer cannot throw out an invoice the supplier approved for the full amount. A late invoice cannot sneak in after the date.
-- **Nothing stalls.** An honest miscount gets a recount (at most 2, opened by the buyer or supplier, never by a signer). If the agent is offline, the supplier or buyer asks for the decision under the same rules.
+- **The agent can be fooled; the money cannot.** A wrong, fake or edited invoice cannot change who is paid or how much: payment is fixed by the amount in escrow, the counts and the supplier's approval of that exact file's fingerprint.
+- **The supplier is protected from the buyer's own counters.** If the supplier's rep counted a delivery and the buyer's counters disagree or stay silent, the buyer cannot take the money back alone, even after the date; only the referee can. A confirmed delivery is the supplier's money as long as it approves its invoice by the agreed date. The buyer cannot throw out an invoice the supplier approved for the full amount.
+- **The buyer is protected from a false delivery.** The rep alone never confirms a delivery: the buyer's receiver must agree, and the buyer's approver can hold a payment by counting a different number. If the rep never counted, the buyer gets the money back after the date.
+- **Stalls have a way out.** A lost seal key can be replaced before anyone unseals, a miscount gets a recount (at most 2, opened by the buyer or supplier), a disagreement goes to the referee, and an offline agent is replaced by the supplier or buyer asking under the same rules.
 - **Fails safe.** If the contract cannot read the agent registry, it refuses.
 
 ## Payment receipts
 
-Asking for payment builds a receipt from the order as the contract holds it at that moment: both counts, the invoice fingerprint, the supplier's approval, the payout account and who asked. Its SHA-256 is sent as `receipt_hash`, and the contract writes it into its own `Decision` event, next to the verdict.
+Asking for payment builds a receipt from the order as the contract holds it at that moment: the counts, any referee ruling, the invoice fingerprint, the supplier's approval, the payout account and who asked. The app keeps it before sending, so a fingerprint never lands on-chain without its receipt. Its SHA-256 is sent as `receipt_hash`, and the contract writes it into its own `Decision` event, next to the verdict.
 
 Design choices, and what protects the user:
 - **Anchored inside the decision itself.** No separate transaction, and a receipt cannot be attached to a different decision.
-- **The verdict is the contract's.** The receipt records facts, never a verdict; anyone can check each fact against the chain.
+- **The verdict is the contract's.** The receipt records facts, never a verdict. The checker compares its fingerprint, contract, order, asker, agent and payee with the decision, and its counts, amounts, invoice and approval with the order on-chain.
 - **Easy to check.** Download a receipt from any order; in Judge mode, pick the file and paste the decision's transaction hash, and the page reads the decision from the chain and confirms (or refutes) that this exact receipt is the one it recorded.
 
 ## Verify before you pay (badge gate)

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { decodeOrder, decodeDecision } from '../app/src/codec.js';
-import { buildEscrowReceipt, escrowReceiptHash, validateEscrowReceipt, checkReceiptAgainstDecision, ESCROW_SCHEMA } from '../receipt/escrowReceipt.js';
+import { buildEscrowReceipt, escrowReceiptHash, validateEscrowReceipt, checkReceiptAgainstDecision, compareReceiptWithOrder, ESCROW_SCHEMA } from '../receipt/escrowReceipt.js';
 import { canonicalize } from '../receipt/canonical.js';
 
 const F = JSON.parse(readFileSync(new URL('./fixtures/escrow-bytes.json', import.meta.url)));
@@ -74,4 +74,15 @@ test('an edited receipt, or one shown with another decision, is caught', async (
 test('a receipt cannot be built from a malformed order', async () => {
   await assert.rejects(build({ payout: 'nope' }), /payout_account/);
   await assert.rejects(build({ askedBy: '' }), /asked_by/);
+});
+
+test('a receipt’s facts are compared with the order the contract holds', async () => {
+  const order = await readyOrder();
+  const r = await build();
+  assert.deepEqual(compareReceiptWithOrder(r, order), []);
+  const otherCount = { ...order, reveals: order.reveals.map((x, i) => (i ? { ...x, qty: 99n } : x)) };
+  assert.match(compareReceiptWithOrder(r, otherCount).join(), /counts differ/);
+  assert.match(compareReceiptWithOrder(r, { ...order, supplier_approval: null }).join(), /supplier approval differs/);
+  assert.match(compareReceiptWithOrder({ ...r, amount_micro: '1' }, order).join(), /escrowed amount differs/);
+  assert.match(compareReceiptWithOrder(r, { ...order, ruled_delivered: !order.ruled_delivered }).join(), /referee ruling/);
 });
