@@ -4,7 +4,7 @@ import { detectConcordiumProvider } from '@concordium/browser-wallet-api-helpers
 import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, Energy, ReceiveName, TransactionHash } from '@concordium/web-sdk';
 import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
 import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
-import { decodeConfig, decodeOrder, decodeSupplier } from './codec.js';
+import { decodeConfig, decodeOrder, decodeSupplier, decodeDecision } from './codec.js';
 
 export const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
 export const ESCROW = { index: Number(globalThis.CTP_ESCROW ?? 13098), subindex: 0 };
@@ -113,7 +113,38 @@ export async function waitFinal(tx, ms = globalThis.CTP_WAIT_MS ?? 120000) {
     const name = r?.tag === 'RejectedReceive' ? errorName(r.rejectReason) : null;
     return { ok: false, tx, reason: name ? (EXPLAIN[name] ?? `Refused by the contract (${name}).`) : `Refused by the chain (${r?.tag ?? 'unknown reason'}).` };
   }
-  return { ok: true, tx };
+  return { ok: true, tx, events: escrowEvents(sum) };
+}
+
+/** Raw bytes of every event our escrow logged in a transaction (before and after any transfer). */
+function escrowEvents(sum) {
+  const out = [];
+  for (const e of sum?.events ?? []) {
+    if ((e.tag === 'Updated' || e.tag === 'Interrupted') && Number(e.address?.index) === ESCROW.index && Number(e.address?.subindex) === ESCROW.subindex) {
+      for (const ev of e.events ?? []) out.push(new Uint8Array(ev.buffer));
+    }
+  }
+  return out;
+}
+
+/** Decision events in a list of raw escrow events. */
+export async function decisionsIn(events) {
+  const out = [];
+  for (const b of events) {
+    const d = await decodeDecision(b).catch(() => null);
+    if (d) out.push(d);
+  }
+  return out;
+}
+
+/** Reads a finalized transaction from the node and returns the escrow Decision events in it. */
+export async function decisionsInTx(tx) {
+  if (!/^[0-9a-f]{64}$/i.test(String(tx).trim())) throw new Error('A transaction hash is 64 hex characters.');
+  const st = await node.getBlockItemStatus(TransactionHash.fromHexString(String(tx).trim().toLowerCase()));
+  if (st?.status !== 'finalized') throw new Error('That transaction is not finalized (or not found) on testnet.');
+  const sum = st.outcome?.summary;
+  if (sum?.type !== 'accountTransaction' || sum.transactionType === 'failed') throw new Error('That transaction did not update the escrow.');
+  return decisionsIn(escrowEvents(sum));
 }
 
 /** Sends one escrow call through the wallet. The wallet shows every field by name (module schema). */

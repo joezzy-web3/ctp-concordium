@@ -2,6 +2,7 @@
 import { AGENT, ESCROW, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
 import { ccdToMicro, microToCcd, orderStage, invoiceApproved } from './codec.js';
 import { dateBlock, recountButton, askPaymentButton, refundControl, buyerCanReject, countsLine, dayEnd, defaultDue, iso, fmtDay } from './ordertools.js';
+import { receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, countdown, fmtDate, short, store, notice, holdText } from './ui.js';
@@ -300,6 +301,7 @@ async function ordersView() {
         h('dt', 'Supplier'), h('dd.mono', short(o.supplier)),
         st.until ? [h('dt', 'Payout hold ends'), h('dd', fmtDate(st.until))] : null),
       o.paid || o.refunded ? null : dateBlock(o, currentAccount(), 'buyer'),
+      receiptPanel(o),
       h('div.actions',
         askPaymentButton(o),
         recountButton(o),

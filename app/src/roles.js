@@ -2,6 +2,7 @@
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
 import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue } from './codec.js';
 import { dateBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
+import { askForPayment, receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, short, countdown, fmtDate, notice, holdText } from './ui.js';
@@ -109,7 +110,7 @@ export async function supplierView() {
           const r = await act('reject_invoice', o.id, { done: `Invoice on order #${o.id} rejected.` });
           if (r.ok) location.reload();
         } }, 'Not my invoice: reject it'))],
-      tools(o));
+      tools(o), receiptPanel(o));
   };
   const waitingCard = ({ o, st }) => h('section.panel.count',
     h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', `${microToCcd(o.amount)} CCD escrowed for you`), h('span', chip(st.tone, st.label)))),
@@ -122,7 +123,7 @@ export async function supplierView() {
     toApprove.length ? toApprove.map(approveCard) : h('section.panel.empty-s', h('p', 'No invoices waiting for your approval.')),
     waiting.length ? [h('h3.sub-h', 'Waiting for the invoice'), waiting.map(waitingCard)] : null,
     payout,
-    paid.length ? h('section.panel', h('h3', 'Payments received'), h('ul.plain', paid.map(({ o }) => h('li', h('b.num', `#${o.id}`), ` ${microToCcd(o.amount)} CCD to ${short(sup.payout)}`)))) : null);
+    paid.length ? h('section.panel', h('h3', 'Payments received'), h('ul.plain', paid.map(({ o }) => h('li', h('b.num', `#${o.id}`), ` ${microToCcd(o.amount)} CCD`, receiptPanel(o))))) : null);
 }
 
 // ---------------- agent ----------------
@@ -183,13 +184,14 @@ export async function agentView() {
         h('p', st.key === 'ready' ? 'Every check passes. Ask the contract to pay.' : `Not ready yet: ${st.label.toLowerCase()}. You can still ask; the contract will answer held, with the reasons.`),
         h('button.btn.gold', { type: 'button', onclick: async (e) => {
           e.currentTarget.disabled = true;
-          const r = await act('execute_payment', { order_id: o.id, receipt_hash: '0'.repeat(64) }, { pending: 'Asking the contract to pay. ', done: `The contract recorded its decision for order #${o.id}. If it cleared, the supplier has been paid.` });
-          if (r.ok) location.reload();
+          const r = await askForPayment(o.id);
+          if (r.ok) setTimeout(() => location.reload(), 2500);
+          else e.currentTarget.disabled = false;
         } }, 'Ask for payment')];
     }
     return h('section.panel.count',
       h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', `${microToCcd(o.amount)} CCD escrowed`), h('span', chip(st.tone, st.label)))),
-      action);
+      action, receiptPanel(o));
   };
 
   return frame(side,
