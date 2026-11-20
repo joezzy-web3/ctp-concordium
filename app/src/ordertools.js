@@ -23,7 +23,7 @@ const run = async (btn, entry, params, done) => {
 };
 
 /** The agreed date: shows it, any pending proposal, and lets this side propose or agree. */
-export function dateBlock(o, me, side) {
+export function dateBlock(o, me, side, { showDate = true } = {}) {
   const other = side === 'buyer' ? 'supplier' : 'buyer';
   const p = o.date_proposal;
   const mine = p && p.by === me;
@@ -36,7 +36,7 @@ export function dateBlock(o, me, side) {
       buyerAlone ? `Date on order #${o.id} set to ${fmtDay(ms)}.` : `New date proposed for order #${o.id}. It applies when the ${other} agrees.`);
   } }, buyerAlone ? 'Set date' : 'Propose this date');
   return h('div.date-block',
-    h('p', icon('calendar', 16), ' Agreed date: ', h('b', fmtDay(o.invoice_by)),
+    !showDate ? null : h('p', icon('calendar', 16), ' Agreed date: ', h('b', fmtDay(o.invoice_by)),
       pastDue(o) ? [' ', chip('hold', 'passed')] : null,
       o.accepted ? null : [' ', chip('wait', 'not accepted yet')]),
     p && !mine ? h('p', chip('wait', `${other[0].toUpperCase()}${other.slice(1)} proposes ${fmtDay(p.invoice_by)}`), ' ',

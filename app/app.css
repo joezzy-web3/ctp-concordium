@@ -97,8 +97,8 @@ input:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
 /* orders */
 .orders{list-style:none;margin:0;padding:0}
 .order{border-top:1px solid var(--line)}
-.order summary{display:grid;grid-template-columns:64px 1fr auto auto;gap:16px;align-items:center;padding:16px 0;cursor:pointer;list-style:none}
-.order summary::-webkit-details-marker{display:none}
+.order > details > summary{display:grid;grid-template-columns:64px 1fr auto auto;gap:16px;align-items:center;padding:16px 0;cursor:pointer;list-style:none}
+.order > details > summary::-webkit-details-marker{display:none}
 .order-id{font:400 22px var(--display);color:var(--navy)}
 .order-what{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .order-d{padding:0 0 20px 80px}
@@ -153,7 +153,7 @@ html[data-dir="back"]::view-transition-old(root){animation-name:vt-out-r}html[da
 @media (max-width:860px){
   .top{flex-wrap:wrap;gap:12px}#tabs{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap}
   .review{grid-template-columns:1fr}.pay{position:static}.stats{grid-template-columns:1fr}
-  .order summary{grid-template-columns:48px 1fr auto}.order summary .chip{grid-column:2/-1;justify-self:start}.order-d{padding-left:0}
+  .order > details > summary{grid-template-columns:48px 1fr auto}.order > details > summary .chip{grid-column:2/-1;justify-self:start}.order-d{padding-left:0}
 }
 
 /* buyer space: navy sidebar + main (dashboard) */

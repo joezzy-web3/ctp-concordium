@@ -70,7 +70,7 @@ export async function supplierView() {
         const r = await act('accept_order', { order_id: o.id, invoice_by: iso(o.invoice_by) }, { done: `You accepted order #${o.id}. The money is locked for you until ${fmtDay(o.invoice_by)}.` });
         if (r.ok) location.reload(); else e.currentTarget.disabled = false;
       } }, icon('check', 18), 'Accept order and date')),
-    h('div.order-tools', dateBlock(o, me, 'supplier'), h('div.actions', releaseButton(o))));
+    h('div.order-tools', dateBlock(o, me, 'supplier', { showDate: false }), h('div.actions', releaseButton(o))));
   const paid = staged.filter(({ o }) => o.paid);
 
   const approveCard = ({ o, st }) => {
