@@ -47,16 +47,8 @@ export async function askForPayment(orderId, { done } = {}) {
   return r;
 }
 
-/** The contract's reason codes, in words. */
-export const CODE_TEXT = {
-  SeizedAlreadyPaid: 'This order was already paid.',
-  HeldNoInvoice: 'No invoice yet.',
-  HeldOneSignature: 'Both signers have not unsealed their counts yet.',
-  HeldCountMismatch: 'The counts do not match the order.',
-  HeldAmountMismatch: 'The invoice amount is not the escrowed amount.',
-  HeldNoSupplierApproval: 'The supplier has not approved this invoice and amount.',
-  HeldPayoutCoolOff: 'The supplier’s payout account is still in its hold.',
-};
+export { CODE_TEXT } from './errors.js';
+import { CODE_TEXT } from './errors.js';
 
 const download = (rec) => {
   const blob = new Blob([`${canonicalize(rec.receipt)}\n`], { type: 'application/json' });

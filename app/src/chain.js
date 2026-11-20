@@ -11,52 +11,8 @@ export const ESCROW = { index: Number(globalThis.CTP_ESCROW ?? 13102), subindex:
 export const AGENT = { id: 1287, badge: 'JyP9U25oUQ6KdnBBHdTYP', owner: '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG' };
 const CONTRACT = ContractAddress.create(ESCROW.index, ESCROW.subindex);
 
-// The contract's error variants in order; concordium-std gives the first one code -1.
-const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed', 'AgentNotVerified', 'RegistryUnavailable', 'PastDeadline', 'BadDate', 'AlreadyAccepted', 'OrderNotAccepted', 'RefundLocked', 'InvoiceApprovedBySupplier', 'RecountNotNeeded', 'NoRecountsLeft', 'NotPendingAdmin', 'NotOrderParty', 'DateChanged', 'ZeroQuantity', 'BadReferee', 'BadRep', 'NotReferee', 'NoDispute', 'NotOrderAgent', 'SamePerson'];
-export const EXPLAIN = {
-  NotAdmin: 'Only the buyer account can do this.',
-  NotSigner: 'This account is not a listed signer.',
-  NotSupplier: 'Only the supplier of this order can do this.',
-  NotAgent: 'Only the registered agent that submitted the invoice can do this.',
-  UnknownOrder: 'There is no order with this number.',
-  OrderExists: 'An order with this number already exists.',
-  UnknownSupplier: 'This supplier is not registered yet.',
-  SupplierExists: 'This supplier is already registered.',
-  OrderClosed: 'This order is already paid or refunded.',
-  BadOrderSigners: 'The receiver and approver must be two different listed signers in those roles.',
-  NotOrderSigner: 'Only the receiver and approver named on this order, and the supplier’s delivery rep, can count it.',
-  SignerNoLongerValid: 'This signer was removed or changed role.',
-  AlreadyCommitted: 'You already sealed a count for this order.',
-  NoInvoice: 'No invoice has been submitted yet.',
-  NotCommitted: 'Commit your count first.',
-  AlreadyRevealed: 'You already revealed your count.',
-  WaitingForSecondRole: 'Wait until the receiver and the supplier’s delivery rep have both sealed their counts.',
-  RevealDoesNotMatchCommit: 'That count or key does not match the count you sealed.',
-  InvoiceExists: 'An invoice was already submitted for this order.',
-  ZeroAmount: 'Attach an amount to fund the order.',
-  TransferFailed: 'The payout transfer failed.',
-  AgentNotVerified: 'The Concordium agent registry does not show this agent as active and owned by this account.',
-  RegistryUnavailable: 'The contract could not read the agent registry, so it refused to be safe. Try again.',
-  PastDeadline: 'The latest date for delivery and invoice has passed. Nothing new can be added unless both sides agree a new date.',
-  BadDate: 'Pick a date in the future.',
-  AlreadyAccepted: 'You already accepted this order.',
-  OrderNotAccepted: 'Accept the order first. Then you can approve its invoice.',
-  RefundLocked: 'The supplier accepted this order, so the money is locked for it. You can take it back after the latest date if the order is not ready to pay and its delivery is not in dispute; a disputed delivery goes to the referee, or the supplier can release it.',
-  InvoiceApprovedBySupplier: 'The supplier approved this invoice and it matches the order. Only the supplier can reject it now.',
-  RecountNotNeeded: 'A recount is only possible once the receiver and the supplier’s rep have both sealed, and the delivery is not confirmed.',
-  NoRecountsLeft: 'Both recounts are used. If the delivery is still short, the money goes back after the latest date.',
-  NotPendingAdmin: 'Only the account proposed as the new buyer admin can accept.',
-  NotOrderParty: 'Only the buyer or the supplier of this order can do this.',
-  DateChanged: 'The date on this order changed. Reload and accept the current date.',
-  ZeroQuantity: 'An order must be for at least one unit.',
-  BadReferee: 'The referee must be someone other than the buyer, the supplier, the two counters and the agent.',
-  BadRep: 'Your delivery rep must be someone other than the buyer, its counters, the referee and the agent. You can name your own account.',
-  NotReferee: 'Only the referee named on this order can rule on it.',
-  NoDispute: 'There is nothing to rule on: the supplier’s rep has not counted, or the counts already confirm the delivery.',
-  NotOrderAgent: 'Only the agent named on this order can submit its invoice.',
-  SamePerson: 'The receiver and the approver are proven to be the same person. Name two different people.',
-};
-export const errorName = (code) => ERRORS[-Number(code) - 1] ?? null;
+export { ERRORS, EXPLAIN, errorName } from './errors.js';
+import { EXPLAIN, errorName } from './errors.js';
 
 export const node = new ConcordiumGRPCWebClient('https://grpc.testnet.concordium.com', 20000);
 
