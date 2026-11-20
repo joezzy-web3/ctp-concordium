@@ -3,7 +3,7 @@
 // these only offer what it would accept right now, and explain the rest.
 import { act } from './act.js';
 import { askForPayment } from './payreceipt.js';
-import { MAX_RECOUNTS, deliveryConfirmed, invoiceApproved, pastDue, readyToPay, recountAllowed, refundAllowed, microToCcd } from './codec.js';
+import { MAX_RECOUNTS, deliveryConfirmed, invoiceApproved, pastDue, readyToPay, recountAllowed, refundAllowed, repCounted, microToCcd } from './codec.js';
 import { h, chip, icon, fmtDate, notice } from './ui.js';
 
 const DAY = 24 * 3600 * 1000;
@@ -81,7 +81,9 @@ export function refundControl(o) {
   }
   const why = readyToPay(o)
     ? 'Delivery confirmed and invoice approved: this money is the supplier’s.'
-    : `Locked for the supplier until ${fmtDay(o.invoice_by)}. If the order is not ready by then, you can take it back.`;
+    : repCounted(o) && !deliveryConfirmed(o)
+      ? 'The supplier’s delivery rep counted this delivery and the counts do not confirm it: only the referee can send the money back.'
+      : `Locked for the supplier until ${fmtDay(o.invoice_by)}. If the order is not ready by then and the supplier’s rep never counted a delivery, you can take it back.`;
   return h('p.fine', icon('lock', 14), ' ', why);
 }
 
@@ -97,6 +99,7 @@ export function releaseButton(o) {
 /** The buyer may reject an invoice only while the supplier has not approved it for the full amount. */
 export const buyerCanReject = (o) => Boolean(o.invoice) && !o.paid && !o.refunded && !invoiceApproved(o);
 
-export const countsLine = (o) => (o.reveals.length
-  ? `${o.reveals.map((x) => `${x.role} ${x.qty}`).join(', ')}${o.reveals.length === 2 ? (deliveryConfirmed(o) ? ' (match)' : ' (do not match)') : ''}`
-  : `${o.commits.length} of 2 sealed`) + (o.recounts ? `, recount ${o.recounts} of ${MAX_RECOUNTS}` : '');
+const ROLE_NAME = { Receiver: 'receiver', Approver: 'approver', SupplierRep: 'supplier’s rep' };
+export const countsLine = (o) => (o.ruled_delivered ? 'referee ruled the goods delivered' : o.reveals.length
+  ? `${o.reveals.map((x) => `${ROLE_NAME[x.role]} ${x.qty}`).join(', ')}${deliveryConfirmed(o) ? ' (confirmed)' : ''}`
+  : `${o.commits.length} sealed`) + (o.recounts ? `, recount ${o.recounts} of ${MAX_RECOUNTS}` : '');

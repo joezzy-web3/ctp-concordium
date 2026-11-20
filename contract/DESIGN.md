@@ -5,52 +5,58 @@ The rules that decide whether a supplier gets paid run **on-chain**. The AI agen
 ## Roles
 | Role | Who | Can |
 |---|---|---|
-| Buyer admin | the buyer's Concordium account | set up signers, agents and suppliers (one `setup` transaction or one at a time), create and fund orders with an agreed date, take the money back while the supplier has not accepted (or after the date if the order was not ready), ask for a recount, ask for payment, hand the admin role to another account in two steps |
-| Signer | a person in the buying team, with a role (`receiver` or `approver`) | commit and reveal a blind delivery count, only on orders that name them |
-| Supplier | the supplier's Concordium account | accept an order at its date; agree date changes; approve its own invoice by hash; ask for a recount; ask for payment; give the money back; set or change its own payout account (starts the hold) |
-| Agent | the account that owns a registered agent (e.g. Agent #1287) | submit an invoice for an order; ask for payment |
+| Buyer admin | the buyer's Concordium account | set up signers, agents and suppliers (one `setup` transaction or one at a time); create and fund orders naming the counters, the agent, a referee and a latest date; take the money back before the supplier accepts, or after the date if nothing was delivered; ask for a recount; ask for payment; hand the admin role over in two steps |
+| Receiver | the buyer's person at the gate | seal and unseal a blind count on orders that name them |
+| Approver | a second buyer person, inside | optionally seal and unseal a blind count; a different number holds the payment, silence never blocks it |
+| Supplier | the supplier's Concordium account | accept an order and name its delivery rep; agree date changes; approve its own invoice by hash; ask for a recount; ask for payment; give the money back; set its own payout account (starts the hold) |
+| Supplier's rep | the supplier's driver, named when it accepts (can be the supplier's own account) | seal and unseal a blind count at the gate |
+| Referee | a neutral account named on the order, seen by the supplier before it accepts | rule on a disputed delivery: delivered, or refund |
+| Agent | the account that owns a registered agent (Agent #1287), named on the order | submit the order's invoice; ask for payment |
 
-Every Concordium account belongs to an identity verified by an identity provider. Concordium ID proofs for signers (step 3 of the build order) tighten "two accounts" into "two verified people".
+Every Concordium account belongs to an identity verified by an identity provider. Signers can also carry a Concordium ID proof (`person_tag`, `id_audit`; see `../docs/F01_SIGNER_IDENTITY.md`); when both counters on an order have one, the contract refuses an order whose two signers are the same person.
 
 ## Flow
-1. **Order.** Admin calls `create_order(order_id, supplier, expected_qty, receiver, approver, invoice_by)` and attaches the CCD. The order names exactly two people: a listed Receiver and a different listed Approver, and an agreed date (`invoice_by`) in the future. Money sits in the contract.
-   **Acceptance.** The supplier calls `accept_order(order_id, invoice_by)` from its own account, confirming the exact date (so a last-moment change cannot slip in). This is the PO acknowledgment. Before it, the buyer can change the date alone or take the money back; after it, a date change needs both sides (`change_date`: one proposes, the other confirms the same date).
-2. **Blind counts.** Each named signer calls `commit_count(order_id, sha256("CTP-count/v2" ‖ order_id ‖ signer account ‖ qty ‖ salt))`. Only after both have committed can they `reveal_count(order_id, qty, salt)`. Neither can copy the other's number: each seal carries its signer's own account, so a seal copied from the chain never opens for anyone else; a reveal that does not match its commit is rejected; a signer removed or moved to another role after committing can no longer reveal. Nobody else can count the order, so a third person cannot block it.
-3. **Invoice.** A registered agent calls `submit_invoice(order_id, invoice_hash, amount)`. The supplier calls `approve_invoice(order_id, invoice_hash, amount)` from its own account, so an agent cannot get an invented invoice paid, and a buyer who escrows less than the supplier approved cannot pay less: the order stays HELD until it is refunded and funded again at the right amount.
-4. **Decision.** The submitting agent (while still registered and verified in the registry), the supplier, or the buyer calls `execute_payment(order_id, receipt_hash)`. The rules are the same whoever asks, so payment never stalls on an offline agent. The contract pays only on CLEARED. HELD can be retried after the cause is fixed; once paid, the order is final and accepts no further decisions.
-5. **Recount.** If both counts are unsealed and do not confirm the delivery, the buyer or the supplier can call `recount(order_id)`: both signers count again, blind. At most 2 recounts; every earlier count stays in the event history.
-6. **The agreed date.** By `invoice_by`, the delivery must be confirmed and an invoice approved. After it the contract takes no new counts, invoices or approvals, so the order's state is final: if it was ready to pay, the supplier is paid (only the payout hold can still be running); if not, the buyer can take the money back.
+1. **Order.** The buyer calls `create_order(order_id, supplier, expected_qty, receiver, approver, invoice_by, agent, referee)` and attaches the CCD. The receiver and approver must be different listed signers in those roles; the agent must be registered; the referee must be none of the buyer, supplier, counters or agent; the quantity must be above zero. The counters are fixed for this order from now on: removing a signer from the list later does not affect it. The account that funds the order is recorded, and refunds go back to it.
+2. **Acceptance.** The supplier calls `accept_order(order_id, invoice_by, rep)` from its own account, confirming the exact date and naming its delivery rep. This is the PO acknowledgment. Before it, the buyer can change the date alone or take the money back. After it, a date change needs both sides (`change_date`): one side proposes, the other confirms the same date within 7 days. A proposal belongs to a side (buyer or supplier), not an account, and its proposer can withdraw it.
+3. **Blind counts at the gate.** The receiver and the supplier's rep each call `commit_count(order_id, sha256("CTP-count/v3" ‖ order_id ‖ round ‖ signer account ‖ qty ‖ salt))`. Nobody can unseal until both gate counters have sealed. The seal carries its signer's account and the count round, so a seal copied from another signer, or reused from an earlier round, never opens. Until anyone unseals, a signer can replace their own seal (for example after losing its key). The approver may seal and unseal too.
+   **No count, no unload.** The rep's screen shows whether the buyer's receiver has sealed; the rep unloads only after it has.
+4. **Delivery confirmed** when the receiver and the rep both unsealed the ordered quantity and the approver, if it unsealed, agrees. Or when the referee rules the goods delivered.
+5. **Invoice.** The agent named on the order calls `submit_invoice(order_id, invoice_hash, amount)`. The supplier calls `approve_invoice(order_id, invoice_hash, amount)` from its own account, so an agent cannot get an invented invoice paid, and a buyer who escrows less than the supplier approved cannot pay less.
+6. **Decision.** The named agent (registered, re-checked in the registry, and holding the same agent token as on the invoice), the supplier, or the buyer calls `execute_payment(order_id, receipt_hash)`. The rules are the same whoever asks. The contract pays only on CLEARED; once paid, the order is final.
+7. **Recount.** Once both gate counters have sealed and the delivery is not confirmed, the buyer or the supplier can call `recount(order_id)`: everyone counts again, blind, in a new round. At most 2 recounts; every earlier count stays in the event history.
+8. **Dispute.** If the supplier's rep unsealed a count and the counts do not confirm the delivery (a counter disagreed, or the receiver never unsealed), the referee can `rule(order_id, Delivered | Refund)`. Delivered: the delivery counts as confirmed, and the invoice can still be submitted and approved even after the date. Refund: the money goes back to whoever funded the order.
+9. **The latest date.** By `invoice_by`, the delivery must be confirmed and an invoice approved. After it the contract takes no new counts, invoices or approvals (unless the referee ruled the goods delivered). If the order was ready to pay, the supplier is paid. If not and the rep never counted, the buyer can take the money back. If the rep counted, only the referee can send it back.
 
 ## Rules checked by `execute_payment`
-| Code | Verdict | Rule |
-|---|---|---|
-Before any rule runs, the call is rejected outright (nothing logged) if: there is no invoice (`NoInvoice`), the caller is not the agent that submitted it (still registered and verified), the supplier, or the buyer (`NotAgent`), or the order is already paid or refunded (`OrderClosed`).
+Before any rule runs, the call is rejected outright (nothing logged) if: there is no invoice (`NoInvoice`); the caller is not the agent on the invoice (registered, verified, same token), the supplier or the buyer (`NotAgent`); or the order is already paid or refunded (`OrderClosed`).
 
 | Code | Verdict | Rule |
 |---|---|---|
-| `HeldOneSignature` | HELD | not both named people (different accounts, different roles) have revealed |
-| `HeldCountMismatch` | HELD | the revealed counts differ from each other or from the ordered quantity |
-| `HeldAmountMismatch` | HELD | invoice amount is not the escrowed amount |
+| `HeldOneSignature` | HELD | the receiver's and the supplier rep's counts are not both unsealed (and no referee ruling) |
+| `HeldCountMismatch` | HELD | an unsealed count differs from the ordered quantity (and no referee ruling) |
+| `HeldAmountMismatch` | HELD | the invoice amount is not the escrowed amount |
 | `HeldNoSupplierApproval` | HELD | the supplier has not approved this exact invoice hash for this exact amount |
 | `HeldPayoutCoolOff` | HELD | the supplier's payout account changed less than the hold ago (72 h in production; init refuses anything outside 1 minute to 30 days) |
 
 On HELD the contract **logs the decision and pays nothing** (the call still succeeds, so the record is kept). On CLEARED it marks the order paid, transfers the escrowed CCD to the supplier's payout account and logs the decision.
 
 ## Decision event (the on-chain receipt)
-`Decision { order_id, verdict, codes, agent, agent_token_id, receipt_hash, paid_to, at, asked_by }`, emitted by the contract. `receipt_hash` is the off-chain receipt's SHA-256 (see `../receipt/`), so the full record stays private while the contract vouches that this decision happened under these rules.
+`Decision { order_id, verdict, codes, agent, agent_token_id, receipt_hash, paid_to, at, asked_by }`, emitted by the contract. `receipt_hash` is the SHA-256 of the payment receipt the asker built from the order (see `../receipt/escrowReceipt.js`), so the fingerprint lives inside the very decision that moved, or held, the money.
 
 ## Design choices, and what protects the user
-- **The AI is never in charge of money.** The agent can submit and ask; the contract checks counts, amounts, signers and payout age itself.
-- **Blind counts by commit and reveal**, so the second signer cannot just agree with the first.
-- **Payout changes wait 72 hours**, which defeats "we changed our bank details" fraud: a hijacked supplier account cannot redirect a payment that is due now.
+- **The AI is never in charge of money.** The agent can submit and ask; the contract checks counts, amounts, approvals and payout age itself.
+- **Each side has a counter the other side does not choose.** The buyer names the receiver, the supplier names its rep, and payment needs both counts. The buyer's own counters cannot stall a delivered order into a refund: once the rep has counted, only the referee can send the money back.
+- **A referee for real disputes.** The contract cannot see a warehouse, so when the counts disagree, a neutral referee named on the order (and seen by the supplier before accepting) decides. Every ruling is an event on the record.
+- **The approver checks, but cannot stall.** A different number from the approver holds the payment; silence never blocks it.
+- **Blind counts by commit and reveal**, bound to the signer and the round, so no counter can copy another's number or reuse an old one.
+- **Honest mistakes can be fixed.** A lost seal key can be replaced before anyone unseals, and a recount (at most 2, opened by the buyer or supplier, never by a counter) corrects a miscount.
+- **Payout changes wait out a hold** (72 hours in production). The hold delays a payment to a new payout account and makes the change visible: a hijacked supplier account cannot redirect a payment that is due now, and the real supplier has the hold period to notice and act.
 - **Fail closed.** Anything missing gives HELD, never CLEARED.
-- **CCD first, stablecoin next.** Escrow uses CCD on testnet for the demo; paying out in a PLT stablecoin is the next step (build order item 4).
-- **The contract asks the agent registry itself (v3).** When the buyer adds an agent, and again at every invoice and every payment request, the escrow calls `agentOf` on the CIS-8004 registry `<12802,0>` and requires the agent to be Active and owned by the calling account. A revoked or transferred agent is refused at once. Anything the escrow cannot read or does not expect in the registry's answer is a refusal (fail closed). The parser is tested against the registry's real answer for Agent #1287.
-- **A wrong invoice can be cleared (v3).** The buyer or the supplier can `reject_invoice`, which clears the invoice and any approval, so a compromised agent cannot jam an order with a junk invoice.
-- **The money is locked for the supplier once it accepts.** The buyer can take it back only while the supplier has not accepted, or after the agreed date if the order was not ready (delivery not confirmed, or no invoice approved for the full amount). The buyer cannot reject an invoice the supplier approved for the full amount. The supplier can always give the money back, for example when it cancels.
-- **One date, agreed by both.** The buyer proposes it, the supplier accepts it, and any change needs both. After it, nothing new is accepted, so a late invoice cannot sneak in and the buyer is free to use another supplier.
-- **Honest mistakes can be fixed.** A recount (at most 2, opened by the buyer or supplier, never by a signer) corrects a miscount without letting anyone stall the order forever.
+- **The contract asks the agent registry itself.** When the buyer adds an agent, and again at every invoice and every payment request by the agent, the escrow calls `agentOf` on the CIS-8004 registry `<12802,0>` and requires the agent to be Active, owned by the calling account and holding the token on the invoice. Anything the escrow cannot read or does not expect is a refusal. The parser is tested against the registry's real answer for Agent #1287.
+- **One agent per order.** Only the agent named on an order can put an invoice on it, so another agent cannot jam it. The buyer or supplier can reject a wrong invoice; the buyer cannot reject one the supplier approved for the full amount.
+- **One date, agreed by both.** The buyer proposes it, the supplier accepts it, and any change needs both sides within 7 days. After it, nothing new is accepted, so a late invoice cannot sneak in.
 - **Nobody waits on the agent.** The supplier or buyer can ask for the decision too; the rules do not change with who asks.
-- **Every change is on the record.** Removing a signer or agent, proposing or changing the admin, proposing or changing the date, and every recount emit an event.
-- **The admin role moves in two steps.** The current admin proposes a new account and that account must accept, so a typo cannot lock anyone out.
-- **Two listed accounts today, two verified people next.** Every Concordium account belongs to an ID-verified identity, but one person can hold several accounts. The Concordium ID step adds zero-knowledge proofs that the receiver and approver are different verified people.
+- **Refunds go back to the funder**, even if the buyer admin changes in between.
+- **Every change is on the record.** Removing a signer or agent, admin handover, date proposals and changes, recounts and rulings all emit events.
+- **The registry address is fixed per contract.** Letting an admin swap it would let that admin point the escrow at a registry it controls. A registry migration is handled by deploying a new escrow version, the same way every version so far has been deployed.
+- **CCD first, stablecoin next.** Escrow uses CCD on testnet for the demo; paying out in a PLT stablecoin is the next step.

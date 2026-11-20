@@ -53,7 +53,9 @@ class Reader {
   bool() { const x = this.u8(); if (x > 1) throw new Error('bad bool'); return x === 1; }
   opt() { const x = this.u8(); if (x > 1) throw new Error('bad option tag'); return x === 1; }
   hex32() { return [...this.raw(32)].map((x) => x.toString(16).padStart(2, '0')).join(''); }
-  role() { const t = this.u8(); if (t > 1) throw new Error('bad role'); return t === 0 ? 'Receiver' : 'Approver'; }
+  role() { const t = this.u8(); if (t > 2) throw new Error('bad role'); return ['Receiver', 'Approver', 'SupplierRep'][t]; }
+  /** A u64 the app uses as a plain number (ids, times): refused above 2^53 so it can never round. */
+  num() { const v = this.u64(); if (v > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('number too large'); return Number(v); }
   done() { if (this.i !== this.b.length) throw new Error('unexpected extra contract data'); }
 }
 
@@ -82,10 +84,19 @@ export async function decodeOrder(bytes) {
   o.supplier_approval = r.opt() ? { invoice_hash: r.hex32(), amount: r.u64() } : null;
   o.paid = r.bool();
   o.refunded = r.bool();
-  o.invoice_by = Number(r.u64());
+  o.invoice_by = r.num();
   o.accepted = r.bool();
-  o.date_proposal = r.opt() ? { by: await acct(r), invoice_by: Number(r.u64()) } : null;
+  if (r.opt()) {
+    const side = r.u8();
+    if (side > 1) throw new Error('bad side');
+    o.date_proposal = { by: side === 0 ? 'Buyer' : 'Supplier', invoice_by: r.num(), expires: r.num() };
+  } else o.date_proposal = null;
   o.recounts = r.u8();
+  o.agent = await acct(r);
+  o.referee = await acct(r);
+  o.rep = r.opt() ? await acct(r) : null;
+  o.funder = await acct(r);
+  o.ruled_delivered = r.bool();
   r.done();
   return o;
 }
@@ -100,7 +111,7 @@ const DECISION_TAG = 10; // position of Decision in the contract's Event enum
 export async function decodeDecision(bytes) {
   const r = new Reader(bytes);
   if (r.u8() !== DECISION_TAG) return null;
-  const d = { order_id: Number(r.u64()) };
+  const d = { order_id: r.num() };
   const v = r.u8();
   if (v >= VERDICTS.length) throw new Error('bad verdict');
   d.verdict = VERDICTS[v];
@@ -108,29 +119,39 @@ export async function decodeDecision(bytes) {
   if (n > CODES.length) throw new Error('too many codes');
   d.codes = Array.from({ length: n }, () => { const c = r.u8(); if (c >= CODES.length) throw new Error('bad code'); return CODES[c]; });
   d.agent = await acct(r);
-  d.agent_token_id = Number(r.u64());
+  d.agent_token_id = r.num();
   d.receipt_hash = r.hex32();
   d.paid_to = r.opt() ? await acct(r) : null;
-  d.at = Number(r.u64());
+  d.at = r.num();
   d.asked_by = await acct(r);
   r.done();
   return d;
 }
 
-/** Both named people unsealed, and both counts equal the ordered quantity. Same rule as the contract. */
-export const deliveryConfirmed = (o) => o.reveals.length === 2 && o.reveals[0].role !== o.reveals[1].role && o.reveals.every((x) => x.qty === o.expected_qty);
+const countOf = (o, role) => o.reveals.find((x) => x.role === role)?.qty;
+/** The supplier's delivery rep has unsealed a count: the supplier claims a delivery. */
+export const repCounted = (o) => o.reveals.some((x) => x.role === 'SupplierRep');
+/** Both gate counters (the buyer's receiver and the supplier's rep) have sealed this round. */
+export const gateSealed = (o) => o.commits.some((c) => c.role === 'Receiver') && o.commits.some((c) => c.role === 'SupplierRep');
+/** Same rule as contract/src/rules.rs: receiver and rep both unsealed the ordered quantity and
+ *  any approver count agrees, or the referee ruled the goods delivered. */
+export const deliveryConfirmed = (o) => o.ruled_delivered || (countOf(o, 'Receiver') === o.expected_qty && countOf(o, 'SupplierRep') === o.expected_qty && (countOf(o, 'Approver') ?? o.expected_qty) === o.expected_qty);
+/** The rep counted but the counts do not confirm the delivery: the referee can rule. */
+export const disputed = (o) => !o.paid && !o.refunded && repCounted(o) && !deliveryConfirmed(o);
 /** The supplier approved the submitted invoice, for the full escrowed amount. */
 export const invoiceApproved = (o) => Boolean(o.invoice && o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount && o.invoice.amount === o.amount);
 export const readyToPay = (o) => deliveryConfirmed(o) && invoiceApproved(o);
 export const pastDue = (o, now = Date.now()) => now > o.invoice_by;
 /** The buyer can take the money back: before the supplier accepts, or after the date if not ready. */
-export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o)));
-export const recountAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && !pastDue(o, now) && o.reveals.length === 2 && !deliveryConfirmed(o) && o.recounts < MAX_RECOUNTS;
+export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o) && !repCounted(o)));
+export const recountAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && !pastDue(o, now) && gateSealed(o) && !deliveryConfirmed(o) && o.recounts < MAX_RECOUNTS;
+/** Invoices and approvals: before the date, or any time after the referee ruled the goods delivered. */
+export const invoiceOpen = (o, now = Date.now()) => o.ruled_delivered || !pastDue(o, now);
 
 /** Supplier, as returned by view_supplier. payout_set_at is milliseconds since 1970. */
 export async function decodeSupplier(bytes) {
   const r = new Reader(bytes);
-  const s = { payout: await acct(r), payout_set_at: Number(r.u64()) };
+  const s = { payout: await acct(r), payout_set_at: r.num() };
   r.done();
   return s;
 }
@@ -140,8 +161,8 @@ export async function decodeConfig(bytes) {
   const r = new Reader(bytes);
   const c = { admin: await acct(r) };
   c.pending_admin = r.opt() ? await acct(r) : null;
-  c.hold_ms = Number(r.u64());
-  c.registry = { index: Number(r.u64()), subindex: Number(r.u64()) };
+  c.hold_ms = r.num();
+  c.registry = { index: r.num(), subindex: r.num() };
   r.done();
   return c;
 }
@@ -150,11 +171,14 @@ export async function decodeConfig(bytes) {
 export function orderStage(o, supplier, holdMs, now = Date.now()) {
   if (o.refunded) return { key: 'refunded', label: 'Refunded', tone: 'mute' };
   if (o.paid) return { key: 'paid', label: 'Paid', tone: 'ok' };
-  if (pastDue(o, now) && !readyToPay(o)) return { key: 'expired', label: 'Date passed, not ready: buyer can take the money back', tone: 'hold' };
+  if (pastDue(o, now) && !readyToPay(o) && disputed(o)) return { key: 'dispute', label: 'Date passed, delivery disputed: the referee decides', tone: 'hold' };
+  if (pastDue(o, now) && !readyToPay(o) && !(o.ruled_delivered)) return { key: 'expired', label: 'Date passed, not ready: buyer can take the money back', tone: 'hold' };
   if (!o.accepted) return { key: 'accept', label: 'Waiting for the supplier to accept', tone: 'wait' };
-  if (o.commits.length < 2) return { key: 'counting', label: `Counting: ${o.commits.length} of 2 sealed`, tone: 'wait' };
-  if (o.reveals.length < 2) return { key: 'revealing', label: `Revealing: ${o.reveals.length} of 2`, tone: 'wait' };
-  if (o.reveals.some((x) => x.qty !== o.expected_qty)) return { key: 'mismatch', label: o.recounts < MAX_RECOUNTS ? 'Counts do not match: recount possible' : 'Counts do not match, no recounts left', tone: 'hold' };
+  if (!deliveryConfirmed(o)) {
+    if (!gateSealed(o)) return { key: 'counting', label: `Counting at the gate: ${['Receiver', 'SupplierRep'].filter((r) => o.commits.some((c) => c.role === r)).length} of 2 sealed`, tone: 'wait' };
+    if (!(countOf(o, 'Receiver') !== undefined && countOf(o, 'SupplierRep') !== undefined)) return { key: 'revealing', label: `Unsealing: ${o.reveals.filter((x) => x.role !== 'Approver').length} of 2`, tone: 'wait' };
+    return { key: 'mismatch', label: o.recounts < MAX_RECOUNTS ? 'Counts do not match: recount, or the referee decides' : 'Counts do not match: the referee decides', tone: 'hold' };
+  }
   if (!o.invoice) return { key: 'invoice', label: 'Waiting for the invoice', tone: 'wait' };
   const approved = o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount;
   if (!approved) return { key: 'approval', label: 'Waiting for the supplier to approve', tone: 'wait' };
@@ -183,19 +207,20 @@ export function ccdToMicro(s) {
 export const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 /** Bytes a signer hashes to seal a count. Same layout as contract/src/rules.rs commit_preimage:
- *  "CTP-count/v2" ‖ order id (u64 LE) ‖ signer account (32 bytes) ‖ qty (u64 LE) ‖ key (32 bytes). */
-export function sealPreimage(orderId, signer, qty, key) {
-  const pre = new Uint8Array(92);
-  pre.set(new TextEncoder().encode('CTP-count/v2'), 0);
+ *  "CTP-count/v3" ‖ order id (u64 LE) ‖ round (u8) ‖ signer account (32 bytes) ‖ qty (u64 LE) ‖ key (32 bytes). */
+export function sealPreimage(orderId, round, signer, qty, key) {
+  const pre = new Uint8Array(93);
+  pre.set(new TextEncoder().encode('CTP-count/v3'), 0);
   const dv = new DataView(pre.buffer);
   dv.setBigUint64(12, BigInt(orderId), true);
-  pre.set(signer, 20);
-  dv.setBigUint64(52, BigInt(qty), true);
-  pre.set(key, 60);
+  pre[20] = Number(round);
+  pre.set(signer, 21);
+  dv.setBigUint64(53, BigInt(qty), true);
+  pre.set(key, 61);
   return pre;
 }
 /** Seal for `signerAddress` (base58). The signer's own account is inside the seal. */
-export async function sealOf(orderId, signerAddress, qty, key) {
+export async function sealOf(orderId, round, signerAddress, qty, key) {
   const signer = await accountBytes(signerAddress);
-  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', sealPreimage(orderId, signer, qty, key))));
+  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', sealPreimage(orderId, round, signer, qty, key))));
 }

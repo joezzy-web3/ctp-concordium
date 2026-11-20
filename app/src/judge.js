@@ -2,9 +2,9 @@
 // Each one is a dry run: the node runs the real contract code on the real state, as the
 // account that would attempt the attack. Nothing is sent, signed or paid, so anyone can
 // press the buttons without a wallet.
-import { AGENT, ESCROW, listOrders, simulate, decisionsIn } from './chain.js';
+import { AGENT, ESCROW, listOrders, simulate, decisionsIn, viewConfig, viewSupplier } from './chain.js';
 import { CAST } from './cast.js';
-import { accountBytes, invoiceApproved, pastDue, readyToPay, microToCcd } from './codec.js';
+import { accountBytes, invoiceApproved, pastDue, readyToPay, microToCcd, repCounted, deliveryConfirmed } from './codec.js';
 import { CODE_TEXT, verifyReceiptCard } from './payreceipt.js';
 import { h, fill, icon, chip, short } from './ui.js';
 
@@ -30,6 +30,26 @@ const ATTACKS = [
     pick: (os) => newest(os, (o) => isOpen(o) && o.invoice && !invoiceApproved(o) && o.invoice.agent === AGENT.owner),
     run: (o) => ['execute_payment', cat(u64(o.id), ZERO32)],
     expect: 'Held',
+    code: 'HeldNoSupplierApproval',
+  },
+  {
+    title: 'The buyer keeps the goods and stalls the count to get its money back',
+    threat: 'The supplier’s rep counted the delivery, the buyer’s receiver never unseals, and the buyer tries to refund.',
+    who: 'Buyer admin', invoker: CAST.buyer,
+    need: 'an open order the supplier’s rep counted that the counts do not confirm',
+    pick: (os) => newest(os, (o) => isOpen(o) && o.accepted && repCounted(o) && !deliveryConfirmed(o)),
+    run: (o) => ['refund', u64(o.id)],
+    expect: 'RefundLocked',
+  },
+  {
+    title: 'A hijacked supplier account redirects the payout and asks to be paid',
+    threat: 'The attacker sets a new payout account; the hold delays any payment there and makes the change visible.',
+    who: 'Supplier', invoker: CAST.supplier,
+    need: 'an order ready to pay whose supplier changed its payout account less than the hold ago',
+    pick: (os, ctx) => newest(os, (o) => isOpen(o) && readyToPay(o) && ctx.inHold(o.supplier)),
+    run: (o) => ['execute_payment', cat(u64(o.id), ZERO32)],
+    expect: 'Held',
+    code: 'HeldPayoutCoolOff',
   },
   {
     title: 'The agent approves its own fake invoice',
@@ -118,7 +138,7 @@ async function tryAttack(a, order, out) {
     } else {
       const verdict = VERDICT[r.returnValue?.[0]] ?? 'Unknown';
       const [d] = await decisionsIn(r.events ?? []);
-      blocked = verdict !== 'Cleared' && a.expect === 'Held';
+      blocked = verdict !== 'Cleared' && a.expect === 'Held' && (!a.code || (d?.codes ?? []).includes(a.code));
       what = [h('b', `${verdict}: `), verdict === 'Cleared' ? 'the contract would pay.' : (d?.codes ?? []).map((c) => CODE_TEXT[c] ?? c).join(' ') || 'nothing is paid.'];
     }
     fill(out,
@@ -133,9 +153,18 @@ async function tryAttack(a, order, out) {
 export async function judgeView() {
   let orders = [];
   let loadError = null;
-  try { orders = await listOrders(); } catch (e) { loadError = String(e?.message ?? e); }
+  const holdUntil = {};
+  try {
+    const [os, cfg] = await Promise.all([listOrders(), viewConfig()]);
+    orders = os;
+    for (const s of new Set(orders.map((o) => o.supplier))) {
+      const sup = await viewSupplier(s).catch(() => null);
+      if (sup) holdUntil[s] = sup.payout_set_at + cfg.hold_ms;
+    }
+  } catch (e) { loadError = String(e?.message ?? e); }
+  const ctx = { inHold: (s) => Date.now() < (holdUntil[s] ?? 0) };
   const cards = ATTACKS.map((a) => {
-    const order = loadError ? null : a.pick(orders);
+    const order = loadError ? null : a.pick(orders, ctx);
     const out = h('div.verify-out');
     return h('section.panel.attack',
       h('h3', a.title),

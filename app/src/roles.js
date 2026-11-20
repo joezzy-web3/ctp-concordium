@@ -1,6 +1,6 @@
 // Supplier and Agent spaces.
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
-import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue } from './codec.js';
+import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen } from './codec.js';
 import { dateBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
 import { askForPayment, receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
@@ -61,22 +61,34 @@ export async function supplierView() {
   const waiting = staged.filter((x) => isOpen(x) && x.o.accepted && !x.o.invoice);
   const tools = (o) => h('div.order-tools', dateBlock(o, me, 'supplier'), h('div.actions', askPaymentButton(o, 'Ask for my payment'), recountButton(o), releaseButton(o)));
 
-  const acceptCard = ({ o }) => h('section.panel.count',
-    h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', 'New order: accept it to lock the money for you'), h('span', `${o.expected_qty} units`))),
-    h('div.big-amount.num', `${microToCcd(o.amount)} CCD`),
-    h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(o.invoice_by)), '. You can deliver and be paid any day before it. By the end of that day the delivery must be counted and your invoice approved. Once you accept, the buyer cannot take this money back unless the date passes with the order not ready, or you give it back.'),
-    pastDue(o) ? h('p.err', icon('alert', 16), 'This date has passed. Ask the buyer for a new date before accepting.') : h('div.count-row',
-      h('button.btn.gold', { type: 'button', onclick: async (e) => {
-        e.currentTarget.disabled = true;
-        const r = await act('accept_order', { order_id: o.id, invoice_by: iso(o.invoice_by) }, { done: `You accepted order #${o.id}. The money is locked for you until ${fmtDay(o.invoice_by)}.` });
-        if (r.ok) location.reload(); else e.currentTarget.disabled = false;
-      } }, icon('check', 18), 'Accept order and date')),
-    h('div.order-tools', dateBlock(o, me, 'supplier', { showDate: false }), h('div.actions', releaseButton(o))));
+  const acceptCard = ({ o }) => {
+    const repIn = h('input.mono', { value: me, spellcheck: false, 'aria-label': 'Delivery rep account' });
+    return h('section.panel.count',
+      h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', 'New order: accept it to lock the money for you'), h('span', `${o.expected_qty} units`))),
+      h('div.big-amount.num', `${microToCcd(o.amount)} CCD`),
+      h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(o.invoice_by)), '. You can deliver and be paid any day before it. Once you accept, the buyer cannot take this money back unless the date passes with nothing delivered, or you give it back.'),
+      h('dl.facts',
+        h('dt', 'Buyer’s receiver (gate)'), h('dd.mono', short(o.receiver)),
+        h('dt', 'Buyer’s approver (inside)'), h('dd.mono', short(o.approver)),
+        h('dt', 'Referee for disputes'), h('dd.mono', short(o.referee))),
+      pastDue(o) ? h('p.err', icon('alert', 16), 'This date has passed. Ask the buyer for a new date before accepting.') : [
+        h('div.field', h('label', 'Your delivery rep (the driver, who counts at the gate)'), repIn,
+          h('p.fine', 'Your own account works if you deliver yourself. At the gate the rep sees whether the buyer’s receiver has sealed a count: no count, no unload.')),
+        h('div.count-row',
+          h('button.btn.gold', { type: 'button', onclick: async (e) => {
+            const rep = repIn.value.trim();
+            if (!/^[1-9A-HJ-NP-Za-km-z]{50}$/.test(rep)) return notice('no', 'Enter your delivery rep’s Concordium account.');
+            e.currentTarget.disabled = true;
+            const r = await act('accept_order', { order_id: o.id, invoice_by: iso(o.invoice_by), rep }, { done: `You accepted order #${o.id}. The money is locked for you until ${fmtDay(o.invoice_by)}.` });
+            if (r.ok) location.reload(); else e.currentTarget.disabled = false;
+          } }, icon('check', 18), 'Accept order and date'))],
+      h('div.order-tools', dateBlock(o, me, 'supplier', { showDate: false }), h('div.actions', releaseButton(o))));
+  };
   const paid = staged.filter(({ o }) => o.paid);
 
   const approveCard = ({ o, st }) => {
     const approved = invoiceApproved(o) || (o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount);
-    const closed = pastDue(o) && !approved;
+    const closed = !invoiceOpen(o) && !approved;
     const amountIn = h('input.num', { value: microToCcd(o.invoice.amount), inputMode: 'decimal', 'aria-label': 'Amount you agree to be paid, in CCD' });
     const fileState = h('p.live', 'Pick the invoice file you sent, to confirm it is the same one.');
     let fileOk = false;
@@ -157,12 +169,12 @@ export async function agentView() {
   } catch {
     return frame(side, unreachable());
   }
-  const open = orders.filter((o) => !o.paid && !o.refunded).reverse();
+  const open = orders.filter((o) => !o.paid && !o.refunded && o.agent === AGENT.owner).reverse();
 
   const orderCard = (o) => {
     const st = orderStage(o, sups[o.supplier], cfg.hold_ms);
     let action;
-    if (!o.invoice && pastDue(o)) {
+    if (!o.invoice && !invoiceOpen(o)) {
       action = h('p', 'The latest date has passed, so no invoice can be submitted unless the buyer and supplier agree a new date.');
     } else if (!o.invoice) {
       let hash = null;

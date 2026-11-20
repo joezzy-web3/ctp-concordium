@@ -4,7 +4,7 @@
 // kept in this browser and can be downloaded; anyone can check it against the chain.
 import { act } from './act.js';
 import { ESCROW, currentAccount, viewOrder, viewSupplier, decisionsIn, decisionsInTx, ccdscanTx } from './chain.js';
-import { buildEscrowReceipt, escrowReceiptHash, checkReceiptAgainstDecision } from '../../receipt/escrowReceipt.js';
+import { buildEscrowReceipt, escrowReceiptHash, checkReceiptAgainstDecision, compareReceiptWithOrder } from '../../receipt/escrowReceipt.js';
 import { canonicalize } from '../../receipt/canonical.js';
 import { h, fill, icon, chip, notice, store, short } from './ui.js';
 
@@ -27,10 +27,20 @@ export async function askForPayment(orderId, { done } = {}) {
     notice('no', h('b', 'Could not prepare the receipt. '), String(e?.message ?? e));
     return { ok: false };
   }
+  // Kept before sending, so a timeout or a closed tab never leaves a fingerprint on-chain
+  // whose receipt nobody has (audit 20 Nov M3).
+  const save = (patch) => store.set(key(orderId), [...savedReceipts(orderId).filter((x) => x.hash !== hash), { receipt, hash, tx: null, verdict: null, codes: [], ...patch }]);
+  save({ pending: true });
   const r = await act('execute_payment', { order_id: orderId, receipt_hash: hash }, { pending: 'Asking the contract. ', done: done ?? `The contract recorded its decision on order #${orderId}, with your receipt.` });
+  if (r.ok === false) {
+    // Not sent, or refused: a refused transaction records nothing, so there is no decision to keep.
+    store.set(key(orderId), savedReceipts(orderId).filter((x) => x.hash !== hash));
+  } else if (!r.ok) {
+    save({ pending: true, tx: r.tx ?? null }); // sent, not yet confirmed from here
+  }
   if (r.ok) {
     const [decision] = await decisionsIn(r.events ?? []);
-    store.set(key(orderId), [...savedReceipts(orderId), { receipt, hash, tx: r.tx, verdict: decision?.verdict ?? null, codes: decision?.codes ?? [] }]);
+    save({ tx: r.tx, verdict: decision?.verdict ?? null, codes: decision?.codes ?? [] });
     if (decision?.verdict === 'Cleared') notice('ok', h('b', 'Cleared. '), `The contract paid the supplier at ${short(decision.paid_to)}.`);
     else if (decision) notice('wait', h('b', 'Held. '), decision.codes.map((c) => CODE_TEXT[c] ?? c).join(' '));
   }
@@ -62,7 +72,14 @@ export async function verifyReceipt(receipt, tx) {
   if (!decisions.length) return { ok: false, decision: null, problems: ['That transaction has no payment decision from this escrow.'] };
   const results = await Promise.all(decisions.map(async (d) => ({ d, p: await checkReceiptAgainstDecision(receipt, d, ESCROW) })));
   const hit = results.find((x) => x.p.length === 0) ?? results[0];
-  return { ok: hit.p.length === 0, decision: hit.d, problems: hit.p };
+  // The facts inside the receipt, against the order the contract holds (audit 20 Nov N14).
+  let notes = [];
+  if (hit.p.length === 0) {
+    const diffs = compareReceiptWithOrder(receipt, await viewOrder(receipt.order_id));
+    if (hit.d.verdict === 'Cleared') hit.p.push(...diffs);
+    else notes = diffs.map((x) => `${x} (the order may have changed since this held decision)`);
+  }
+  return { ok: hit.p.length === 0, decision: hit.d, problems: hit.p, notes };
 }
 
 const verdictChip = (v) => chip(v === 'Cleared' ? 'ok' : 'hold', v === 'Cleared' ? 'Cleared' : v === 'Held' ? 'Held' : v ?? 'Unknown');
@@ -70,7 +87,8 @@ const verdictChip = (v) => chip(v === 'Cleared' ? 'ok' : 'hold', v === 'Cleared'
 function resultView(res) {
   const d = res.decision;
   return res.ok
-    ? h('div.verify-ok', h('p', icon('check', 16), h('b', ' This receipt is the one the contract recorded with its decision.')),
+    ? h('div.verify-ok', h('p', icon('check', 16), h('b', ' This receipt is the one the contract recorded with its decision, and its facts match the order on-chain.')),
+      res.notes?.length ? h('ul.plain', res.notes.map((x) => h('li.fine', x))) : null,
       h('p.fine', 'Verdict: ', verdictChip(d.verdict), d.codes.length ? ` ${d.codes.map((c) => CODE_TEXT[c] ?? c).join(' ')}` : '', d.paid_to ? ` · paid to ${short(d.paid_to)}` : '', ` · asked by ${short(d.asked_by)}`))
     : h('div.verify-no', h('p.err', icon('alert', 16), h('b', ' This receipt does not match the decision on-chain.')), h('ul.plain', res.problems.map((x) => h('li', x))));
 }
@@ -83,10 +101,10 @@ export function receiptPanel(o) {
   return h('div.receipts',
     h('h4', 'Payment receipts'),
     h('ul.plain', recs.map((rec) => h('li',
-      verdictChip(rec.verdict), ' ', h('code', `${rec.hash.slice(0, 12)}…`), ' ',
-      h('a.inline', { href: ccdscanTx(rec.tx), target: '_blank', rel: 'noopener' }, 'Decision', icon('external', 14)), ' ',
+      rec.pending && !rec.verdict ? chip('wait', 'Sent, not confirmed here') : verdictChip(rec.verdict), ' ', h('code', `${rec.hash.slice(0, 12)}…`), ' ',
+      rec.tx ? [h('a.inline', { href: ccdscanTx(rec.tx), target: '_blank', rel: 'noopener' }, 'Decision', icon('external', 14)), ' '] : null,
       h('button.btn.text.small', { type: 'button', onclick: () => download(rec) }, icon('download', 14), 'Download'), ' ',
-      h('button.btn.text.small', { type: 'button', onclick: async (e) => {
+      !rec.tx ? null : h('button.btn.text.small', { type: 'button', onclick: async (e) => {
         e.currentTarget.disabled = true;
         try { fill(out, resultView(await verifyReceipt(rec.receipt, rec.tx))); } catch (err) { fill(out, h('p.err', String(err?.message ?? err))); }
         e.currentTarget.disabled = false;
