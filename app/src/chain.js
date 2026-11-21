@@ -176,9 +176,10 @@ export async function send(entrypoint, params, microCcd = 0n) {
 
 /** If the wallet refused while another account is selected in it, say how to fix it. */
 async function withSwitchHint(e) {
+  if (/already open/i.test(String(e?.message ?? e))) return new Error('The wallet already has a request open. Open the Concordium Wallet, finish or reject it, then try again.');
   const recent = await provider.getMostRecentlySelectedAccount?.().catch(() => null);
-  if (!recent || recent === account || /reject|cancel|denied|closed/i.test(String(e?.message ?? e))) return e;
-  const err = new Error(`${e?.message ?? e} If the wallet only signs for the account selected in it, select ${account.slice(0, 4)}…${account.slice(-4)} in the Concordium Wallet and try again.`);
+  if (!recent || recent === account || /reject|cancel|denied|closed|already open|prompt/i.test(String(e?.message ?? e))) return e;
+  const err = new Error(`${String(e?.message ?? e).replace(/\.?$/, '.')} If the wallet only signs for the account selected in it, select ${account.slice(0, 4)}…${account.slice(-4)} in the Concordium Wallet and try again.`);
   err.cause = e;
   return err;
 }
