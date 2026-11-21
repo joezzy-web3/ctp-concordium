@@ -22,9 +22,9 @@ export const normDoc = (s) => String(s ?? '').trim().toUpperCase().replace(/\s+/
  * The salt is secret to the buyer, so the on-chain tag cannot be matched to a guessed document.
  */
 export async function personTag(escrow, salt, issuer, docNo) {
-  const i = normDoc(issuer);
+  const i = normDoc(issuer); // empty when the identity has no document issuer
   const d = normDoc(docNo);
-  if (!i || !d) throw new Error('The proof did not reveal the ID document issuer and number.');
+  if (!d) throw new Error('The proof did not reveal the ID document number.');
   if (!(salt instanceof Uint8Array) || salt.length !== 32) throw new Error('The person-tag salt must be 32 bytes.');
   return toHex(await sha256(cat(enc.encode(TAG_DOMAIN), [0], enc.encode(`<${escrow.index},${escrow.subindex}>`), [0], salt, enc.encode(i), [0], enc.encode(d))));
 }

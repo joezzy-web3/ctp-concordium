@@ -37,6 +37,7 @@ test('different people, salts or escrows give different fingerprints', async () 
   assert.notEqual(base, await personTag(ESCROW, new Uint8Array(32).fill(8), 'NG', 'A1234567'));
   assert.notEqual(base, await personTag({ index: 1, subindex: 0 }, SALT, 'NG', 'A1234567'));
   await assert.rejects(personTag(ESCROW, SALT, 'NG', ''), /did not reveal/);
+  assert.match(await personTag(ESCROW, SALT, '', 'A1234567'), /^[0-9a-f]{64}$/, 'an identity without a document issuer still gets a fingerprint');
 });
 
 test('the salt comes from the buyer’s signature and is the same every time', async () => {

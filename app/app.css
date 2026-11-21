@@ -261,3 +261,5 @@ div.result{background:var(--sheet);border-radius:16px;padding:16px 20px;margin-t
 .acct-more p{margin:4px 0 8px;color:var(--mute);font-size:13px}
 @media (prefers-reduced-motion: reduce){.acct-menu{animation:none}}
 .acct-steps{margin:4px 0 4px 18px;padding:0;color:var(--mute);font-size:13px;display:grid;gap:2px}
+.pend-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.pend-acts .btn{white-space:nowrap}
+.ready-list .btn{white-space:nowrap}

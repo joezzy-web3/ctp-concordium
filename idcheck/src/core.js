@@ -5,22 +5,32 @@ import {
   AccountAddress, IdentityProviderDID, TransactionHash,
   VerifiablePresentationV1, VerificationAuditRecordV1, VerificationRequestV1,
 } from '@concordium/web-sdk';
+import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
 import { RESOURCE, boundToAccount, revealed, toHex } from './idlogic.js';
 
+// This module is bundled on its own, with its own copy of the SDK, so it keeps its own node
+// client: SDK values made here (account addresses, credential ids) are only recognised by
+// a client from the same copy.
+const grpcClient = new ConcordiumGRPCWebClient('https://grpc.testnet.concordium.com', 20000);
+
 /** Every identity provider on testnet, so a counter can prove with whichever issued their ID. */
-export async function testnetIssuers(grpc) {
+export async function testnetIssuers(grpc = grpcClient) {
   const out = [];
   for await (const ip of grpc.getIdentityProviders()) out.push(new IdentityProviderDID('Testnet', Number(ip.ipIdentity)));
   if (!out.length) throw new Error('Could not read the identity providers from the node.');
   return out;
 }
 
-/** A proof request for one counter: a verified adult, revealing ID document issuer and number. */
-export async function draftRequest(grpc, escrow, signer, role) {
+/**
+ * A proof request for one counter: a verified adult, revealing the ID document number only.
+ * (Testnet identities may have no document issuer, and a request for a missing attribute
+ * cannot be answered, so the issuer is not asked for.)
+ */
+export async function draftRequest(escrow, signer, role) {
   const nonce = crypto.getRandomValues(new Uint8Array(32));
   const context = VerificationRequestV1.createSimpleContext(nonce, `ctp-${toHex(crypto.getRandomValues(new Uint8Array(8)))}`, RESOURCE(escrow, signer), `Clear to Pay: prove you are a verified adult before counting deliveries as ${role}`);
   const claims = VerificationRequestV1.claimsBuilder()
-    .addAccountClaims(await testnetIssuers(grpc), (b) => { b.revealAttribute('idDocIssuer'); b.revealAttribute('idDocNo'); b.addMinimumAge(18); })
+    .addAccountClaims(await testnetIssuers(), (b) => { b.revealAttribute('idDocNo'); b.addMinimumAge(18); })
     .getClaims();
   return { context, claims, anchor: VerificationRequestV1.createAnchor(context, claims, { ctp: 'signer-check' }) };
 }
@@ -37,7 +47,8 @@ export const presentationJSON = (p) => (typeof p?.toJSON === 'function' ? p.toJS
  * that request, every proof verifies and every credential is active. Then the proof must be about
  * one credential of the counter's own account. Returns the audit record and revealed attributes.
  */
-export async function verifyAnswer(grpc, escrow, signer, requestJSON, presentation) {
+export async function verifyAnswer(escrow, signer, requestJSON, presentation) {
+  const grpc = grpcClient;
   const request = VerificationRequestV1.fromJSON(requestJSON);
   const vp = VerifiablePresentationV1.fromJSON(presentation);
   const res = await VerificationAuditRecordV1.createChecked(`ctp:${escrow.index}:${signer}:${Date.now()}`, request, vp, grpc, 'Testnet');
