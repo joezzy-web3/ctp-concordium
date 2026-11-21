@@ -2,11 +2,11 @@
 // Built on its own as app/idcheck-core.js and loaded only when someone opens ID checks, so the
 // rest of the app stays light. No wallet here: the app signs and sends.
 import {
-  AccountAddress, IdentityProviderDID, TransactionHash,
+  AccountAddress, CredentialRegistrationId, IdentityProviderDID, TransactionHash,
   VerifiablePresentationV1, VerificationAuditRecordV1, VerificationRequestV1,
 } from '@concordium/web-sdk';
 import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
-import { RESOURCE, boundToAccount, revealed, toHex } from './idlogic.js';
+import { RESOURCE, boundToAccount, presentedCredIds, revealed, toHex } from './idlogic.js';
 
 // This module is bundled on its own, with its own copy of the SDK, so it keeps its own node
 // client: SDK values made here (account addresses, credential ids) are only recognised by
@@ -54,7 +54,17 @@ export async function verifyAnswer(escrow, signer, requestJSON, presentation) {
   const res = await VerificationAuditRecordV1.createChecked(`ctp:${escrow.index}:${signer}:${Date.now()}`, request, vp, grpc, 'Testnet');
   if (res.type !== 'success') throw new Error(`The proof did not verify: ${res.error?.message ?? res.error}`);
   const info = await grpc.getAccountInfo(AccountAddress.fromBase58(signer));
-  if (!boundToAccount(presentation, info)) throw new Error('The proof is not about the counter’s own account.');
+  if (!boundToAccount(presentation, info)) {
+    // Say which account the proof came from, so the counter knows what to pick in the wallet.
+    const ids = presentedCredIds(presentation);
+    let from = 'an identity, not an account';
+    if (ids.length === 1) {
+      try { from = `account ${AccountAddress.toBase58((await grpc.getAccountInfo(CredentialRegistrationId.fromHexString(ids[0]))).accountAddress)}`; } catch { from = 'another account'; }
+    } else if (ids.length > 1) from = 'several accounts';
+    const e = new Error(`This proof came from ${from}, not from ${signer}. Ask the counter to open the request again and choose that account at the top of the wallet window.`);
+    e.fromAccount = from;
+    throw e;
+  }
   return { record: res.result, attrs: revealed(presentation) };
 }
 
