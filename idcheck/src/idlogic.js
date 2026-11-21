@@ -78,11 +78,27 @@ export function boundToAccount(presentation, info) {
 // ---------- links: JSON → deflate → base64url, carried after # so it never reaches a server ----------
 const b64u = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''); };
 const unb64u = (s) => Uint8Array.from(atob(s.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0));
-async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+async function pipe(bytes, stream, maxBytes = Infinity) {
+  const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader();
+  const parts = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.length;
+    // Stop as soon as it is too large, before unpacking the rest (audit 21 Nov L4).
+    if (n > maxBytes) { await reader.cancel(); throw new Error('That link is too large to be a signer proof.'); }
+    parts.push(value);
+  }
+  const out = new Uint8Array(n);
+  let i = 0;
+  for (const p of parts) { out.set(p, i); i += p.length; }
+  return out;
+}
 
 export async function pack(obj) { return b64u(await pipe(enc.encode(JSON.stringify(obj)), new CompressionStream('deflate-raw'))); }
 export async function unpack(s, maxBytes = 512 * 1024) {
-  const out = await pipe(unb64u(String(s).trim()), new DecompressionStream('deflate-raw'));
-  if (out.length > maxBytes) throw new Error('That link is too large to be a signer proof.');
+  if (String(s).length > 2 * maxBytes) throw new Error('That link is too large to be a signer proof.');
+  const out = await pipe(unb64u(String(s).trim()), new DecompressionStream('deflate-raw'), maxBytes);
   return JSON.parse(new TextDecoder().decode(out));
 }

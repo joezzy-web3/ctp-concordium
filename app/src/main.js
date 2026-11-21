@@ -1,6 +1,6 @@
 // App shell: role tabs, role band with a short guide, wallet button, hash routes,
 // and smooth section changes with the browser's view transitions.
-import { connect, currentAccount, onAccount, restore } from './chain.js';
+import { connect, currentAccount, logout, onAccount, restore } from './chain.js';
 import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
@@ -117,15 +117,19 @@ function walletButton(acct) {
 }
 
 $('#wallet').addEventListener('click', () => {
-  // Ask the wallet every time: when the site is not connected yet, the wallet opens its
-  // window. Once connected, the wallet answers at once without opening (a page cannot open
-  // a browser extension itself), so say how to switch accounts instead of doing nothing.
   const before = currentAccount();
-  const howToSwitch = () => notice('wait', h('b', 'To switch account, '), 'click the Concordium Wallet icon in your browser toolbar (the puzzle piece if it is hidden) and pick another account. This page follows it at once.');
-  const tip = before ? setTimeout(() => { if (currentAccount() === before) howToSwitch(); }, 4000) : null;
+  // Connected: the button offers to log out, so you can connect another account next.
+  if (before) {
+    if (confirm(`Log out ${CAST.nameOf(before)} (${short(before)}) from this page?\n\nNext, pick the account you want in the Concordium Wallet, then click Connect wallet.`)) {
+      logout();
+      notice('ok', h('b', 'Logged out. '), 'Pick another account in the Concordium Wallet (toolbar icon), then click Connect wallet.');
+    }
+    return;
+  }
+  // Not connected: ask the wallet, which opens its window when this site needs approval.
   connect()
-    .then((a) => { if (before && a === before) { clearTimeout(tip); howToSwitch(); } })
-    .catch((e) => { clearTimeout(tip); notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e)); });
+    .then((a) => { if (a) notice('ok', h('b', 'Connected '), `as ${CAST.nameOf(a)} (${short(a)}). If that is not the account you picked, open the wallet and connect this site to it.`); })
+    .catch((e) => notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e)));
 });
 // Redraw the page when the connected account changes, so each role sees its own view at once.
 let shownFor;

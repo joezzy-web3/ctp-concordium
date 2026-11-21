@@ -3,8 +3,8 @@
 // these only offer what it would accept right now, and explain the rest.
 import { act } from './act.js';
 import { askForPayment } from './payreceipt.js';
-import { MAX_RECOUNTS, deliveryConfirmed, invoiceApproved, pastDue, readyToPay, recountAllowed, refundAllowed, repCounted, microToCcd } from './codec.js';
-import { h, chip, icon, fmtDate, notice } from './ui.js';
+import { MAX_RECOUNTS, deliveryConfirmed, invoiceApproved, pastDue, readyToPay, recountAllowed, refundAllowed, deliveryOnRecord, disputed, microToCcd } from './codec.js';
+import { h, chip, icon, fmtDate, notice, short } from './ui.js';
 
 const DAY = 24 * 3600 * 1000;
 /** A date input value (yyyy-mm-dd) -> the end of that day, local time, in ms. */
@@ -27,7 +27,7 @@ const run = async (btn, entry, params, done) => {
 export function dateBlock(o, me, side, { showDate = true } = {}) {
   const other = side === 'buyer' ? 'supplier' : 'buyer';
   const p = o.date_proposal;
-  const mine = p && p.by === me;
+  const mine = p && p.by.toLowerCase() === side;
   const buyerAlone = side === 'buyer' && !o.accepted;
   const input = h('input', { type: 'date', value: toDay(p?.invoice_by ?? o.invoice_by), min: toDay(Date.now() + DAY), 'aria-label': 'New date' });
   const propose = h('button.btn.line.small', { type: 'button', onclick: (e) => {
@@ -45,6 +45,31 @@ export function dateBlock(o, me, side, { showDate = true } = {}) {
     mine ? h('p.fine', `You proposed ${fmtDay(p.invoice_by)}. Waiting for the ${other} to agree.`) : null,
     h('details.change', h('summary', buyerAlone ? 'Change the date' : 'Ask for a different date'),
       h('p.fine', buyerAlone ? 'The supplier has not accepted yet, so you can change it alone.' : `Both sides must agree. The ${other} sees your proposal and can agree to it.`),
+      h('div.count-row', input, propose)));
+}
+
+/**
+ * Replace a silent referee. Shown while a delivery is disputed or a change is pending: one side
+ * proposes a neutral account, and it changes when the other side proposes the same one.
+ */
+export function refereeBlock(o, side) {
+  const p = o.referee_proposal;
+  if (o.paid || o.refunded || (!disputed(o) && !p)) return null;
+  const other = side === 'buyer' ? 'supplier' : 'buyer';
+  const mine = p && p.by.toLowerCase() === side;
+  const input = h('input', { type: 'text', spellcheck: 'false', placeholder: 'New referee’s account', 'aria-label': 'New referee account' });
+  const propose = h('button.btn.line.small', { type: 'button', onclick: (e) => {
+    const a = input.value.trim();
+    if (!/^[1-9A-HJ-NP-Za-km-z]{50}$/.test(a)) return notice('no', 'Enter the new referee’s full Concordium account.');
+    run(e.currentTarget, 'change_referee', { order_id: o.id, referee: a }, `New referee proposed for order #${o.id}. It applies when the ${other} agrees.`);
+  } }, 'Propose referee');
+  return h('div.date-block',
+    h('p', icon('user', 16), ' Referee: ', h('b', short(o.referee))),
+    p && !mine ? h('p', chip('wait', `${other[0].toUpperCase()}${other.slice(1)} proposes ${short(p.referee)} as referee`), ' ',
+      h('button.btn.dark.small', { type: 'button', onclick: (e) => run(e.currentTarget, 'change_referee', { order_id: o.id, referee: p.referee }, `Referee on order #${o.id} changed to ${short(p.referee)}.`) }, 'Agree')) : null,
+    mine ? h('p.fine', `You proposed ${short(p.referee)}. Waiting for the ${other} to agree.`) : null,
+    h('details.change', h('summary', 'Referee not answering? Propose another'),
+      h('p.fine', `Both sides must agree on a new referee. The ${other} sees your proposal and can agree to it.`),
       h('div.count-row', input, propose)));
 }
 
@@ -81,7 +106,7 @@ export function refundControl(o) {
   }
   const why = readyToPay(o)
     ? 'Delivery confirmed and invoice approved: this money is the supplier’s.'
-    : repCounted(o) && !deliveryConfirmed(o)
+    : deliveryOnRecord(o) && !deliveryConfirmed(o)
       ? 'The supplier’s delivery rep counted this delivery and the counts do not confirm it: only the referee can send the money back.'
       : `Locked for the supplier until ${fmtDay(o.invoice_by)}. If the order is not ready to pay by then, and its delivery is not in dispute, you can take it back.`;
   return h('p.fine', icon('lock', 14), ' ', why);

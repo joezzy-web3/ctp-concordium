@@ -22,13 +22,14 @@ export const ccdscanTx = (tx) => `https://testnet.ccdscan.io/?dcount=1&dentity=t
 const NEXT = {
   accept: 'the supplier accepts the order',
   expired: 'the buyer can take the money back',
-  dispute: 'the referee rules',
+  dispute: 'the referee rules (both sides can agree to replace a silent referee)',
   counting: 'the receiver and the supplier’s rep seal their counts at the gate',
   revealing: 'the counters unseal their counts',
   mismatch: 'a recount, or the referee rules',
   invoice: 'the agent submits the invoice',
   approval: 'the supplier approves the invoice and its amount',
   amount: 'the buyer rejects the invoice so the right amount can be submitted',
+  approverwindow: 'the approver counts, or their window after the gate counts ends',
   hold: 'the supplier’s payout hold ends',
   ready: 'the agent asks the contract to pay',
 };
@@ -91,8 +92,11 @@ export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ??
   async function submitInvoice({ order_id: id, invoice_file: file, amount_ccd: amountCcd }) {
     const micro = ccdToMicro(String(amountCcd));
     if (micro == null) return 'The amount must be a CCD number, for example 25 or 0.5.';
-    let size;
-    try { size = statSync(file).size; } catch { return `Could not open the invoice file at ${file}.`; }
+    let st;
+    try { st = statSync(file); } catch { return `Could not open the invoice file at ${file}.`; }
+    // Only a regular file: never a device, pipe or folder (audit 21 Nov L1).
+    if (!st.isFile()) return 'That path is not a regular file. Give the path of the invoice file itself.';
+    const size = st.size;
     if (size > MAX_INVOICE_BYTES) return 'That file is larger than 10 MB; an invoice should be smaller.';
     const hash = createHash('sha256').update(readFileSync(file)).digest('hex');
     const bytes = invoiceParams(id, hash, micro);

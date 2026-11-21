@@ -23,6 +23,8 @@ const MAX_HOLD_MS: u64 = 30 * 24 * 3600 * 1000;
 pub const MAX_RECOUNTS: u8 = 2;
 /// A proposed date change lapses after this long if the other side has not confirmed it.
 const PROPOSAL_TTL_MS: u64 = 7 * 24 * 3600 * 1000;
+/// After the referee rules the goods delivered, the supplier has at least this long to invoice.
+const RULED_INVOICE_GRACE_MS: u64 = 7 * 24 * 3600 * 1000;
 
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Supplier {
@@ -77,6 +79,14 @@ pub struct DateProposal {
 }
 
 /// A referee's ruling on a disputed delivery.
+/// A new referee proposed by one side, waiting for the other.
+#[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
+pub struct RefereeProposal {
+    pub by: Side,
+    pub referee: AccountAddress,
+    pub expires: Timestamp,
+}
+
 #[derive(Serialize, SchemaType, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ruling {
     /// The goods were delivered: the delivery counts as confirmed.
@@ -131,6 +141,15 @@ pub struct Order {
     pub funder: AccountAddress,
     /// The referee ruled that the goods were delivered.
     pub ruled_delivered: bool,
+    /// Both gate counters sealed at least once. Stays true through recounts: from then on the
+    /// supplier has a delivery on record, and only the referee can send the money back while
+    /// the counts do not confirm it.
+    pub gate_met: bool,
+    /// When the receiver's and the rep's counts were both unsealed in this round. A named
+    /// approver gets the hold period from then to unseal before payment can clear.
+    pub gate_counted_at: Option<Timestamp>,
+    /// A referee change proposed by one side, waiting for the other.
+    pub referee_proposal: Option<RefereeProposal>,
 }
 
 #[derive(Serial, DeserialWithState)]
@@ -273,6 +292,8 @@ pub enum Event {
     AdminChanged { from: AccountAddress, to: AccountAddress },
     Ruled { order_id: OrderId, ruling: Ruling, by: AccountAddress },
     DateProposalCleared { order_id: OrderId },
+    RefereeProposed { order_id: OrderId, by: AccountAddress, referee: AccountAddress },
+    RefereeChanged { order_id: OrderId, referee: AccountAddress },
 }
 
 // ---------- parameters ----------
@@ -336,6 +357,12 @@ pub struct AcceptParams {
 pub struct RuleParams {
     pub order_id: OrderId,
     pub ruling: Ruling,
+}
+
+#[derive(Serialize, SchemaType)]
+pub struct RefereeParams {
+    pub order_id: OrderId,
+    pub referee: AccountAddress,
 }
 
 #[derive(Serialize, SchemaType)]
@@ -446,9 +473,15 @@ fn delivery_confirmed(o: &Order) -> bool {
     o.ruled_delivered || rules::delivery_confirmed(&reveals_of(o), o.expected_qty)
 }
 
-/// The supplier's delivery rep has unsealed a count: the supplier claims a delivery.
-fn rep_counted(o: &Order) -> bool {
-    o.reveals.iter().any(|r| r.role == Role::SupplierRep)
+/// Both gate counters (receiver and the supplier's rep) sealed at least once on this order.
+fn delivery_on_record(o: &Order) -> bool {
+    o.gate_met
+}
+
+/// The supplier has a delivery on record that the counts do not confirm: only the referee
+/// settles it (or the supplier gives the money back).
+fn disputed(o: &Order) -> bool {
+    delivery_on_record(o) && !delivery_confirmed(o)
 }
 
 /// Both gate counters (the buyer's receiver and the supplier's rep) have sealed this round.
@@ -637,8 +670,10 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
     ensure!(p.expected_qty > 0, Error::ZeroQuantity);
     let receiver = host.state().signers.get(&p.receiver).map(|r| *r).ok_or(Error::BadOrderSigners)?;
     ensure!(receiver.role == Role::Receiver, Error::BadOrderSigners);
+    // The buyer's counters are neither the supplier nor the agent.
+    ensure!(p.receiver != p.supplier && p.receiver != p.agent, Error::BadOrderSigners);
     if let Some(a) = p.approver {
-        ensure!(a != p.receiver, Error::BadOrderSigners);
+        ensure!(a != p.receiver && a != p.supplier && a != p.agent, Error::BadOrderSigners);
         let approver = host.state().signers.get(&a).map(|r| *r).ok_or(Error::BadOrderSigners)?;
         ensure!(approver.role == Role::Approver, Error::BadOrderSigners);
         // Once both signers are proven with Concordium ID, they must be two different people.
@@ -672,6 +707,9 @@ fn create_order(ctx: &ReceiveContext, host: &mut Host<State>, amount: Amount, lo
         rep: None,
         funder,
         ruled_delivered: false,
+        gate_met: false,
+        gate_counted_at: None,
+        referee_proposal: None,
     });
     logger.log(&Event::OrderCreated { order_id: p.order_id, supplier: p.supplier, expected_qty: p.expected_qty, amount, invoice_by: p.invoice_by, agent: p.agent, referee: p.referee })?;
     Ok(())
@@ -689,8 +727,7 @@ fn refund(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> 
     let order_id: OrderId = ctx.parameter_cursor().get()?;
     let order = open_order(host, order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
-    let disputed = rep_counted(&order) && !delivery_confirmed(&order);
-    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order) && !disputed;
+    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order) && !disputed(&order);
     ensure!(!order.accepted || expired, Error::RefundLocked);
     let admin = host.state().admin;
     close_and_refund(host, logger, order_id, order.amount, admin)
@@ -768,6 +805,48 @@ fn change_date(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger
     Ok(())
 }
 
+/// Either side proposes a new referee for the order; it changes once the other side proposes
+/// the same account (before the supplier accepts, the buyer alone may change it). Proposing
+/// the current referee withdraws your own pending proposal. A silent referee can therefore be
+/// replaced, but never by one side alone once the supplier has accepted.
+#[receive(contract = "ctp_escrow", name = "change_referee", parameter = "RefereeParams", error = "Error", mutable, enable_logger)]
+fn change_referee(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
+    let p: RefereeParams = ctx.parameter_cursor().get()?;
+    let order = open_order(host, p.order_id)?;
+    ensure!(!order.paid, Error::OrderClosed);
+    let by = order_party(ctx, host, &order)?;
+    let admin = host.state().admin;
+    let side = if by == admin { Side::Buyer } else { Side::Supplier };
+    if p.referee == order.referee {
+        if matches!(&order.referee_proposal, Some(r) if r.by == side) {
+            if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
+                o.referee_proposal = None;
+            }
+        }
+        return Ok(());
+    }
+    ensure!(
+        ![admin, order.supplier, order.receiver, order.agent].contains(&p.referee) && order.approver != Some(p.referee) && order.rep != Some(p.referee),
+        Error::BadReferee
+    );
+    let now = ctx.metadata().slot_time();
+    let other_agreed = matches!(&order.referee_proposal, Some(r) if r.by != side && r.referee == p.referee && now <= r.expires);
+    let buyer_alone = !order.accepted && side == Side::Buyer;
+    let mut o = host.state_mut().orders.get_mut(&p.order_id).ok_or(Error::UnknownOrder)?;
+    if other_agreed || buyer_alone {
+        o.referee = p.referee;
+        o.referee_proposal = None;
+        drop(o);
+        logger.log(&Event::RefereeChanged { order_id: p.order_id, referee: p.referee })?;
+    } else {
+        let expires = Timestamp::from_timestamp_millis(now.timestamp_millis().saturating_add(PROPOSAL_TTL_MS));
+        o.referee_proposal = Some(RefereeProposal { by: side, referee: p.referee, expires });
+        drop(o);
+        logger.log(&Event::RefereeProposed { order_id: p.order_id, by, referee: p.referee })?;
+    }
+    Ok(())
+}
+
 /// The buyer or the supplier asks everyone to count again, once both gate counts are sealed and
 /// the delivery is not confirmed: an honest miscount, the rest delivered, or a lost seal key.
 /// At most MAX_RECOUNTS times; every earlier count stays in the event history.
@@ -784,6 +863,7 @@ fn recount(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) ->
     if let Some(mut o) = host.state_mut().orders.get_mut(&order_id) {
         o.commits.clear();
         o.reveals.clear();
+        o.gate_counted_at = None;
         o.recounts = recount;
     }
     logger.log(&Event::RecountStarted { order_id, recount, by })?;
@@ -801,12 +881,22 @@ fn rule(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> Co
     let order = open_order(host, p.order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
     ensure!(order.referee == by, Error::NotReferee);
-    ensure!(rep_counted(&order) && !delivery_confirmed(&order), Error::NoDispute);
+    ensure!(disputed(&order), Error::NoDispute);
     logger.log(&Event::Ruled { order_id: p.order_id, ruling: p.ruling, by })?;
     match p.ruling {
         Ruling::Delivered => {
+            // The supplier gets at least RULED_INVOICE_GRACE_MS to invoice, so a ruling that
+            // lands near or after the date cannot be undone by a refund.
+            let now = ctx.metadata().slot_time();
+            let floor = Timestamp::from_timestamp_millis(now.timestamp_millis().saturating_add(RULED_INVOICE_GRACE_MS));
+            let invoice_by = if order.invoice_by < floor { floor } else { order.invoice_by };
             if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
                 o.ruled_delivered = true;
+                o.invoice_by = invoice_by;
+                o.date_proposal = None;
+            }
+            if invoice_by != order.invoice_by {
+                logger.log(&Event::DateChanged { order_id: p.order_id, invoice_by })?;
             }
             Ok(())
         }
@@ -863,6 +953,9 @@ fn commit_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.commits.retain(|c| c.signer != signer);
         o.commits.push(Commit { signer, role, hash: p.hash });
+        if gate_sealed(&o) {
+            o.gate_met = true;
+        }
     }
     logger.log(&Event::CountCommitted { order_id: p.order_id, signer, role })?;
     Ok(())
@@ -884,6 +977,10 @@ fn reveal_count(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logge
     ensure!(h == commit.hash, Error::RevealDoesNotMatchCommit);
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         o.reveals.push(RevealedCount { signer, role, qty: p.qty });
+        let both = o.reveals.iter().any(|r| r.role == Role::Receiver) && o.reveals.iter().any(|r| r.role == Role::SupplierRep);
+        if both && o.gate_counted_at.is_none() {
+            o.gate_counted_at = Some(ctx.metadata().slot_time());
+        }
     }
     logger.log(&Event::CountRevealed { order_id: p.order_id, signer, role, qty: p.qty })?;
     Ok(())
@@ -982,6 +1079,8 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
         supplier_approved: order.supplier_approval == Some(Approval { invoice_hash: invoice.invoice_hash, amount: invoice.amount }),
         reveals: &reveals,
         ruled_delivered: order.ruled_delivered,
+        approver_named: order.approver.is_some(),
+        gate_counted_at: order.gate_counted_at.map(|t| t.timestamp_millis()),
         payout_set_at: supplier.payout_set_at.timestamp_millis(),
         now: now.timestamp_millis(),
         hold_ms: host.state().hold_ms,

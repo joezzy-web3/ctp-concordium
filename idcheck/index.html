@@ -38,6 +38,9 @@
   <button id="checkBtn">Check proof</button>
   <div id="chkOut"></div>
 
+  <label for="saltFile">Recorded counters from another browser or after a wallet change? Load your salt backup first.</label>
+  <input id="saltFile" type="file" accept="application/json">
+
   <h2>Verified from this browser</h2>
   <ul id="list"></ul>
   <p class="note">What is shared: the counter’s ID document issuer and number, to this page only, and a proof they are over 18. What goes on-chain: a fingerprint salted with a secret only the buyer’s wallet can make, and the hash of an audit record anyone can re-check with the record file. The document number is never stored.</p>

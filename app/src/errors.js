@@ -56,4 +56,5 @@ export const CODE_TEXT = {
   HeldAmountMismatch: 'The invoice amount is not the escrowed amount.',
   HeldNoSupplierApproval: 'The supplier has not approved this invoice and amount.',
   HeldPayoutCoolOff: 'The supplier’s payout account is still in its hold.',
+  HeldApproverWindow: 'The approver has not counted yet; payment waits for them until the hold period after the gate counts ends.',
 };

@@ -4,7 +4,7 @@
 // press the buttons without a wallet.
 import { AGENT, ESCROW, listOrders, simulate, decisionsIn, viewConfig, viewSupplier } from './chain.js';
 import { CAST } from './cast.js';
-import { accountBytes, invoiceApproved, pastDue, readyToPay, microToCcd, repCounted, deliveryConfirmed } from './codec.js';
+import { accountBytes, invoiceApproved, pastDue, readyToPay, microToCcd, deliveryOnRecord, deliveryConfirmed } from './codec.js';
 import { CODE_TEXT, verifyReceiptCard } from './payreceipt.js';
 import { h, fill, icon, chip, short } from './ui.js';
 
@@ -37,7 +37,7 @@ const ATTACKS = [
     threat: 'The supplier’s rep counted the delivery, the buyer’s receiver never unseals, and the buyer tries to refund.',
     who: 'Buyer admin', invoker: CAST.buyer,
     need: 'an open order the supplier’s rep counted that the counts do not confirm',
-    pick: (os) => newest(os, (o) => isOpen(o) && o.accepted && repCounted(o) && !deliveryConfirmed(o)),
+    pick: (os) => newest(os, (o) => isOpen(o) && o.accepted && deliveryOnRecord(o) && !deliveryConfirmed(o)),
     run: (o) => ['refund', u64(o.id)],
     expect: 'RefundLocked',
   },
