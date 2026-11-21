@@ -80,7 +80,7 @@ server.registerTool('submit_invoice', {
 
 server.registerTool('request_payment', {
   title: 'Ask the contract to pay',
-  description: 'Builds a payment receipt from the order as the contract holds it, saves it, and asks the contract to pay. The contract answers Cleared (and pays the supplier’s own payout account) or Held with its reasons; either answer is recorded on-chain.',
+  description: 'Builds a payment receipt from the order as the contract holds it, saves it, and asks the contract to pay. The contract answers Cleared (and pays the supplier’s own payout account) or Held with its reasons. It sends even when the dry run says Held, on purpose: the held answer and its reasons are then recorded on-chain, as public proof of what was asked and refused.',
   inputSchema: order,
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 }, text(tools.requestPayment));

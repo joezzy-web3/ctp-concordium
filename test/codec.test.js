@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, recountAllowed, readyToPay, deliveryConfirmed, disputed, orderStage, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
+import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, recountAllowed, readyToPay, deliveryConfirmed, disputed, orderStage, approverWindowEnd, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
 import { createHash } from 'node:crypto';
 import { accountBytes } from '../link/encode.js';
 
@@ -51,10 +51,14 @@ test('refund, recount and payment rules mirror the contract', async () => {
   const RV = (role, signer, qty) => ({ signer, role, qty });
   assert.equal(refundAllowed({ ...o, accepted: false }, due - 1), true, 'before the supplier accepts');
   assert.equal(refundAllowed(o, due - 1), false, 'accepted, before the date');
-  assert.equal(refundAllowed(o, due + 1), true, 'after the date, the supplier’s rep never counted');
-  const repCounted = { ...o, reveals: [RV('SupplierRep', o.rep, 100n)] };
-  assert.equal(refundAllowed(repCounted, due + 1), false, 'the rep counted: only the referee can refund');
+  assert.equal(refundAllowed({ ...o, gate_met: false }, due + 1), true, 'after the date, the gate counters never both sealed');
+  const repCounted = { ...o, gate_met: true, reveals: [RV('SupplierRep', o.rep, 100n)] };
+  assert.equal(refundAllowed(repCounted, due + 1), false, 'a delivery is on record: only the referee can refund');
   assert.equal(disputed(repCounted), true);
+  // Audit 21 Nov H1: a recount clears the counts but not the record that both sides met.
+  const afterRecount = { ...o, gate_met: true, commits: [], reveals: [], recounts: 1 };
+  assert.equal(refundAllowed(afterRecount, due + 1), false, 'a recount cannot turn a delivery into a refund');
+  assert.equal(disputed(afterRecount), true);
   const ready = { ...o, reveals: [RV('Receiver', R, 100n), RV('SupplierRep', o.rep, 100n)] };
   assert.equal(deliveryConfirmed(ready), true, 'receiver and rep agree; a silent approver does not block');
   assert.equal(readyToPay(ready), true);
@@ -71,8 +75,17 @@ test('refund, recount and payment rules mirror the contract', async () => {
   assert.equal(recountAllowed(short, due + 1), false, 'past the date');
   assert.equal(recountAllowed(ready, due - 1), false, 'counts agree');
   assert.equal(orderStage({ ...o, accepted: false }, null, 0, due - 1).key, 'accept');
-  assert.equal(orderStage(o, null, 0, due + 1).key, 'expired');
+  assert.equal(orderStage({ ...o, gate_met: false }, null, 0, due + 1).key, 'expired');
   assert.equal(orderStage(repCounted, null, 0, due + 1).key, 'dispute');
+});
+
+test('decodes the v6 fields: gate record, gate count time, referee proposal', async () => {
+  const o = await decodeOrder(hex(F.order_full));
+  assert.equal(o.gate_met, true);
+  assert.equal(o.gate_counted_at, 1795181000000);
+  assert.deepEqual({ ...o.referee_proposal, referee: undefined }, { by: 'Buyer', referee: undefined, expires: 1795722180000 });
+  const e = await decodeOrder(hex(F.order_empty));
+  assert.deepEqual([e.gate_met, e.gate_counted_at, e.referee_proposal], [false, null, null]);
 });
 
 test('decodes an empty, paid order', async () => {
@@ -89,8 +102,8 @@ test('decodes a supplier record', async () => {
 test('refuses truncated or padded data', async () => {
   await assert.rejects(decodeOrder(hex(F.order_full).slice(0, -1)), /truncated/);
   await assert.rejects(decodeSupplier(hex(F.supplier + '00')), /extra/);
-  // The rep's option tag sits before the funder (32 bytes) and the ruling flag (1 byte).
-  const badTag = F.order_empty.slice(0, -68) + '02' + F.order_empty.slice(-66);
+  // The rep's option tag sits before the funder (32 bytes), the ruling flag, gate_met and two empty options (1 byte each).
+  const badTag = F.order_empty.slice(0, -74) + '02' + F.order_empty.slice(-72);
   await assert.rejects(decodeOrder(hex(badTag)), /option/);
 });
 
@@ -99,6 +112,11 @@ test('order stage reads like a person would say it', async () => {
   assert.equal(orderStage(o, null, 0, 1000).key, 'revealing');
   o.reveals.push({ signer: o.rep, role: 'SupplierRep', qty: 100n });
   const sup = { payout_set_at: 1000 };
+  o.gate_counted_at = 1000;
+  assert.equal(orderStage(o, sup, 500, 1200).key, 'approverwindow', 'a named approver who has not unsealed gets the hold period');
+  assert.equal(approverWindowEnd(o, 500), 1500);
+  assert.equal(approverWindowEnd({ ...o, approver: null }, 500), null, 'no approver, no window');
+  o.gate_counted_at = 600;
   assert.equal(orderStage(o, sup, 500, 1200).key, 'hold');
   assert.equal(orderStage(o, sup, 500, 1500).key, 'ready');
   o.supplier_approval.amount = 1n;

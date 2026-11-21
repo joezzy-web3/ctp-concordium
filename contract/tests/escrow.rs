@@ -193,7 +193,8 @@ fn execute(t: &mut T) -> (Verdict, Vec<Code>, Option<AccountAddress>) {
 fn clears_and_pays_the_registered_payout_after_the_hold() {
     let mut t = setup();
     happy_path_until_execute(&mut t, QTY, QTY);
-    assert_eq!(execute(&mut t).1, vec![Code::HeldPayoutCoolOff]); // payout registered just now
+    // Payout registered just now, and the approver's window after the gate counts is open.
+    assert_eq!(execute(&mut t).1, vec![Code::HeldApproverWindow, Code::HeldPayoutCoolOff]);
     t.wait(HOLD_MS);
     let before = t.balance(PAYOUT);
     assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
@@ -467,6 +468,8 @@ fn setup_is_admin_only_and_running_it_again_leaves_a_supplier_untouched() {
     assert_eq!(t.err(ADMIN, "register_supplier", &SupplierParams { supplier: SUPPLIER, payout: NEW_PAYOUT }), Error::SupplierExists);
     // Same payout account, hold not restarted.
     happy_path_until_execute(&mut t, QTY, QTY);
+    assert_eq!(execute(&mut t), (Verdict::Held, vec![Code::HeldApproverWindow], None));
+    t.wait(HOLD_MS);
     assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
 }
 
@@ -557,7 +560,7 @@ fn the_supplier_or_the_buyer_can_ask_for_payment_when_the_agent_is_offline() {
     happy_path_until_execute(&mut t, QTY, QTY);
     // Asking early changes nothing: the same rules hold the payment.
     let r = t.ok(SUPPLIER, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
-    assert_eq!(t.decision(&r).1, vec![Code::HeldPayoutCoolOff]);
+    assert_eq!(t.decision(&r).1, vec![Code::HeldApproverWindow, Code::HeldPayoutCoolOff]);
     let r = t.ok(ADMIN, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
     assert_eq!(t.asked_by(&r), ADMIN);
     t.wait(HOLD_MS);
@@ -842,12 +845,15 @@ fn app_fixture_bytes_match_the_contract() {
         agent: ag, referee: acct("0101010101010101010101010101010101010101010101010101010101010101"),
         rep: Some(acct("0202020202020202020202020202020202020202020202020202020202020202")),
         funder: buyer, ruled_delivered: true,
+        gate_met: true, gate_counted_at: Some(Timestamp::from_timestamp_millis(1_795_181_000_000)),
+        referee_proposal: Some(RefereeProposal { by: Side::Buyer, referee: acct("0303030303030303030303030303030303030303030303030303030303030303"), expires: Timestamp::from_timestamp_millis(1_795_722_180_000) }),
     };
     let empty = Order {
         supplier: s, receiver: r, approver: None, expected_qty: 7, amount: Amount::from_micro_ccd(1),
         commits: vec![], reveals: vec![], invoice: None, supplier_approval: None, paid: true, refunded: false,
         invoice_by: Timestamp::from_timestamp_millis(1_795_117_380_000), accepted: false, date_proposal: None, recounts: 0,
         agent: ag, referee: acct("0101010101010101010101010101010101010101010101010101010101010101"), rep: None, funder: buyer, ruled_delivered: false,
+        gate_met: false, gate_counted_at: None, referee_proposal: None,
     };
     let supplier = Supplier { payout: s, payout_set_at: Timestamp::from_timestamp_millis(1_795_117_380_000) };
     let decision = Event::Decision {
@@ -897,4 +903,112 @@ fn an_individual_buyer_can_order_without_an_approver() {
     t.wait(HOLD_MS);
     let r = t.ok(AGENT, "execute_payment", &ExecuteParams { order_id: 7, receipt_hash: RECEIPT });
     assert_eq!(t.decision(&r), (Verdict::Cleared, vec![], Some(PAYOUT)));
+}
+
+#[test]
+fn a_recount_cannot_wipe_the_reps_count_into_a_refund() {
+    // Audit 21 Nov H1: the rep unsealed, the receiver stayed silent, the buyer asked for a
+    // recount (which clears the counts) and then waited out the date.
+    let mut t = setup();
+    let (sr, sa) = ([11u8; 32], [22u8; 32]);
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, sr) });
+    t.ok(REP, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(REP, QTY, sa) });
+    t.ok(REP, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sa });
+    t.ok(ADMIN, "recount", &ORDER);
+    assert!(t.order().reveals.is_empty());
+    t.past_due();
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    // The referee still decides.
+    t.ok(REFEREE, "rule", &RuleParams { order_id: ORDER, ruling: Ruling::Delivered });
+}
+
+#[test]
+fn once_both_gate_counters_sealed_the_buyer_cannot_refund_alone() {
+    // Audit 21 Nov H1: both sealed (the goods are at the gate), nobody unsealed, the buyer
+    // recounts at once and its receiver never seals again.
+    let mut t = setup();
+    t.ok(RECEIVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(RECEIVER, QTY, [1; 32]) });
+    t.ok(REP, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(REP, QTY, [2; 32]) });
+    assert!(t.order().gate_met);
+    t.ok(ADMIN, "recount", &ORDER);
+    t.past_due();
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    let before = t.balance(ADMIN);
+    t.ok(REFEREE, "rule", &RuleParams { order_id: ORDER, ruling: Ruling::Refund });
+    assert_eq!(t.balance(ADMIN), before + PRICE);
+}
+
+#[test]
+fn a_named_approver_gets_the_hold_period_after_the_gate_counts() {
+    // Audit 21 Nov H2: the receiver and the driver cannot be paid before the approver counts.
+    let mut t = setup();
+    t.wait(HOLD_MS); // the supplier's payout hold is over
+    happy_path_until_execute(&mut t, QTY, QTY);
+    assert_eq!(execute(&mut t), (Verdict::Held, vec![Code::HeldApproverWindow], None));
+    // The approver counts and agrees: the window ends at once.
+    let sp = [33u8; 32];
+    t.ok(APPROVER, "commit_count", &CommitParams { order_id: ORDER, hash: commit_hash(APPROVER, QTY, sp) });
+    t.ok(APPROVER, "reveal_count", &RevealParams { order_id: ORDER, qty: QTY, salt: sp });
+    assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
+}
+
+#[test]
+fn a_silent_referee_can_be_replaced_only_by_both_sides() {
+    // Audit 21 Nov M1.
+    let mut t = setup();
+    count(&mut t, QTY, QTY - 1);
+    // Not a neutral party.
+    for bad in [ADMIN, SUPPLIER, RECEIVER, APPROVER, AGENT, REP] {
+        assert_eq!(t.err(SUPPLIER, "change_referee", &RefereeParams { order_id: ORDER, referee: bad }), Error::BadReferee);
+    }
+    assert_eq!(t.err(STRANGER, "change_referee", &RefereeParams { order_id: ORDER, referee: OTHER_SIGNER }), Error::NotOrderParty);
+    // One side alone only proposes.
+    t.ok(SUPPLIER, "change_referee", &RefereeParams { order_id: ORDER, referee: OTHER_SIGNER });
+    assert_eq!(t.order().referee, REFEREE);
+    // The supplier can withdraw its own proposal by proposing the current referee.
+    t.ok(SUPPLIER, "change_referee", &RefereeParams { order_id: ORDER, referee: REFEREE });
+    assert!(t.order().referee_proposal.is_none());
+    t.ok(SUPPLIER, "change_referee", &RefereeParams { order_id: ORDER, referee: OTHER_SIGNER });
+    // A different account from the buyer is a counter-proposal, not agreement.
+    t.ok(ADMIN, "change_referee", &RefereeParams { order_id: ORDER, referee: STRANGER });
+    assert_eq!(t.order().referee, REFEREE);
+    t.ok(SUPPLIER, "change_referee", &RefereeParams { order_id: ORDER, referee: STRANGER });
+    assert_eq!(t.order().referee, STRANGER);
+    assert_eq!(t.err(REFEREE, "rule", &RuleParams { order_id: ORDER, ruling: Ruling::Refund }), Error::NotReferee);
+    t.ok(STRANGER, "rule", &RuleParams { order_id: ORDER, ruling: Ruling::Refund });
+}
+
+#[test]
+fn a_delivered_ruling_gives_the_supplier_time_to_invoice() {
+    // Audit 21 Nov M2: the buyer cannot refund straight after a late "delivered" ruling.
+    let mut t = setup();
+    count(&mut t, QTY, QTY - 1);
+    t.past_due();
+    t.ok(REFEREE, "rule", &RuleParams { order_id: ORDER, ruling: Ruling::Delivered });
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.ok(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    t.wait(HOLD_MS);
+    assert_eq!(execute(&mut t), (Verdict::Cleared, vec![], Some(PAYOUT)));
+    // If the supplier never invoices, the buyer can refund once the grace week is over.
+    let mut t = setup();
+    count(&mut t, QTY, QTY - 1);
+    t.past_due();
+    t.ok(REFEREE, "rule", &RuleParams { order_id: ORDER, ruling: Ruling::Delivered });
+    t.wait(7 * 24 * 3600 * 1000 + 1);
+    t.ok(ADMIN, "refund", &ORDER);
+}
+
+#[test]
+fn the_buyers_counters_are_neither_the_supplier_nor_the_agent() {
+    // Audit 21 Nov L3.
+    let mut t = setup();
+    t.ok(ADMIN, "add_signer", &SignerParams { account: SUPPLIER, role: Role::Receiver, person_tag: None, id_audit: None });
+    t.ok(ADMIN, "add_signer", &SignerParams { account: AGENT, role: Role::Approver, person_tag: None, id_audit: None });
+    let mut p = order_params(77);
+    p.receiver = SUPPLIER;
+    assert_eq!(t.call(ADMIN, "create_order", &p, PRICE).expect_err("supplier as receiver").parse_return_value::<Error>().unwrap(), Error::BadOrderSigners);
+    let mut p = order_params(78);
+    p.approver = Some(AGENT);
+    assert_eq!(t.call(ADMIN, "create_order", &p, PRICE).expect_err("agent as approver").parse_return_value::<Error>().unwrap(), Error::BadOrderSigners);
 }

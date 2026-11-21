@@ -24,9 +24,17 @@ export const onAccount = (fn) => { listeners.add(fn); fn(account); return () => 
 const setAccount = (a) => { account = a; listeners.forEach((fn) => fn(a)); };
 export const currentAccount = () => account;
 
+const LOGGED_OUT = 'ctp:loggedOut';
+const remember = (out) => { try { if (out) localStorage.setItem(LOGGED_OUT, '1'); else localStorage.removeItem(LOGGED_OUT); } catch { /* storage unavailable */ } };
+const loggedOut = () => { try { return localStorage.getItem(LOGGED_OUT) === '1'; } catch { return false; } };
+
 export async function connect() {
   provider ??= await detectConcordiumProvider();
-  const a = (await provider.requestAccounts())?.[0] ?? null;
+  const connected = (await provider.requestAccounts()) ?? [];
+  // The account selected in the wallet, if this site may use it; otherwise the first allowed one.
+  const recent = await provider.getMostRecentlySelectedAccount?.();
+  const a = connected.includes(recent) ? recent : (connected[0] ?? null);
+  remember(false);
   const chain = (await provider.getSelectedChain()) ?? '';
   if (!chain.startsWith(TESTNET_GENESIS_PREFIX)) {
     setAccount(null);
@@ -35,24 +43,34 @@ export async function connect() {
   setAccount(a);
   if (!listening) {
     listening = true;
-    provider.on?.('accountChanged', (x) => setAccount(x));
+    provider.on?.('accountChanged', (x) => { if (!loggedOut()) setAccount(x); });
     provider.on?.('accountDisconnected', () => setAccount(null));
   }
   return a;
 }
 let listening = false;
 
+/**
+ * Log out of this page: it stops using the account until you connect again. A page cannot
+ * revoke its own permission in the wallet; that stays in the wallet's connected-sites list.
+ */
+export function logout() {
+  remember(true);
+  setAccount(null);
+}
+
 /** On page load: reuse the account this site was already allowed, without a wallet prompt. */
 export async function restore() {
   try {
     provider ??= await detectConcordiumProvider(1500);
+    if (loggedOut()) return null;
     const a = await provider.getMostRecentlySelectedAccount?.();
     const chain = (await provider.getSelectedChain?.()) ?? '';
     if (!a || !chain.startsWith(TESTNET_GENESIS_PREFIX)) return null;
     setAccount(a);
     if (!listening) {
       listening = true;
-      provider.on?.('accountChanged', (x) => setAccount(x));
+      provider.on?.('accountChanged', (x) => { if (!loggedOut()) setAccount(x); });
       provider.on?.('accountDisconnected', () => setAccount(null));
     }
     return a;

@@ -119,6 +119,13 @@ test('an invoice the contract would refuse is never sent', async () => {
   assert.equal(chain.sent.length, 0);
 });
 
+test('the invoice tool reads only regular files', async () => {
+  const chain = fakeChain();
+  const out = await makeTools(chain).submitInvoice({ order_id: 1, invoice_file: tmpdir(), amount_ccd: '5' });
+  assert.match(out, /not a regular file/);
+  assert.equal(chain.sent.length, 0);
+});
+
 test('an accepted invoice is sent with only its fingerprint', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
   const file = join(dir, 'invoice.pdf');

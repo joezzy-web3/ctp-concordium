@@ -1,7 +1,7 @@
 // Supplier and Agent spaces.
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
 import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen } from './codec.js';
-import { dateBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
+import { dateBlock, refereeBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
 import { askForPayment, receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
@@ -59,7 +59,7 @@ export async function supplierView() {
   const toAccept = staged.filter((x) => isOpen(x) && !x.o.accepted);
   const toApprove = staged.filter((x) => isOpen(x) && x.o.accepted && x.o.invoice);
   const waiting = staged.filter((x) => isOpen(x) && x.o.accepted && !x.o.invoice);
-  const tools = (o) => h('div.order-tools', dateBlock(o, me, 'supplier'), h('div.actions', askPaymentButton(o, 'Ask for my payment'), recountButton(o), releaseButton(o)));
+  const tools = (o) => h('div.order-tools', dateBlock(o, me, 'supplier'), refereeBlock(o, 'supplier'), h('div.actions', askPaymentButton(o, 'Ask for my payment'), recountButton(o), releaseButton(o)));
 
   const acceptCard = ({ o }) => {
     const repIn = h('input.mono', { value: me, spellcheck: false, 'aria-label': 'Delivery rep account' });

@@ -9,7 +9,7 @@ import {
 } from '@concordium/web-sdk';
 import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
 import { ESCROW, connect as connectApp, send as sendEscrow, waitFinal } from '../../app/src/chain.js';
-import { RESOURCE, SALT_MESSAGE, boundToAccount, pack, personTag, revealed, saltFromSignature, toHex, unpack } from './idlogic.js';
+import { RESOURCE, SALT_MESSAGE, boundToAccount, fromHex, pack, personTag, revealed, saltFromSignature, toHex, unpack } from './idlogic.js';
 
 const REGISTER_DATA = 21; // AccountTransactionType.RegisterData
 const TESTNET = '4221332d34e1694168c2a0c0b3fd0f27';
@@ -21,6 +21,10 @@ const mask = (s) => (s.length <= 4 ? '••••' : `${s.slice(0, 2)}${'•'.r
 const tx = (h) => `https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${h}`;
 const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } } };
 const VERIFIED = `ctp:idcheck:${ESCROW.index}`;
+// Requests this browser created, by anchor transaction: an answer must match one of them, and
+// the account and role come from here, never from the answer link (audit 21 Nov M3).
+const ASKED = `ctp:idcheck:${ESCROW.index}:asked`;
+const SALT_BACKUP = `ctp:idcheck:${ESCROW.index}:salt`;
 
 function say(el, kind, ...parts) {
   const box = document.createElement('div');
@@ -34,7 +38,9 @@ const code = (t) => Object.assign(document.createElement('code'), { textContent:
 let provider;
 async function wallet() {
   provider ??= await detectConcordiumProvider();
-  const [account] = (await provider.requestAccounts()) ?? [];
+  const connected = (await provider.requestAccounts()) ?? [];
+  const recent = await provider.getMostRecentlySelectedAccount?.();
+  const account = connected.includes(recent) ? recent : connected[0];
   if (!account) throw new Error('Unlock your Concordium wallet and allow this site.');
   if (!String((await provider.getSelectedChain()) ?? '').startsWith(TESTNET)) throw new Error('Switch your wallet to testnet.');
   return account;
@@ -67,6 +73,7 @@ async function ask() {
     .getClaims();
   const anchorTx = await registerData(buyer, VerificationRequestV1.createAnchor(context, claims, { ctp: 'signer-check' }));
   const request = VerificationRequestV1.create(context, claims, TransactionHash.fromHexString(anchorTx));
+  store.set(ASKED, { ...store.get(ASKED, {}), [anchorTx]: { signer, role, at: Date.now() } });
   const url = `${location.origin}${location.pathname}#req=${await pack({ request: request.toJSON(), signer, role })}`;
   const open = Object.assign(document.createElement('button'), { textContent: 'Copy link for the counter', onclick: () => navigator.clipboard?.writeText(url) });
   say('askOut', 'ok', 'Request anchored on-chain (', link(tx(anchorTx), 'transaction'), '). Send this link to ', code(short(signer)), '. They open it with their own wallet.', document.createElement('br'), open, ' ', link(url, 'Open it here (same browser demo)'));
@@ -92,6 +99,11 @@ async function check(payload) {
   say('chkOut', 'info', 'Checking the proof against the chain…');
   const request = VerificationRequestV1.fromJSON(payload.request);
   const presentation = VerifiablePresentationV1.fromJSON(payload.presentation);
+  const anchorTx = TransactionHash.toHexString(request.transactionRef);
+  const asked = store.get(ASKED, {})[anchorTx];
+  if (!asked) throw new Error('This answer is not for a request made from this browser. Create the request here, send that link, and check the answer here.');
+  // Who and in which role come from the request you made, not from the answer.
+  payload = { ...payload, signer: asked.signer, role: asked.role };
   if (!ADDR.test(payload.signer) || !['Receiver', 'Approver'].includes(payload.role)) throw new Error('That answer is malformed.');
   const res = await VerificationAuditRecordV1.createChecked(`ctp:${ESCROW.index}:${payload.signer}:${Date.now()}`, request, presentation, grpc, 'Testnet');
   if (res.type !== 'success') throw new Error(`The proof did not verify: ${res.error?.message ?? res.error}`);
@@ -108,7 +120,11 @@ async function record() {
   if (!c) return;
   say('chkOut', 'info', 'Sign three things with the buyer wallet: a fixed message (makes your private salt), the audit anchor, and the escrow update…');
   const buyer = await wallet();
-  const salt = await saltFromSignature(await provider.signMessage(buyer, SALT_MESSAGE(ESCROW)));
+  // The salt comes from the buyer wallet's signature on a fixed message. A backup loaded on this
+  // page wins, so fingerprints stay the same if the wallet's keys ever change (audit 21 Nov M4).
+  const backup = store.get(SALT_BACKUP, null);
+  const salt = backup ? fromHex(backup) : await saltFromSignature(await provider.signMessage(buyer, SALT_MESSAGE(ESCROW)));
+  if (!backup) store.set(SALT_BACKUP, toHex(salt));
   const tag = await personTag(ESCROW, salt, c.attrs.idDocIssuer, c.attrs.idDocNo);
   const info = { ctp: 'signer-audit', role: c.role[0] };
   const auditTx = await registerData(buyer, VerificationAuditRecordV1.createAnchor(c.record, info));
@@ -123,10 +139,11 @@ async function record() {
   store.set(VERIFIED, list);
   const blob = new Blob([JSON.stringify({ escrow: `<${ESCROW.index},0>`, account: c.signer, role: c.role, person_tag: tag, id_audit: audit, audit_anchor_tx: auditTx, audit_record: c.record.toJSON() }, null, 2)], { type: 'application/json' });
   const dl = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `ctp-id-audit-${c.signer.slice(0, 8)}.json`, textContent: 'Download the audit record' });
+  const saltFile = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([JSON.stringify({ escrow: `<${ESCROW.index},0>`, salt: toHex(salt), note: 'Private. Keeps person fingerprints the same if your wallet keys change. Load it on the Signer ID check page.' }, null, 2)], { type: 'application/json' })), download: `ctp-salt-backup-${ESCROW.index}.json`, textContent: 'Download your salt backup (keep it private)' });
   say('chkOut', twin ? 'bad' : 'ok',
     `${short(c.signer)} is now a verified ${c.role} on escrow <${ESCROW.index},0> (`, link(tx(txHash), 'escrow update'), ', ', link(tx(auditTx), 'audit anchor'), '). ',
     twin ? `Same person as ${short(twin.account)} (${twin.role}): the contract will refuse an order that names both.` : 'Fingerprint recorded; an order naming this person twice will be refused.',
-    document.createElement('br'), dl);
+    document.createElement('br'), dl, ' · ', saltFile);
   renderList();
 }
 
@@ -160,6 +177,14 @@ $('checkBtn').onclick = async () => {
     const i = v.indexOf('#res=');
     await check(await unpack(i >= 0 ? v.slice(i + 5) : v));
   } catch (e) { say('chkOut', 'bad', e.message ?? e); }
+};
+$('saltFile').onchange = async (e) => {
+  try {
+    const j = JSON.parse(await e.target.files[0].text());
+    if (j.escrow !== `<${ESCROW.index},0>` || !/^[0-9a-f]{64}$/.test(j.salt)) throw new Error('That is not a salt backup for this escrow.');
+    store.set(SALT_BACKUP, j.salt);
+    say('chkOut', 'ok', 'Salt backup loaded. New fingerprints will match the ones you recorded before.');
+  } catch (err) { say('chkOut', 'bad', err.message ?? err); }
 };
 $('esc').textContent = `<${ESCROW.index},0>`;
 window.addEventListener('hashchange', route);

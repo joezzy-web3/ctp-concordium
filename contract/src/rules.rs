@@ -23,6 +23,8 @@ pub enum Code {
     HeldNoSupplierApproval,
     /// The supplier's payout account changed less than the hold period ago.
     HeldPayoutCoolOff,
+    /// A named approver has not unsealed, and the hold period since the gate counts has not passed.
+    HeldApproverWindow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, concordium_std::Serialize, concordium_std::SchemaType)]
@@ -61,6 +63,10 @@ pub struct Facts<'a, A> {
     pub reveals: &'a [Reveal<A>],
     /// The order's referee ruled that the goods were delivered (settles a count dispute).
     pub ruled_delivered: bool,
+    /// The order names an approver (a second buyer-side counter inside).
+    pub approver_named: bool,
+    /// When the receiver's and the rep's counts were both unsealed (milliseconds), if they were.
+    pub gate_counted_at: Option<u64>,
     /// When the supplier's payout account was last set (milliseconds).
     pub payout_set_at: u64,
     pub now: u64,
@@ -97,6 +103,16 @@ pub fn decide<A: PartialEq>(f: &Facts<A>) -> (Verdict, Vec<Code>) {
         }
         if f.reveals.iter().any(|r| r.qty != f.expected_qty) {
             codes.push(Code::HeldCountMismatch);
+        }
+        // A named approver gets the hold period after the gate counts to unseal, so a receiver
+        // and driver who agree cannot be paid before the approver has counted. Silence never
+        // blocks for longer than that.
+        if f.approver_named && count_of(f.reveals, Role::Approver).is_none() {
+            if let Some(t) = f.gate_counted_at {
+                if f.now < t.saturating_add(f.hold_ms) {
+                    codes.push(Code::HeldApproverWindow);
+                }
+            }
         }
     }
     if let Some(amount) = f.invoice_amount {
@@ -141,7 +157,7 @@ mod tests {
     fn r(signer: u8, role: Role, qty: u64) -> Reveal<u8> { Reveal { signer, role, qty } }
 
     fn facts<'a>(reveals: &'a [Reveal<u8>]) -> Facts<'a, u8> {
-        Facts { paid: false, expected_qty: 100, order_amount: 1_250, invoice_amount: Some(1_250), supplier_approved: true, reveals, ruled_delivered: false, payout_set_at: 0, now: H72, hold_ms: H72 }
+        Facts { paid: false, expected_qty: 100, order_amount: 1_250, invoice_amount: Some(1_250), supplier_approved: true, reveals, ruled_delivered: false, approver_named: false, gate_counted_at: Some(0), payout_set_at: 0, now: H72, hold_ms: H72 }
     }
 
     #[test]
@@ -276,5 +292,40 @@ mod tests {
         assert_eq!(&p[21..53], &[3u8; 32]);
         assert_eq!(&p[53..61], &100u64.to_le_bytes());
         assert_eq!(&p[61..], &[9u8; 32]);
+    }
+
+    #[test]
+    fn a_named_approver_gets_the_hold_period_after_the_gate_counts() {
+        let reveals = [Reveal { signer: A, role: Role::Receiver, qty: 100 }, Reveal { signer: B, role: Role::SupplierRep, qty: 100 }];
+        let mut f = facts(&reveals);
+        f.approver_named = true;
+        f.gate_counted_at = Some(H72);
+        f.now = H72 + 1;
+        assert_eq!(decide(&f), (Verdict::Held, vec![Code::HeldApproverWindow]));
+        f.now = H72 + H72;
+        assert_eq!(decide(&f).0, Verdict::Cleared, "silence blocks no longer than the window");
+    }
+
+    #[test]
+    fn an_approver_who_unseals_ends_the_window_at_once() {
+        let reveals = [
+            Reveal { signer: A, role: Role::Receiver, qty: 100 },
+            Reveal { signer: B, role: Role::SupplierRep, qty: 100 },
+            Reveal { signer: 3, role: Role::Approver, qty: 100 },
+        ];
+        let mut f = facts(&reveals);
+        f.approver_named = true;
+        f.gate_counted_at = Some(H72);
+        f.now = H72 + 1;
+        assert_eq!(decide(&f).0, Verdict::Cleared);
+    }
+
+    #[test]
+    fn no_approver_means_no_window() {
+        let reveals = [Reveal { signer: A, role: Role::Receiver, qty: 100 }, Reveal { signer: B, role: Role::SupplierRep, qty: 100 }];
+        let mut f = facts(&reveals);
+        f.gate_counted_at = Some(H72);
+        f.now = H72 + 1;
+        assert_eq!(decide(&f).0, Verdict::Cleared);
     }
 }

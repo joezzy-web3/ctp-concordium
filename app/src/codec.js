@@ -97,6 +97,13 @@ export async function decodeOrder(bytes) {
   o.rep = r.opt() ? await acct(r) : null;
   o.funder = await acct(r);
   o.ruled_delivered = r.bool();
+  o.gate_met = r.bool();
+  o.gate_counted_at = r.opt() ? r.num() : null;
+  if (r.opt()) {
+    const side = r.u8();
+    if (side > 1) throw new Error('bad side');
+    o.referee_proposal = { by: side === 0 ? 'Buyer' : 'Supplier', referee: await acct(r), expires: r.num() };
+  } else o.referee_proposal = null;
   r.done();
   return o;
 }
@@ -104,7 +111,7 @@ export async function decodeOrder(bytes) {
 export const MAX_RECOUNTS = 2;
 
 const VERDICTS = ['Cleared', 'Held', 'Seized'];
-const CODES = ['SeizedAlreadyPaid', 'HeldNoInvoice', 'HeldOneSignature', 'HeldCountMismatch', 'HeldAmountMismatch', 'HeldNoSupplierApproval', 'HeldPayoutCoolOff'];
+const CODES = ['SeizedAlreadyPaid', 'HeldNoInvoice', 'HeldOneSignature', 'HeldCountMismatch', 'HeldAmountMismatch', 'HeldNoSupplierApproval', 'HeldPayoutCoolOff', 'HeldApproverWindow'];
 const DECISION_TAG = 10; // position of Decision in the contract's Event enum
 
 /** Decodes a contract event if it is a Decision; any other event gives null. */
@@ -130,20 +137,25 @@ export async function decodeDecision(bytes) {
 
 const countOf = (o, role) => o.reveals.find((x) => x.role === role)?.qty;
 /** The supplier's delivery rep has unsealed a count: the supplier claims a delivery. */
-export const repCounted = (o) => o.reveals.some((x) => x.role === 'SupplierRep');
+/** Both gate counters sealed at least once (the contract's gate_met, kept through recounts):
+ *  the supplier has a delivery on record. */
+export const deliveryOnRecord = (o) => Boolean(o.gate_met);
 /** Both gate counters (the buyer's receiver and the supplier's rep) have sealed this round. */
 export const gateSealed = (o) => o.commits.some((c) => c.role === 'Receiver') && o.commits.some((c) => c.role === 'SupplierRep');
 /** Same rule as contract/src/rules.rs: receiver and rep both unsealed the ordered quantity and
  *  any approver count agrees, or the referee ruled the goods delivered. */
 export const deliveryConfirmed = (o) => o.ruled_delivered || (countOf(o, 'Receiver') === o.expected_qty && countOf(o, 'SupplierRep') === o.expected_qty && (countOf(o, 'Approver') ?? o.expected_qty) === o.expected_qty);
-/** The rep counted but the counts do not confirm the delivery: the referee can rule. */
-export const disputed = (o) => !o.paid && !o.refunded && repCounted(o) && !deliveryConfirmed(o);
+/** A delivery is on record but the counts do not confirm it: only the referee settles it. */
+export const disputed = (o) => !o.paid && !o.refunded && deliveryOnRecord(o) && !deliveryConfirmed(o);
 /** The supplier approved the submitted invoice, for the full escrowed amount. */
 export const invoiceApproved = (o) => Boolean(o.invoice && o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount && o.invoice.amount === o.amount);
 export const readyToPay = (o) => deliveryConfirmed(o) && invoiceApproved(o);
 export const pastDue = (o, now = Date.now()) => now > o.invoice_by;
 /** The buyer can take the money back: before the supplier accepts, or after the date if not ready. */
-export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o) && !(repCounted(o) && !deliveryConfirmed(o))));
+export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o) && !(deliveryOnRecord(o) && !deliveryConfirmed(o))));
+/** Same rule as rules.rs: a named approver who has not unsealed gets the hold period after
+ *  the gate counts. Returns when that window ends, or null when there is none. */
+export const approverWindowEnd = (o, holdMs) => (o.approver && !o.ruled_delivered && countOf(o, 'Approver') === undefined && o.gate_counted_at != null ? o.gate_counted_at + holdMs : null);
 export const recountAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && !pastDue(o, now) && gateSealed(o) && !deliveryConfirmed(o) && o.recounts < MAX_RECOUNTS;
 /** Invoices and approvals: before the date, or any time after the referee ruled the goods delivered. */
 export const invoiceOpen = (o, now = Date.now()) => o.ruled_delivered || !pastDue(o, now);
@@ -183,6 +195,8 @@ export function orderStage(o, supplier, holdMs, now = Date.now()) {
   const approved = o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount;
   if (!approved) return { key: 'approval', label: 'Waiting for the supplier to approve', tone: 'wait' };
   if (o.invoice.amount !== o.amount) return { key: 'amount', label: 'Invoice amount differs from the escrow', tone: 'hold' };
+  const windowEnd = approverWindowEnd(o, holdMs);
+  if (windowEnd && now < windowEnd) return { key: 'approverwindow', label: 'Ready, waiting for the approver to count', tone: 'hold', until: windowEnd };
   const free = supplier ? supplier.payout_set_at + holdMs : 0;
   if (now < free) return { key: 'hold', label: 'Ready, payout hold running', tone: 'hold', until: free };
   return { key: 'ready', label: 'Ready to pay', tone: 'ok' };

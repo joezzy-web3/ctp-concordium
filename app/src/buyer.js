@@ -1,7 +1,7 @@
 // Buyer space: Readiness, New order (wizard with review and one signature), Orders.
 import { AGENT, ESCROW, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
 import { ccdToMicro, microToCcd, orderStage, invoiceApproved, gateSealed, deliveryConfirmed } from './codec.js';
-import { dateBlock, recountButton, askPaymentButton, refundControl, buyerCanReject, countsLine, dayEnd, defaultDue, iso, fmtDay } from './ordertools.js';
+import { dateBlock, refereeBlock, recountButton, askPaymentButton, refundControl, buyerCanReject, countsLine, dayEnd, defaultDue, iso, fmtDay } from './ordertools.js';
 import { receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
@@ -41,7 +41,8 @@ const NEXT_STEP = {
   accept: 'The supplier accepts the order and its date.',
   expired: 'The latest date passed and the order was not ready: you can take the money back.',
   counting: 'The receiver and the supplier’s delivery rep count at the gate.',
-  dispute: 'The supplier’s rep counted, but the counts do not confirm it: the referee decides.',
+  dispute: 'A delivery is on record but the counts do not confirm it: the referee decides.',
+  approverwindow: 'The approver has a window to count before the payment can go.',
   revealing: 'The signers reveal their sealed counts.',
   mismatch: 'The counts do not match: ask for a recount, or wait for the rest of the delivery.',
   invoice: `Agent #${AGENT.id} submits the invoice.`,
@@ -322,6 +323,7 @@ async function ordersView() {
         h('dt', 'Supplier'), h('dd.mono', short(o.supplier)),
         st.until ? [h('dt', 'Payout hold ends'), h('dd', fmtDate(st.until))] : null),
       o.paid || o.refunded ? null : dateBlock(o, currentAccount(), 'buyer'),
+      refereeBlock(o, 'buyer'),
       receiptPanel(o),
       h('div.actions',
         askPaymentButton(o),

@@ -74,3 +74,10 @@ test('a real request survives the link round trip', async () => {
   assert.equal(back.role, 'Receiver');
   assert.deepEqual(VerificationRequestV1.fromJSON(back.request).toJSON(), JSON.parse(JSON.stringify(req.toJSON())));
 });
+
+test('an oversized link is refused while unpacking, not after', async () => {
+  const big = await pack({ pad: 'x'.repeat(2 * 1024 * 1024) }); // compresses to a few KB
+  assert.ok(big.length < 20000);
+  await assert.rejects(unpack(big), /too large/);
+  assert.deepEqual(await unpack(await pack({ a: 1 })), { a: 1 });
+});

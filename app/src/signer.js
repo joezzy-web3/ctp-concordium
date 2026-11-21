@@ -79,7 +79,7 @@ function card(o, me) {
       : h('p', chip('hold', 'Receiver has not sealed'), ' Do not unload until the buyer’s receiver has sealed their count. No count, no unload.'))
     : null;
   const approverNote = role === 'Approver' && !mine
-    ? h('p.fine', 'Your count is optional: you check the delivery inside. If you unseal a different number, the payment is held; staying silent never blocks it.')
+    ? h('p.fine', 'You check the delivery inside. After the gate counts, the payment waits for you for the hold period: unseal the same number and it can go at once; a different number holds it. Staying silent never blocks it for longer than that.')
     : null;
   const sealButton = (label) => {
     const input = h('input.count-in.num', { inputMode: 'numeric', 'aria-label': 'Units you counted', placeholder: '0', autocomplete: 'off' });
