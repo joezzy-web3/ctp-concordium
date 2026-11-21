@@ -5,8 +5,9 @@
 //            #/buyer/ids/<answer>    an answer link: check it and record it.
 // - Counter: #/signer/prove/<request> prove with the wallet, send the answer back.
 // The proof engine (WebAssembly) loads only here, from idcheck-core.js.
-import { ESCROW, node, currentAccount, connect, send, waitFinal, registerData, signText, requestProof, ccdscanTx } from './chain.js';
+import { ESCROW, currentAccount, connect, send, waitFinal, registerData, signText, requestProof, ccdscanTx } from './chain.js';
 import { CAST } from './cast.js';
+const render = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
 import { h, fill, icon, chip, short, store, notice, fmtDate } from './ui.js';
 import { SALT_MESSAGE, fromHex, pack, personTag, saltFromSignature, toHex, unpack } from '../../idcheck/src/idlogic.js';
 
@@ -68,7 +69,7 @@ function askPanel() {
       await connect();
       fill(out, h('p.fine', 'Preparing the request… then approve one small record in your wallet.'));
       const c = await engine();
-      const draft = await c.draftRequest(node, ESCROW, signer, role.value);
+      const draft = await c.draftRequest(ESCROW, signer, role.value);
       const tx = await registerData(draft.anchor);
       const request = c.finishRequest(draft, tx);
       store.set(ASKED, { ...asked(), [tx]: { signer, role: role.value, at: Date.now(), request } });
@@ -96,8 +97,15 @@ function pendingPanel(result) {
     h('h3', 'Waiting for answers'),
     open.length ? h('ul.ready-list.compact', open.map(([tx, a]) => h('li.ready',
       h(`span.ready-ico.${got[tx] ? 'ok' : 'hold'}`, icon(got[tx] ? 'check' : 'clock', 16)),
-      h('div', h('b', `${CAST.nameOf(a.signer)} · ${a.role}`), h('span', got[tx] ? 'Answer received in this browser.' : `Asked ${fmtDate(a.at)}. Waiting for their answer link.`)),
-      got[tx] ? h('button.btn.gold.small', { type: 'button', onclick: () => checkLocal(result, tx).catch((e) => say(result, 'no', e)) }, 'Check and record') : null)))
+      h('div', h('b', `${a.role} · ${short(a.signer)}`), h('span', got[tx] ? 'Answer received in this browser.' : `Asked ${fmtDate(a.at)}. Waiting for their answer.`),
+        h('div.pend-acts',
+          got[tx] ? h('button.btn.gold.small', { type: 'button', onclick: () => checkLocal(result, tx).catch((e) => say(result, 'no', e)) }, 'Check and record') : null,
+          got[tx] ? null : h('button.btn.line.small', { type: 'button', onclick: async () => {
+            const url = linkTo('signer/prove', await pack({ request: a.request, signer: a.signer, role: a.role }));
+            try { await navigator.clipboard.writeText(url); notice('ok', 'Request link copied.'); } catch { prompt('Copy this link:', url); }
+          } }, 'Copy link'),
+          got[tx] ? null : h('button.btn.line.small', { type: 'button', onclick: async () => { location.href = linkTo('signer/prove', await pack({ request: a.request, signer: a.signer, role: a.role })); } }, 'Open here'),
+          h('button.btn.line.small', { type: 'button', onclick: () => { const x = asked(); delete x[tx]; store.set(ASKED, x); const g = answers(); delete g[tx]; store.set(ANSWERS, g); render(); } }, 'Remove'))))))
       : h('p.fine', 'No open requests. Ask a counter on the left.'),
     h('details.change', h('summary', 'Got an answer link? Paste it'),
       (() => {
@@ -146,7 +154,7 @@ function howPanel() {
     h('h3', 'How it works'),
     h('ol.guide',
       step(1, 'You ask', 'Create a request for one counter and send them the link.'),
-      step(2, 'They prove', 'Their own Concordium wallet makes a zero-knowledge proof: a verified adult, sharing only their ID document issuer and number with this page.'),
+      step(2, 'They prove', 'Their own Concordium wallet makes a zero-knowledge proof: a verified adult, sharing only their ID document number with this page.'),
       step(3, 'You record', 'The app checks the proof against the chain, makes a salted fingerprint, records an audit anchor, and saves the fingerprint on the escrow. The document number is never stored.')));
 }
 
@@ -170,8 +178,7 @@ async function checkAnswer(result, packed) {
 async function checkAndOffer(result, tx, a, presentation) {
   say(result, 'wait', 'Checking the proof against the chain…');
   const c = await engine();
-  const { record, attrs } = await c.verifyAnswer(node, ESCROW, a.signer, a.request, presentation);
-  const issuer = attrs.idDocIssuer ?? '?';
+  const { record, attrs } = await c.verifyAnswer(ESCROW, a.signer, a.request, presentation);
   const doc = attrs.idDocNo ?? '';
   const masked = doc.length <= 4 ? '••••' : `${doc.slice(0, 2)}${'•'.repeat(doc.length - 4)}${doc.slice(-2)}`;
   const rec = h('button.btn.gold', { type: 'button', onclick: async (e) => {
@@ -180,7 +187,7 @@ async function checkAndOffer(result, tx, a, presentation) {
   } }, 'Record on the escrow');
   fill(result, h('section.panel.result.ok',
     h('h3', icon('check', 18), ` ${CAST.nameOf(a.signer)} is a verified adult`),
-    h('p', `Proven with Concordium ID for ${short(a.signer)} as ${a.role}. ID document ${issuer} ${masked}. The number is used once to make a private fingerprint and is not stored.`),
+    h('p', `Proven with Concordium ID for ${short(a.signer)} as ${a.role}. ID document ${masked}. The number is used once to make a private fingerprint and is not stored.`),
     h('p.fine', 'Recording asks your buyer wallet for three approvals: a fixed message (makes your private salt, first time only), the audit record, and the escrow update.'),
     rec));
 }
@@ -223,7 +230,7 @@ export async function proveView() {
   const prove = h('button.btn.gold', { type: 'button', disabled: !right, onclick: async (e) => {
     e.currentTarget.disabled = true;
     try {
-      fill(out, h('p.fine', 'Your wallet will show exactly what is shared. Approve it there.'));
+      fill(out, h('p.fine', `In the wallet window, choose the account ${CAST.nameOf(p.signer)} (${short(p.signer)}) at the top, check what is shared, then approve.`));
       const c = await engine();
       const presentation = c.presentationJSON(await requestProof(c.requestFromJSON(p.request)));
       const tx = c.anchorTxOf(p.request);
@@ -238,8 +245,9 @@ export async function proveView() {
   return h('div.space', h('section.panel.prove',
     h('header.panel-h', h('h2', 'Prove you are a verified person'), h('p', `The buyer asks ${short(p.signer)} to prove, before counting deliveries as ${p.role.toLowerCase()}, that it belongs to a real verified adult.`)),
     h('ul.ready-list.compact',
-      h('li.ready', h('span.ready-ico.ok', icon('check', 16)), h('div', h('b', 'Shared with the buyer’s page'), h('span', 'Your ID document issuer and number, and proof that you are over 18.'))),
+      h('li.ready', h('span.ready-ico.ok', icon('check', 16)), h('div', h('b', 'Shared with the buyer’s page'), h('span', 'Your ID document number, and proof that you are over 18.'))),
       h('li.ready', h('span.ready-ico.ok', icon('lock', 16)), h('div', h('b', 'Stays private'), h('span', 'Your name, birthday and everything else. Only a salted fingerprint goes on-chain.')))),
+    right ? h('p.fine', `When the wallet opens, choose the account ${CAST.nameOf(p.signer)} (${short(p.signer)}) at the top of its window. A proof from any other account is refused.`) : null,
     right ? null : h('p.err', me ? `Your wallet is connected as ${short(me)}. Pick ${short(p.signer)} in the Concordium Wallet, click the address button to log out, then Connect wallet.` : `Connect the wallet account ${short(p.signer)}.`),
     prove, out));
 }
