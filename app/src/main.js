@@ -145,7 +145,12 @@ async function openMenu() {
     h('p.acct-h', 'Act as'),
     list.map(pick),
     h('details.acct-more', h('summary', 'Use another account'),
-      h('p', 'Open the Concordium Wallet, select that account, and connect this site to it. It then appears here.')),
+      h('ol.acct-steps',
+        h('li', 'Open the Concordium Wallet, tap the six dots, then Accounts.'),
+        h('li', 'On any account: Connected sites, See list.'),
+        h('li', `On ${location.host}, tap Edit.`),
+        h('li', 'Tick every account you want here, then close.')),
+      h('p', 'They appear in this menu straight away.')),
     h('button.acct-item.out', { type: 'button', role: 'menuitem', onclick: () => {
       closeMenu();
       logout();
