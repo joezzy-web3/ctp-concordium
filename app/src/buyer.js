@@ -209,9 +209,9 @@ function wizard() {
   function stepLines() {
     const t = totals(d);
     const tbody = h('tbody', d.lines.map((l, i) => h('tr',
-      h('td', h('input', { value: l.item, 'aria-label': `Item ${i + 1}`, placeholder: 'Rice, 50 kg bag', oninput: (e) => { l.item = e.target.value; save(d); refreshTotals(); } })),
-      h('td', h('input.num', { value: l.qty, inputMode: 'numeric', 'aria-label': `Quantity ${i + 1}`, placeholder: '100', oninput: (e) => { l.qty = e.target.value; save(d); refreshTotals(); } })),
-      h('td', h('input.num', { value: l.price, inputMode: 'decimal', 'aria-label': `Unit price ${i + 1} in CCD`, placeholder: '0.25', oninput: (e) => { l.price = e.target.value; save(d); refreshTotals(); } })),
+      h('td', { 'data-label': 'Item' }, h('input', { value: l.item, 'aria-label': `Item ${i + 1}`, placeholder: 'Rice, 50 kg bag', oninput: (e) => { l.item = e.target.value; save(d); refreshTotals(); } })),
+      h('td', { 'data-label': 'Quantity' }, h('input.num', { value: l.qty, inputMode: 'numeric', 'aria-label': `Quantity ${i + 1}`, placeholder: '100', oninput: (e) => { l.qty = e.target.value; save(d); refreshTotals(); } })),
+      h('td', { 'data-label': 'Unit price (CCD)' }, h('input.num', { value: l.price, inputMode: 'decimal', 'aria-label': `Unit price ${i + 1} in CCD`, placeholder: '0.25', oninput: (e) => { l.price = e.target.value; save(d); refreshTotals(); } })),
       h('td', d.lines.length > 1 ? h('button.icon-btn', { type: 'button', 'aria-label': `Remove line ${i + 1}`, onclick: () => { d.lines.splice(i, 1); save(d); paint(); } }, icon('x', 16)) : null),
     )));
     const tot = h('p.totals');
