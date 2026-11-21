@@ -7,6 +7,7 @@ import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, countdown, fmtDate, short, store, notice, holdText } from './ui.js';
 import { printPO } from './po.js';
+import { idsView } from './ids.js';
 
 const ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
 
@@ -17,12 +18,12 @@ function sidebar(sub) {
   const item = (key, label, ico) => h('a', { href: `#/buyer${key ? `/${key}` : ''}`, class: sub === key ? 'on' : null, 'aria-current': sub === key ? 'page' : null }, icon(ico, 18), label);
   return h('aside.side',
     h('div.who', h('span.avatar', 'B'), h('div', h('b', 'Buyer'), h('span.mono', me ? short(me) : 'Not connected'))),
-    h('nav', { 'aria-label': 'Buyer sections' }, item('', 'Dashboard', 'grid'), item('new', 'New order', 'plus'), item('orders', 'Orders', 'list')),
+    h('nav', { 'aria-label': 'Buyer sections' }, item('', 'Dashboard', 'grid'), item('new', 'New order', 'plus'), item('orders', 'Orders', 'list'), item('ids', 'ID checks', 'user')),
     h('a.side-foot', { href: CONTRACT_URL, target: '_blank', rel: 'noopener' }, `Escrow <${ESCROW.index},${ESCROW.subindex}>`, icon('external', 14)));
 }
 
 export async function buyerView(sub = '') {
-  const body = sub === 'new' ? wizard() : sub === 'orders' ? await ordersView() : await dashboard();
+  const body = sub === 'new' ? wizard() : sub === 'orders' ? await ordersView() : sub === 'ids' ? await idsView() : await dashboard();
   return h('div.space.with-side', sidebar(sub), h('div.space-main', body));
 }
 
@@ -113,7 +114,7 @@ async function dashboard() {
 function idRow(row) {
   const done = store.get(`ctp:idcheck:${ESCROW.index}`, []);
   const roles = new Set(done.map((x) => x.role));
-  const go = h('a.inline', { href: '../idcheck/', target: '_blank', rel: 'noopener' }, done.length ? 'Check another' : 'Start', icon('external', 14));
+  const go = h('a.inline', { href: '#/buyer/ids' }, done.length ? 'Check another' : 'Start', icon('arrow', 14));
   return roles.has('Receiver') && roles.has('Approver')
     ? row('ok', 'Counters ID-checked', 'Receiver and approver proved with Concordium ID. The contract refuses an order naming the same person twice.', go)
     : row('hold', 'Counters not ID-checked', 'Have the receiver and approver prove with Concordium ID that they are two different verified people.', go);

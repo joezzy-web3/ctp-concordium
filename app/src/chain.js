@@ -1,7 +1,7 @@
 // Chain access for the app: the browser wallet for signing, a testnet gRPC-web
 // node for reading the escrow contract and waiting for finalization.
 import { detectConcordiumProvider } from '@concordium/browser-wallet-api-helpers';
-import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, Energy, ReceiveName, TransactionHash } from '@concordium/web-sdk';
+import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, DataBlob, Energy, ReceiveName, TransactionHash } from '@concordium/web-sdk';
 import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
 import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
 import { decodeConfig, decodeOrder, decodeSupplier, decodeDecision } from './codec.js';
@@ -139,6 +139,30 @@ export async function send(entrypoint, params, microCcd = 0n) {
     params,
     { type: 'module', value: MODULE_SCHEMA_B64 },
   );
+}
+
+// ---------- wallet: ID checks (F-01) ----------
+/** Records small data on-chain from the connected account (RegisterData) and waits for it. */
+export async function registerData(bytes) {
+  await connect();
+  if (!account) throw new Error('Connect your wallet first.');
+  if (bytes.length > 256) throw new Error('That record is larger than the chain allows.');
+  const tx = await provider.sendTransaction(account, AccountTransactionType.RegisterData, { data: new DataBlob(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)) });
+  const fin = await waitFinal(tx);
+  if (!fin.ok) throw new Error(fin.reason ?? 'The record did not finalize.');
+  return tx;
+}
+/** The connected account signs a fixed text message (moves nothing, costs nothing). */
+export async function signText(message) {
+  await connect();
+  if (!account) throw new Error('Connect your wallet first.');
+  return provider.signMessage(account, message);
+}
+/** The wallet answers a proof request with a zero-knowledge presentation. */
+export async function requestProof(request) {
+  await connect();
+  if (!account) throw new Error('Connect your wallet first.');
+  return provider.requestVerifiablePresentationV1(request);
 }
 
 // ---------- reads ----------

@@ -7,6 +7,7 @@ import { buyerView } from './buyer.js';
 import { judgeView } from './judge.js';
 import { refereeView } from './referee.js';
 import { signerView } from './signer.js';
+import { proveView } from './ids.js';
 import { supplierView, agentView } from './roles.js';
 
 const ROLES = {
@@ -38,7 +39,7 @@ const ROLES = {
 const routes = {
   '': () => pickView(),
   buyer: (sub) => buyerView(sub),
-  signer: () => signerView(),
+  signer: (sub) => (sub === 'prove' ? proveView() : signerView()),
   supplier: () => supplierView(),
   agent: () => agentView(),
   referee: () => refereeView(),
