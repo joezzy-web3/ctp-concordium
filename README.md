@@ -2,7 +2,7 @@
 
 **An AI agent can be fooled into believing an invoice. Clear to Pay makes sure that belief is not enough to move the company's money** — and on Concordium, every agent and every signer involved is accountable to a verified human or company.
 
-**Try it:** [landing page](https://joezzy-web3.github.io/ctp-concordium/) · [app](https://joezzy-web3.github.io/ctp-concordium/app/) (Concordium Browser Wallet on testnet)
+**Try it:** [landing page](https://cleartopay-concordium.vercel.app/) · [app](https://cleartopay-concordium.vercel.app/app/) (Concordium Browser Wallet on testnet) · Also served from GitHub Pages, where the Agent Card keeps its registered address.
 
 Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**.
 
@@ -32,7 +32,7 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 | Key registry (CIS-8) | `<12801,0>` |
 | Explorer | https://testnet.ccdscan.io |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
-| **Escrow contract (live, test run)** | `<13106,0>` (v6, audit of 21 Nov fixed) · module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73` (verifiable build, CI run 44887957697) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://joezzy-web3.github.io/ctp-concordium/app/) |
+| **Escrow contract (live, test run)** | `<13106,0>` (v6, audit of 21 Nov fixed) · module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73` (verifiable build, CI run 44887957697) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://cleartopay-concordium.vercel.app/app/) |
 | **Escrow contract (earlier)** | `<13092,0>` (v2), superseded by v4 · module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27` |
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
@@ -91,7 +91,7 @@ node receipt/cli.js demo JyP9U25oUQ6KdnBBHdTYP     # check the agent, write rece
 node receipt/cli.js verify receipts/<hash>.json <on-chain data hex>
 ```
 
-Anchor a receipt from the browser wallet at `anchor/` (https://joezzy-web3.github.io/ctp-concordium/anchor/).
+Anchor a receipt from the browser wallet at `anchor/` (https://cleartopay-concordium.vercel.app/anchor/).
 
 Design choices, and what protects the user:
 - **Only a hash goes on-chain.** The 36-byte anchor is `CTP1` plus the receipt's SHA-256. Invoice details stay with the business, and a random salt in every receipt means the hash cannot be matched to a guessed invoice.
