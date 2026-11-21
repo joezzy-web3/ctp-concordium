@@ -4,7 +4,7 @@ Clear to Pay already runs on NEAR (`guard.cleartopay.testnet`, owned by `buyer.c
 
 1. `node link/prepare.mjs --key <NEAR key file> --expect ed25519:<public key> --near-account buyer.cleartopay.testnet`
    signs the CIS-8 canonical message with the NEAR owner key on your machine and writes `bundle.json` (public key and signature only).
-2. Push `bundle.json`, open `https://joezzy-web3.github.io/ctp-concordium/link/`, send step 1 (`registerExternalKey` on CIS-8 `<12801,0>`) and step 2 (`setExternalReference` on CIS-8004 `<12802,0>`).
+2. Push `bundle.json`, open `https://cleartopay-concordium.vercel.app/link/`, send step 1 (`registerExternalKey` on CIS-8 `<12801,0>`) and step 2 (`setExternalReference` on CIS-8004 `<12802,0>`).
 3. `node link/verify.mjs` asks the registry, starting from the NEAR key, who owns it and which agent it belongs to.
 
 Design choices, and what protects the user:
