@@ -32,7 +32,7 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 | Key registry (CIS-8) | `<12801,0>` |
 | Explorer | https://testnet.ccdscan.io |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
-| **Escrow contract (live, test run)** | `<13102,0>` (v5, approver optional) · module `ae80470a9c3487d58ae93aad3dc6a7508da5a5e3624d1af154134eba0e9fefa6` (verifiable build, CI run 44791468350) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://joezzy-web3.github.io/ctp-concordium/app/) |
+| **Escrow contract (live, test run)** | `<13106,0>` (v6, audit of 21 Nov fixed) · module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73` (verifiable build, CI run 44887957697) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://joezzy-web3.github.io/ctp-concordium/app/) |
 | **Escrow contract (earlier)** | `<13092,0>` (v2), superseded by v4 · module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27` |
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 

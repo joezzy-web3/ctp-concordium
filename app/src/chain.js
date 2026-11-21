@@ -7,7 +7,7 @@ import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
 import { decodeConfig, decodeOrder, decodeSupplier, decodeDecision } from './codec.js';
 
 export const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
-export const ESCROW = { index: Number(globalThis.CTP_ESCROW ?? 13102), subindex: 0 };
+export const ESCROW = { index: Number(globalThis.CTP_ESCROW ?? 13106), subindex: 0 };
 export const AGENT = { id: 1287, badge: 'JyP9U25oUQ6KdnBBHdTYP', owner: '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG' };
 const CONTRACT = ContractAddress.create(ESCROW.index, ESCROW.subindex);
 
