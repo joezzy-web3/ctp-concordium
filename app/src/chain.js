@@ -28,24 +28,53 @@ const LOGGED_OUT = 'ctp:loggedOut';
 const remember = (out) => { try { if (out) localStorage.setItem(LOGGED_OUT, '1'); else localStorage.removeItem(LOGGED_OUT); } catch { /* storage unavailable */ } };
 const loggedOut = () => { try { return localStorage.getItem(LOGGED_OUT) === '1'; } catch { return false; } };
 
+const ACTIVE = 'ctp:activeAccount';
+const chosen = () => { try { return localStorage.getItem(ACTIVE); } catch { return null; } };
+const choose = (a) => { try { if (a) localStorage.setItem(ACTIVE, a); else localStorage.removeItem(ACTIVE); } catch { /* storage unavailable */ } };
+
+function listen() {
+  if (listening) return;
+  listening = true;
+  // Switching accounts in the wallet extension still works: the page follows it.
+  provider.on?.('accountChanged', (x) => { if (!loggedOut()) { choose(x); setAccount(x); } });
+  provider.on?.('accountDisconnected', (x) => { if (!x || x === account) setAccount(null); });
+}
+
+/**
+ * Connects, or keeps the account already in use. Which account: the one in use if this site may
+ * still use it, else the one picked in our account menu, else the one selected in the wallet,
+ * else the first this site may use.
+ */
 export async function connect() {
   provider ??= await detectConcordiumProvider();
   const connected = (await provider.requestAccounts()) ?? [];
-  // The account selected in the wallet, if this site may use it; otherwise the first allowed one.
   const recent = await provider.getMostRecentlySelectedAccount?.();
-  const a = connected.includes(recent) ? recent : (connected[0] ?? null);
+  const pick = [account, chosen(), recent].find((x) => x && connected.includes(x)) ?? connected[0] ?? null;
   remember(false);
   const chain = (await provider.getSelectedChain()) ?? '';
   if (!chain.startsWith(TESTNET_GENESIS_PREFIX)) {
     setAccount(null);
     throw new Error('Your wallet is on another network. Switch it to Concordium testnet.');
   }
+  setAccount(pick);
+  listen();
+  return pick;
+}
+
+/** Every account this site may use, without a wallet prompt once the site is approved. */
+export async function connectedAccounts() {
+  provider ??= await detectConcordiumProvider();
+  return (await provider.requestAccounts()) ?? [];
+}
+
+/** Act as another account this site may use (from the account menu). */
+export async function useAccount(a) {
+  const connected = await connectedAccounts();
+  if (!connected.includes(a)) throw new Error('That account is not connected to this site yet.');
+  remember(false);
+  choose(a);
   setAccount(a);
-  if (!listening) {
-    listening = true;
-    provider.on?.('accountChanged', (x) => { if (!loggedOut()) setAccount(x); });
-    provider.on?.('accountDisconnected', () => setAccount(null));
-  }
+  listen();
   return a;
 }
 let listening = false;
@@ -56,6 +85,7 @@ let listening = false;
  */
 export function logout() {
   remember(true);
+  choose(null);
   setAccount(null);
 }
 
@@ -64,15 +94,14 @@ export async function restore() {
   try {
     provider ??= await detectConcordiumProvider(1500);
     if (loggedOut()) return null;
-    const a = await provider.getMostRecentlySelectedAccount?.();
+    const recent = await provider.getMostRecentlySelectedAccount?.();
     const chain = (await provider.getSelectedChain?.()) ?? '';
-    if (!a || !chain.startsWith(TESTNET_GENESIS_PREFIX)) return null;
+    if (!recent || !chain.startsWith(TESTNET_GENESIS_PREFIX)) return null;
+    // The site is approved (the wallet named a connected account), so this does not prompt.
+    const connected = (await provider.requestAccounts?.()) ?? [recent];
+    const a = [chosen(), recent].find((x) => x && connected.includes(x)) ?? recent;
     setAccount(a);
-    if (!listening) {
-      listening = true;
-      provider.on?.('accountChanged', (x) => { if (!loggedOut()) setAccount(x); });
-      provider.on?.('accountDisconnected', () => setAccount(null));
-    }
+    listen();
     return a;
   } catch {
     return null; // no wallet installed, or the site is not allowed yet: the Connect button handles it
@@ -132,13 +161,26 @@ export async function decisionsInTx(tx) {
 export async function send(entrypoint, params, microCcd = 0n) {
   await connect();
   if (!account) throw new Error('Connect your wallet first.');
-  return provider.sendTransaction(
-    account,
-    AccountTransactionType.Update,
-    { amount: CcdAmount.fromMicroCcd(microCcd), address: CONTRACT, receiveName: ReceiveName.fromString(`ctp_escrow.${entrypoint}`), maxContractExecutionEnergy: Energy.create(30000) },
-    params,
-    { type: 'module', value: MODULE_SCHEMA_B64 },
-  );
+  try {
+    return await provider.sendTransaction(
+      account,
+      AccountTransactionType.Update,
+      { amount: CcdAmount.fromMicroCcd(microCcd), address: CONTRACT, receiveName: ReceiveName.fromString(`ctp_escrow.${entrypoint}`), maxContractExecutionEnergy: Energy.create(30000) },
+      params,
+      { type: 'module', value: MODULE_SCHEMA_B64 },
+    );
+  } catch (e) {
+    throw await withSwitchHint(e);
+  }
+}
+
+/** If the wallet refused while another account is selected in it, say how to fix it. */
+async function withSwitchHint(e) {
+  const recent = await provider.getMostRecentlySelectedAccount?.().catch(() => null);
+  if (!recent || recent === account || /reject|cancel|denied|closed/i.test(String(e?.message ?? e))) return e;
+  const err = new Error(`${e?.message ?? e} If the wallet only signs for the account selected in it, select ${account.slice(0, 4)}…${account.slice(-4)} in the Concordium Wallet and try again.`);
+  err.cause = e;
+  return err;
 }
 
 // ---------- wallet: ID checks (F-01) ----------
@@ -147,7 +189,10 @@ export async function registerData(bytes) {
   await connect();
   if (!account) throw new Error('Connect your wallet first.');
   if (bytes.length > 256) throw new Error('That record is larger than the chain allows.');
-  const tx = await provider.sendTransaction(account, AccountTransactionType.RegisterData, { data: new DataBlob(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)) });
+  let tx;
+  try {
+    tx = await provider.sendTransaction(account, AccountTransactionType.RegisterData, { data: new DataBlob(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)) });
+  } catch (e) { throw await withSwitchHint(e); }
   const fin = await waitFinal(tx);
   if (!fin.ok) throw new Error(fin.reason ?? 'The record did not finalize.');
   return tx;
@@ -156,7 +201,7 @@ export async function registerData(bytes) {
 export async function signText(message) {
   await connect();
   if (!account) throw new Error('Connect your wallet first.');
-  return provider.signMessage(account, message);
+  try { return await provider.signMessage(account, message); } catch (e) { throw await withSwitchHint(e); }
 }
 /** The wallet answers a proof request with a zero-knowledge presentation. */
 export async function requestProof(request) {

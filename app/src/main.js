@@ -1,6 +1,6 @@
 // App shell: role tabs, role band with a short guide, wallet button, hash routes,
 // and smooth section changes with the browser's view transitions.
-import { connect, currentAccount, logout, onAccount, restore } from './chain.js';
+import { connect, connectedAccounts, currentAccount, logout, onAccount, restore, useAccount } from './chain.js';
 import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
@@ -117,19 +117,54 @@ function walletButton(acct) {
   b.classList.toggle('connected', Boolean(acct));
 }
 
-$('#wallet').addEventListener('click', () => {
-  const before = currentAccount();
-  // Connected: the button offers to log out, so you can connect another account next.
-  if (before) {
-    if (confirm(`Log out ${CAST.nameOf(before)} (${short(before)}) from this page?\n\nNext, pick the account you want in the Concordium Wallet, then click Connect wallet.`)) {
+// ---------- account menu: tap the address button to switch accounts or log out ----------
+let menu = null;
+function closeMenu() {
+  if (!menu) return;
+  menu.remove();
+  menu = null;
+  $('#wallet').setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', outside, true);
+  document.removeEventListener('keydown', onKey, true);
+}
+function outside(e) { if (menu && !menu.contains(e.target) && e.target !== $('#wallet') && !$('#wallet').contains(e.target)) closeMenu(); }
+function onKey(e) { if (e.key === 'Escape') { closeMenu(); $('#wallet').focus(); } }
+const label = (a) => `${CAST.nameOf(a)} · ${short(a)}`;
+
+async function openMenu() {
+  const me = currentAccount();
+  let list = [me];
+  try { list = await connectedAccounts(); } catch { /* keep the current one */ }
+  if (!list.includes(me)) list = [me, ...list];
+  const pick = (a) => h('button.acct-item', { type: 'button', role: 'menuitemradio', 'aria-checked': String(a === me), onclick: async () => {
+    closeMenu();
+    if (a === me) return;
+    try { await useAccount(a); notice('ok', h('b', 'Now acting as '), label(a), '.'); } catch (err) { notice('no', String(err?.message ?? err)); }
+  } }, h('b', CAST.nameOf(a)), h('span.mono', short(a)), a === me ? icon('check', 16) : null);
+  menu = h('div.acct-menu', { role: 'menu', 'aria-label': 'Accounts' },
+    h('p.acct-h', 'Act as'),
+    list.map(pick),
+    h('details.acct-more', h('summary', 'Use another account'),
+      h('p', 'Open the Concordium Wallet, select that account, and connect this site to it. It then appears here.')),
+    h('button.acct-item.out', { type: 'button', role: 'menuitem', onclick: () => {
+      closeMenu();
       logout();
-      notice('ok', h('b', 'Logged out. '), 'Pick another account in the Concordium Wallet (toolbar icon), then click Connect wallet.');
-    }
-    return;
-  }
+      notice('ok', h('b', 'Logged out. '), 'Click Connect wallet to connect again.');
+    } }, 'Log out'));
+  $('#wallet').after(menu);
+  $('#wallet').setAttribute('aria-expanded', 'true');
+  document.addEventListener('pointerdown', outside, true);
+  document.addEventListener('keydown', onKey, true);
+  menu.querySelector('.acct-item')?.focus();
+}
+
+$('#wallet').setAttribute('aria-haspopup', 'menu');
+$('#wallet').addEventListener('click', () => {
+  if (menu) return closeMenu();
+  if (currentAccount()) return openMenu();
   // Not connected: ask the wallet, which opens its window when this site needs approval.
   connect()
-    .then((a) => { if (a) notice('ok', h('b', 'Connected '), `as ${CAST.nameOf(a)} (${short(a)}). If that is not the account you picked, open the wallet and connect this site to it.`); })
+    .then((a) => { if (a) notice('ok', h('b', 'Connected '), `as ${label(a)}. Tap the address button to switch accounts or log out.`); })
     .catch((e) => notice('no', h('b', 'Wallet not connected. '), String(e?.message ?? e)));
 });
 // Redraw the page when the connected account changes, so each role sees its own view at once.
