@@ -248,3 +248,15 @@ div.result{background:var(--sheet);border-radius:16px;padding:16px 20px;margin-t
 .prove .ready-list{margin:0 0 20px}
 .prove .err{margin:0 0 16px}
 .ids .actions.quick{margin:0 0 16px}
+/* account menu (tap the address button) */
+.top{position:relative}
+.acct-menu{position:absolute;top:calc(100% + 8px);right:12px;z-index:40;width:min(320px,calc(100vw - 32px));background:var(--card);border-radius:16px;box-shadow:var(--lift);padding:8px;display:grid;gap:2px;animation:pop .16s var(--ease-out)}
+.acct-h{margin:4px 12px 6px;font-size:13px;color:var(--mute)}
+.acct-item{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;min-height:44px;padding:0 12px;border:0;border-radius:10px;background:transparent;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer}
+.acct-item:hover,.acct-item:focus-visible{background:var(--sheet);outline:none}
+.acct-item[aria-checked="true"]{color:var(--ok-strong)}
+.acct-item .mono{color:var(--mute)}
+.acct-item.out{grid-template-columns:1fr;color:var(--no);border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:4px}
+.acct-more{padding:4px 12px;font-size:14px}.acct-more summary{cursor:pointer;min-height:36px;display:flex;align-items:center;color:var(--navy);font-weight:600}
+.acct-more p{margin:4px 0 8px;color:var(--mute);font-size:13px}
+@media (prefers-reduced-motion: reduce){.acct-menu{animation:none}}
