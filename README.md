@@ -56,6 +56,7 @@ Design choices, and what protects the user:
 - **The buyer is protected from a false delivery.** The rep alone never confirms a delivery: the buyer's receiver must agree, and the buyer's approver can hold a payment by counting a different number. If the rep never counted, the buyer gets the money back after the date.
 - **Stalls have a way out.** A lost seal key can be replaced before anyone unseals, a miscount gets a recount (at most 2, opened by the buyer or supplier), a disagreement goes to the referee, and an offline agent is replaced by the supplier or buyer asking under the same rules.
 - **Fails safe.** If the contract cannot read the agent registry, it refuses.
+- **Checks scale with the risk of the order.** ID checks and the approver are optional: the buyer chooses which counters prove their ID, and whether an order needs an approver. A small or high-volume buyer runs the minimum: buyer, one receiver, supplier. A counter proves their ID once; the escrow keeps them on its signer list, so every later order and delivery adds no extra steps.
 
 ## Payment receipts
 
