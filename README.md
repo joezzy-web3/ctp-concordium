@@ -14,7 +14,7 @@ Every row marked live links to on-chain evidence or runs in the test suite. Rows
 |---|---|---|
 | Agent #1287 registered (CIS-8004), Agent Card anchored, Verified by Concordium badge | **Live (testnet)** | registry `check-badge`: all 15 checks pass; card anchor tx below |
 | Cross-chain link to the Clear to Pay agent on NEAR (CIS-8) | **Live (testnet)** | CIS-8 checked the NEAR signature; registry confirmed the binding before attaching it (link tx below) |
-| **Escrow v6, full live run with Claude (21 Nov 2026):** receiver proved with Concordium ID, blind count 20 = 20, Claude submitted the invoice over MCP, refused to skip the checks, was sent anyway and got **Held** on-chain; the supplier approved from its own account and the same request **Cleared**, 2 CCD to the supplier's payout account | **Live (testnet)** | `<13106,0>`, module `ec8aa1da…` = verifiable build; 26 rule tests, 54 end-to-end tests; [contract on CCDExplorer](https://ccdexplorer.io/testnet/instance/13106/0) |
+| **Escrow v6, full live run with Claude (21 Nov 2026):** receiver proved with Concordium ID, blind count 20 = 20, Claude submitted the invoice over MCP, refused to skip the checks, was sent anyway and got **Held** on-chain; the supplier approved from its own account and the same request **Cleared**, 2 CCD to the supplier's payout account | **Live (testnet)** | `<13106,0>`, module `ec8aa1da…` = verifiable build ([check it yourself](#check-the-contract-yourself)); 26 rule tests, 54 end-to-end tests; [contract on CCDExplorer](https://ccdexplorer.io/testnet/instance/13106/0) |
 | Escrow contract v4: two named people in two roles count blind (each seal bound to its signer), the supplier accepts the order and its latest date, approves its own invoice and amount, payout hold on new payout accounts, pays only on CLEARED, logs every decision | **Live (testnet)**, full order paid on 20 Nov 2026 | `<13098,0>`, module `ad60bdff…a28c7e52` = verifiable build ([first payment](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947)); 20 rule tests, 34 end-to-end tests |
 | The contract checks the agent in the CIS-8004 registry itself, when the agent is added and at every invoice and payment request | **Live (testnet)** | it read the real registry for Agent #1287 at setup and again at the invoice in the first live order; end-to-end tests cover revoked, transferred and hijacked agents |
 | Escrow v5: each side has a counter the other does not choose (buyer's receiver, supplier's delivery rep), a referee for disputes, one agent per order, seals bound to signer and round, refunds to the funder | **Live (testnet)**, deployed 20 Nov 2026 | `<13102,0>`, module `ae80470a…` = verifiable build; 23 rule tests, 47 end-to-end tests on the compiled contract, one per attack from the 20 Nov audit |
@@ -38,6 +38,22 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
 Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model; no code reused).
+
+## Check the contract yourself
+
+The escrow at `<13106,0>` runs module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73`. Anyone can confirm it was built from the code in this repo, using Concordium's own build image:
+
+1. Download the published source archive: [release `escrow-v6-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v6-src1) (`ctp_escrow.wasm.v1.tar`, SHA-256 `491ddddcc2691d5c2c0cd407d8257e9cd7ec1213d50fc334169fea78b27bbcc0`).
+2. With Docker and `cargo-concordium` installed, from `contract/`:
+   ```
+   cargo concordium build --verifiable --out ctp_escrow.wasm.v1
+   sha256sum ctp_escrow.wasm.v1
+   ```
+   The hash is the module reference: `ec8aa1da…a94b73`, the same as the module behind `<13106,0>` on CCDExplorer.
+
+CI does exactly this in public: the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45031516327) rebuilt `ec8aa1da` byte for byte, then `cargo concordium verify-build` and `edit-build-info --verify` confirmed the archive matches. The same module with its source link embedded is deployed as `196930b8…` (deploy tx `5fda39e0…`), and every future escrow version ships with that link.
+
+CCDExplorer's automatic check doesn't yet confirm builds from this image; the steps above check it directly.
 
 ## How a payment clears (escrow contract)
 
