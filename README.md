@@ -53,7 +53,7 @@ The escrow at `<13106,0>` runs module `ec8aa1da1bf370b3241a723862ff089cd6549b41e
 
 CI does exactly this in public: the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45031516327) rebuilt `ec8aa1da` byte for byte, then `cargo concordium verify-build` and `edit-build-info --verify` confirmed the archive matches. The same module with its source link embedded is deployed as `196930b8…` (deploy tx `5fda39e0…`), and every future escrow version ships with that link.
 
-CCDExplorer's automatic check currently reports the linked module as not matching, while Concordium's `cargo concordium verify-build` passes on the same archive. The steps above let anyone settle it independently; we have raised the explorer result with the Concordium team.
+CCDExplorer's automatic check currently reports the linked module as not matching, while Concordium's `cargo concordium verify-build` passes on the same archive. The steps above let anyone settle it independently; we are raising the explorer result with the Concordium team.
 
 ## How a payment clears (escrow contract)
 
