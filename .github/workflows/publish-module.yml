@@ -1,0 +1,55 @@
+name: publish module with source link
+# Run by hand (Actions tab > "publish module with source link" > Run workflow).
+# Builds the escrow in Concordium's verifiable build image, publishes the exact
+# source archive as a GitHub Release, embeds that link in the module and checks
+# the link matches. The module in the "ctp_escrow-linked" artifact is the one to
+# deploy: CCDExplorer can then download the source and verify the module.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag for the source archive (new each time, e.g. escrow-v6-src1)
+        required: true
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+      - name: Install cargo-concordium
+        run: command -v cargo-concordium || cargo install --locked cargo-concordium
+      - name: Verifiable build
+        run: |
+          mkdir -p dist
+          cargo concordium build --verifiable --out dist/ctp_escrow.wasm.v1
+          cargo concordium verify-build --module dist/ctp_escrow.wasm.v1 --source dist/ctp_escrow.wasm.v1.tar
+          sha256sum dist/*
+      - name: Publish the source archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$TAG" dist/ctp_escrow.wasm.v1.tar \
+            --title "Escrow source archive ($TAG)" \
+            --notes "Source archive for the verifiable build of commit ${GITHUB_SHA}. Embedded as the source link of the deployed module."
+      - name: Embed the source link and check it
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          LINK="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/ctp_escrow.wasm.v1.tar"
+          cargo concordium edit-build-info --module dist/ctp_escrow.wasm.v1 --source-link "$LINK" --verify
+          cargo concordium print-build-info --module dist/ctp_escrow.wasm.v1
+          echo "Module reference (deploy this):"
+          cargo concordium module-ref dist/ctp_escrow.wasm.v1 2>/dev/null || sha256sum dist/ctp_escrow.wasm.v1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ctp_escrow-linked
+          path: contract/dist/ctp_escrow.wasm.v1
