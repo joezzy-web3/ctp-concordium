@@ -302,3 +302,4 @@ button.link{background:none;border:0;padding:0;color:var(--navy);font:inherit;fo
 .start input,.start select{width:100%;box-sizing:border-box}
 @media (max-width:600px){.form-grid,.own-agent{grid-template-columns:minmax(0,1fr)}.form-grid .field{grid-column:auto}}
 .start .panel>.btn{justify-self:start;min-width:220px}
+.reg-sup{margin-top:12px;padding:14px 16px;border:1px dashed var(--line);border-radius:14px}

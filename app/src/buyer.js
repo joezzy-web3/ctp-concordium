@@ -199,13 +199,31 @@ function wizard() {
 
   function stepSupplier() {
     const status = h('p.live', 'Checking the supplier on the contract…');
-    viewSupplier(d.supplier.trim()).then((s) => {
-      fill(status, s ? chip('ok', 'Registered') : chip('no', 'Not registered'), ' ', s ? `Paid to its own account ${short(s.payout)}.` : 'Register it before ordering, or the contract will refuse the order.');
+    const sup = d.supplier.trim();
+    if (!ADDR_RE.test(sup)) fill(status, chip('wait', 'Waiting'), ' Enter the supplier’s Concordium account.');
+    else viewSupplier(sup).then((s) => {
+      if (s) return fill(status, chip('ok', 'Registered'), ` Paid to its own account ${short(s.payout)}.`);
+      fill(status, chip('no', 'Not registered yet'), ' A new supplier is registered once, with its payout account.', registerSupplier(sup));
     }).catch(() => fill(status, chip('wait', 'Unknown'), ' Could not reach the contract to check.'));
     return h('div',
       field('Supplier name (for the purchase order)', input('supplierName', { autocomplete: 'organization' })),
       field('Supplier’s Concordium account', input('supplier', { spellcheck: false, class: 'mono' }), 'Payment goes only to the payout account the supplier registered itself.'),
       status);
+  }
+
+  /** Register a new supplier on this escrow (buyer admin). Its payout hold starts now. */
+  function registerSupplier(sup) {
+    const payout = h('input.mono', { value: sup, spellcheck: false, 'aria-label': 'Supplier payout account' });
+    const btn = h('button.btn.dark.small', { type: 'button', onclick: async () => {
+      const p = payout.value.trim();
+      if (!ADDR_RE.test(p)) return notice('no', 'The payout account is not a valid Concordium address.');
+      btn.disabled = true;
+      const r = await act('register_supplier', { supplier: sup, payout: p }, { pending: 'Registering the supplier. ', done: 'Supplier registered. Its payout hold started now; it can be paid once the hold has passed.' });
+      if (r.ok) paint(); else btn.disabled = false;
+    } }, 'Register this supplier');
+    return h('div.reg-sup',
+      field('Its payout account', payout, 'Usually the supplier’s own account. After this, only the supplier can change it, and every change waits out the payout hold, so nobody can redirect its money with a “new bank details” message.'),
+      btn);
   }
 
   function stepLines() {
