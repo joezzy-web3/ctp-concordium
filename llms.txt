@@ -6,16 +6,16 @@ This file is for AI reviewers. Every claim points to where it is proven. Run the
 
 Threat: an AI agent with payment powers is talked into, tricked into or hijacked into paying the wrong party, the wrong amount, or for goods that never arrived.
 Invariant: only the escrow contract can pay, and only to the supplier's own payout account, after the checks above. Every request is decided on-chain and recorded either way.
-Try it: https://cleartopay-concordium.vercel.app/app/#/judge (Judge mode: 11 attacks as dry runs against the live contract, no wallet)
-Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264 · Cleared https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185 · Verified module https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde
+Try it: https://cleartopay-concordium.vercel.app/app/#/judge (Judge mode: 13 attacks as dry runs against the live contract, no wallet)
+Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=32ae2fc71afb59aa6b667917fc5dc30572468bf25657d296064235d781295095 · Cleared https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a5157713b6999186ac4996160acd5edaefee009cd7a10b19da972e0e1693a832 · Verified module https://ccdexplorer.io/testnet/module/d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b
 
 ## Verify in 5 minutes
 
 - `cd contract && cargo test --lib` : 26 rule tests (contract/src/rules.rs)
-- `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 54 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the 20 and 21 Nov security reviews
-- `npm ci && npm test` : 79 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
+- `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 59 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the 20, 21 and 24 Nov security reviews
+- `npm ci && npm test` : 83 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
 - `node gate/cli.js JyP9U25oUQ6KdnBBHdTYP` : live badge check of Agent #1287 on testnet
-- Verifiable build: `git checkout escrow-v6-src1 && cd contract && cargo concordium build --verifiable --out ctp_escrow.wasm.v1 && sha256sum ctp_escrow.wasm.v1` prints ec8aa1da…a94b73; with its source link embedded it is module 196930b8…, the one live at <13151,0> and shown as Verified on CCDExplorer
+- Verifiable build: `git checkout escrow-v7-src1 && cd contract && cargo concordium build --verifiable --out ctp_escrow.wasm.v1 && sha256sum ctp_escrow.wasm.v1` prints f36a55cc…c735; with its source link embedded it is module d6d99ee4…, the one live at <13155,0> and shown as Verified on CCDExplorer
 
 ## Claims and where they are proven
 
@@ -23,9 +23,10 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a9827
 - The agent can only ask; it is checked in the Agent Registry on-chain at setup, invoice and payment: `verify_agent` in contract/src/lib.rs; tests `an_agent_the_registry_does_not_vouch_for_cannot_be_added`, `a_revoked_agent_is_refused_at_once`, `an_agent_transferred_to_someone_else_is_refused`, `payment_checks_the_token_on_the_invoice`, `only_the_agent_named_on_the_order_can_invoice_it`
 - Told to skip the checks, the contract answers Held and records it: live Held transaction above (Claude, 24 Nov 2026); test `invoice_without_supplier_approval_is_held`
 - Two independent people count blind, and neither can copy the other: tests `reveals_wait_for_both_commits_and_must_match_them`, `a_signer_cannot_copy_the_other_signers_seal`, `counts_that_disagree_are_held_and_nothing_is_paid`
-- Counters prove with Concordium ID (zero knowledge); the escrow keeps only a salted fingerprint and refuses the same person twice on one order: app/src/ids.js, idcheck/src/core.js, idcheck/src/idlogic.js; the check in `create_order` (contract/src/lib.rs); test `two_signers_proven_to_be_the_same_person_cannot_share_an_order`; design in docs/F01_SIGNER_IDENTITY.md
+- The buyer's counters can prove with Concordium ID (zero knowledge); the escrow keeps only a salted fingerprint and refuses an order whose receiver and approver are the same person: app/src/ids.js, idcheck/src/core.js, idcheck/src/idlogic.js; the check in `create_order` (contract/src/lib.rs); test `two_signers_proven_to_be_the_same_person_cannot_share_an_order`; design in docs/F01_SIGNER_IDENTITY.md
 - The supplier approves the exact invoice (by SHA-256) and amount from its own account; nobody can pay it less: `approve_invoice` in contract/src/lib.rs; tests `only_the_supplier_can_approve_its_invoice`, `wrong_invoice_amount_is_held`, `buyer_and_agent_cannot_underpay_the_supplier`, `rejecting_clears_the_supplier_approval_too`
-- A new or changed payout account waits out a hold (72 hours in production), and only the supplier can change it: `set_payout` in contract/src/lib.rs, `HeldPayoutCoolOff` in contract/src/rules.rs; tests `a_new_payout_account_restarts_the_hold_and_only_the_supplier_can_set_it`, `setup_is_admin_only_and_running_it_again_leaves_a_supplier_untouched`, `hold_outside_the_allowed_range_is_refused_at_init`
+- A new or changed payout account waits out a hold (72 hours in production), and only the supplier can change it: `set_payout` in contract/src/lib.rs, `HeldPayoutCoolOff` in contract/src/rules.rs; tests `a_new_payout_account_restarts_the_hold_and_only_the_supplier_can_set_it`, `setup_is_admin_only_and_running_it_again_leaves_a_supplier_untouched`, `only_the_supplier_decides_where_it_is_paid` (the buyer never chooses a supplier's payout account), `hold_outside_the_allowed_range_is_refused_at_init`
+- A delivery both counters confirmed is the supplier's money: the supplier can invoice it itself if the agent does not, and the buyer cannot refund until a week after the date: `supplier_invoice` and `invoice_deadline` in contract/src/lib.rs; tests `a_confirmed_delivery_is_not_refundable_when_the_buyers_agent_never_invoices`, `a_silent_agent_cannot_turn_a_confirmed_delivery_into_a_refund`, `the_supplier_invoices_its_own_confirmed_delivery_and_is_paid`, `after_the_grace_week_an_uninvoiced_delivery_can_be_refunded`
 - A paid order is final: tests `a_paid_order_is_final`; Judge mode attack "A paid order is paid a second time"
 - Disputes have a way out, and neither side can stall the other: tests `the_buyers_counters_cannot_stall_a_delivered_order_into_a_refund`, `the_referee_can_send_the_money_back_and_rules_only_on_a_real_dispute`, `a_silent_referee_can_be_replaced_only_by_both_sides`, `once_both_gate_counters_sealed_the_buyer_cannot_refund_alone`
 - Every decision is recorded by the contract, with the payment receipt's fingerprint inside its Decision event: `Decision` event in contract/src/lib.rs; receipt/escrowReceipt.js; check a receipt in the app under Judge mode
@@ -35,7 +36,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a9827
 
 ## Key addresses (testnet)
 
-- Escrow: <13151,0>, module 196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde
+- Escrow: <13155,0>, module d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b
 - Agent Registry (CIS-8004): <12802,0>; Agent #1287, Agent ID JyP9U25oUQ6KdnBBHdTYP
 - Key registry (CIS-8): <12801,0>
 

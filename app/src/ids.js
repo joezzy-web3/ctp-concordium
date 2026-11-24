@@ -216,7 +216,10 @@ async function recordIt(result, tx, a, record, attrs) {
   const others = verified().filter((v) => v.account !== a.signer);
   const twin = others.find((v) => v.tag === tag);
   store.set(K, [...others, { account: a.signer, role: a.role, tag, audit: audit.hash, auditTx, at: Date.now(), request: tx }]);
+  // Recorded: drop the answer (it carries the ID number) and the open request, so it leaves
+  // the waiting list and cannot be checked again.
   const got = answers(); delete got[tx]; store.set(ANSWERS, got);
+  const ask = asked(); delete ask[tx]; store.set(ASKED, ask);
   const file = h('a.btn.line.small', { href: URL.createObjectURL(new Blob([JSON.stringify({ escrow: `<${ESCROW.index},0>`, account: a.signer, role: a.role, person_tag: tag, id_audit: audit.hash, audit_anchor_tx: auditTx, audit_record: audit.json }, null, 2)], { type: 'application/json' })), download: `ctp-id-audit-${a.signer.slice(0, 8)}-PRIVATE.json`, title: 'Contains the counter’s ID document number. Keep it private.' }, icon('download', 16), 'Audit record (private: has the ID number)');
   fill(result, h(`section.panel.result.${twin ? 'no' : 'ok'}`,
     h('h3', icon(twin ? 'alert' : 'check', 18), twin ? ' Recorded: same person as another counter' : ` ${CAST.nameOf(a.signer)} is verified on the escrow`),

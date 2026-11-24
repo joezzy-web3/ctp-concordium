@@ -54,7 +54,7 @@
 | Approver | `3byivDufzZzRRFasdEcL6pYM9zyyER73kaYvraPWb1rVixy9pA` |
 | Supplier (also its payout account) | `45H81t8SBw5z84LjPcX3VFZRWPrcEKv3bTbao8yC5hbP2BixMY` |
 
-All five come from one tester's identity on testnet. That is exactly the gap Concordium ID proofs close (build order 3): in production each signer proves they are a different verified person.
+These demo accounts come from one tester's identity on testnet, which is fine for a demo. In a real escrow the buyer turns on ID checks, each counter proves they are a verified adult, and the contract refuses an order whose receiver and approver are the same person.
 
 ## Done
 - [x] Agent Card built with the hosted MCP tool `build_agent_card`, hosted on GitHub Pages, served bytes verified (v1, superseded by v2 below).
@@ -85,12 +85,15 @@ Judging: 1 depth of integration (identity + registry + payments), 2 path to prod
 4. **One-click team onboarding** (polish, last): connect company, invite storekeeper and weighbridge, done.
 
 ## Next
-- [ ] Confirm the on-chain hash matches the hosted card (`verify_agent_card` / `GET /v1/verify-agent-card/{badge}` -> `match: true`).
-- [ ] Badge gate: Clear to Pay refuses invoices from agents whose badge fails `check-badge` or `verify-agent-card` (reason codes).
-- [ ] Verified human signers with Concordium ID (ZK proof of a role attribute). Ask at office hours whether Agent IDP is live on testnet.
-- [ ] Escrow contract on testnet (Rust).
-- [ ] Payouts (x402 / PLT, sponsored fees) and EU AI Act Article 12 audit trail.
-- [ ] PATH_TO_PRODUCTION.md: LEI-verified buyer companies, signer keys via wallet-as-a-service (Dfns, MPC) or Tether WDK, branded app (no crypto wallet in sight), ZK attribute proofs.
+
+**Status 24 Nov 2026:** everything below is done and live; the README's "What's live" table is the current record. Kept as the original plan.
+
+- [x] Confirm the on-chain hash matches the hosted card (`verify_agent_card` / `GET /v1/verify-agent-card/{badge}` -> `match: true`).
+- [x] Badge gate: Clear to Pay refuses invoices from agents whose badge fails `check-badge` or `verify-agent-card` (reason codes).
+- [x] Verified human signers with Concordium ID (ZK proof of a role attribute). Ask at office hours whether Agent IDP is live on testnet.
+- [x] Escrow contract on testnet (Rust): v7 live at `<13155,0>`.
+- [x] EU AI Act Article 12 audit trail (Decision events with receipt fingerprints). PLT stablecoin payouts and sponsored fees: PATH_TO_PRODUCTION.md.
+- [x] PATH_TO_PRODUCTION.md: LEI-verified buyer companies, signer keys via wallet-as-a-service (Dfns, MPC) or Tether WDK, branded app (no crypto wallet in sight), ZK attribute proofs.
 
 ## Do not forget
-- [ ] **Cross-chain link to the NEAR agent (now a headline item: the brief asks for an agent you already run on another chain).** Agent #1287 was registered as **Native** on purpose. Later, link the original Clear to Pay NEAR agent (github.com/joezzy-web3/clear-to-pay) as a cross-chain reference: CIS-8 key binding with its own ownership proof (`build_cis8_canonical_bytes` -> sign with the NEAR key -> `build_cis8_register` -> `build_set_external_reference`). The registry dashboard lists NEAR among supported cross-chain agents.
+- [x] **Cross-chain link to the NEAR agent (now a headline item: the brief asks for an agent you already run on another chain).** Agent #1287 was registered as **Native** on purpose. Later, link the original Clear to Pay NEAR agent (github.com/joezzy-web3/clear-to-pay) as a cross-chain reference: CIS-8 key binding with its own ownership proof (`build_cis8_canonical_bytes` -> sign with the NEAR key -> `build_cis8_register` -> `build_set_external_reference`). The registry dashboard lists NEAR among supported cross-chain agents.
