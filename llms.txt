@@ -12,7 +12,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a9827
 ## Verify in 5 minutes
 
 - `cd contract && cargo test --lib` : 26 rule tests (contract/src/rules.rs)
-- `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 54 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the two security reviews
+- `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 54 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the 20 and 21 Nov security reviews
 - `npm ci && npm test` : 79 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
 - `node gate/cli.js JyP9U25oUQ6KdnBBHdTYP` : live badge check of Agent #1287 on testnet
 - Verifiable build: `git checkout escrow-v6-src1 && cd contract && cargo concordium build --verifiable --out ctp_escrow.wasm.v1 && sha256sum ctp_escrow.wasm.v1` prints ec8aa1da…a94b73; with its source link embedded it is module 196930b8…, the one live at <13151,0> and shown as Verified on CCDExplorer
@@ -44,4 +44,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a9827
 - README.md: overview, how the brief is met, what is live
 - contract/DESIGN.md: every rule of the escrow
 - PATH_TO_PRODUCTION.md: audit, mainnet, stablecoin payouts, sponsored fees
+- THREAT_MODEL.md: every threat, its defence and the test that fails if the defence breaks
+- docs/testnet-proof.md: every testnet transaction, newest first
+- README.md "Why now": sourced figures (FBI IC3 2025, AFP 2026, Forrester for Basware 2026); "How we got here": timeline from the NEAR build (30 Oct 2026) to the Verified module
 - mcp/README.md: connect Claude Desktop (or any MCP client) to the escrow
