@@ -286,7 +286,8 @@ div.result{background:var(--sheet);border-radius:16px;padding:16px 20px;margin-t
 
 /* start your own escrow */
 .start{display:grid;gap:20px;max-width:880px;margin:0 auto}
-.start .panel{display:grid;gap:14px}
+.start .panel{display:grid;gap:12px}
+.start .panel>h3,.start .panel>p{margin:0}
 .start-steps{margin:0;padding-left:22px;display:grid;gap:10px}
 .start-steps li b{display:block}.start-steps li span{color:var(--mute);font-size:15px}
 .start-now{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:12px 14px;border-radius:12px;background:var(--sheet,#F6F7F9);font-size:15px}

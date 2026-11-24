@@ -19,7 +19,7 @@ function sidebar(sub) {
   return h('aside.side',
     h('div.who', h('span.avatar', 'B'), h('div', h('b', 'Buyer'), h('span.mono', me ? short(me) : 'Not connected'))),
     h('nav', { 'aria-label': 'Buyer sections' }, item('', 'Dashboard', 'grid'), item('new', 'New order', 'plus'), item('orders', 'Orders', 'list'), item('ids', 'ID checks', 'user')),
-    h('div.side-foot', h('a', { href: CONTRACT_URL, target: '_blank', rel: 'noopener' }, `Escrow <${ESCROW.index},${ESCROW.subindex}>${isDemo ? ' · demo' : ''}`, icon('external', 14)), h('a.side-switch', { href: '#/start' }, isDemo ? 'Start your own escrow' : 'Switch escrow')));
+    h('div.side-foot', h('a', { href: CONTRACT_URL, target: '_blank', rel: 'noopener' }, `Escrow <${ESCROW.index},${ESCROW.subindex}>`, icon('external', 14)), h('a.side-switch', { href: '#/start' }, isDemo ? 'Start your own escrow' : 'Switch escrow')));
 }
 
 export async function buyerView(sub = '') {
