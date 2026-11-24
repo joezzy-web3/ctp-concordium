@@ -250,7 +250,7 @@ function wizard() {
       sign.disabled = true;
       const r = await act('create_order', params(), { micro: t.micro, pending: `Order #${d.orderId} sent. `, done: `Order #${d.orderId} created. ${microToCcd(t.micro)} CCD is locked in escrow.` });
       sign.disabled = false;
-      if (r.ok) { store.set(`ctp:po:${d.orderId}`, d); store.del('ctp:draft'); location.hash = '#/buyer/orders'; }
+      if (r.ok) { store.set(`ctp:po:${d.orderId}`, d); store.set(`ctp:po:${ESCROW.index}:${d.orderId}`, d); store.del('ctp:draft'); location.hash = '#/buyer/orders'; }
     } }, 'Sign with wallet');
     return h('div.review',
       h('div.rv-col',

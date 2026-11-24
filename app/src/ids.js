@@ -187,7 +187,8 @@ async function checkAndOffer(result, tx, a, presentation) {
   } }, 'Record on the escrow');
   fill(result, h('section.panel.result.ok',
     h('h3', icon('check', 18), ` ${CAST.nameOf(a.signer)} is a verified adult`),
-    h('p', `Proven with Concordium ID for ${short(a.signer)} as ${a.role}. ID document ${masked}. The number is used once to make a private fingerprint and is not stored.`),
+    h('p', `Proven with Concordium ID for ${short(a.signer)} as ${a.role}. ID document ${masked}.`),
+    h('p', 'Recording puts only a salted fingerprint of the document on the escrow, so the same person can never count twice on one order. The number itself is not stored.'),
     h('p.fine', 'Recording asks your buyer wallet for three approvals: a fixed message (makes your private salt, first time only), the audit record, and the escrow update.'),
     rec));
 }
