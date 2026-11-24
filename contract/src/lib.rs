@@ -16,8 +16,12 @@ use rules::{Facts, Reveal};
 
 pub type OrderId = u64;
 
-/// Allowed range for the payout hold: at least 1 minute, at most 30 days.
+/// Allowed range for the payout hold: at most 30 days, and at least 1 minute on testnet
+/// (so a full test run fits in one sitting) or 24 hours in a mainnet build.
+#[cfg(not(feature = "mainnet"))]
 const MIN_HOLD_MS: u64 = 60 * 1000;
+#[cfg(feature = "mainnet")]
+const MIN_HOLD_MS: u64 = 24 * 3600 * 1000;
 const MAX_HOLD_MS: u64 = 30 * 24 * 3600 * 1000;
 /// How many times the buyer or supplier can ask the signers to count again.
 pub const MAX_RECOUNTS: u8 = 2;
@@ -25,6 +29,9 @@ pub const MAX_RECOUNTS: u8 = 2;
 const PROPOSAL_TTL_MS: u64 = 7 * 24 * 3600 * 1000;
 /// After the referee rules the goods delivered, the supplier has at least this long to invoice.
 const RULED_INVOICE_GRACE_MS: u64 = 7 * 24 * 3600 * 1000;
+/// After a delivery both gate counters confirmed, the supplier has this long past the agreed
+/// date to invoice (itself if the buyer's agent never does), and the buyer cannot refund meanwhile.
+const CONFIRMED_INVOICE_GRACE_MS: u64 = 7 * 24 * 3600 * 1000;
 
 #[derive(Serialize, SchemaType, Clone, Debug, PartialEq, Eq)]
 pub struct Supplier {
@@ -239,6 +246,12 @@ pub enum Error {
     NotOrderAgent,
     /// The two signers on an order are proven to be the same person.
     SamePerson,
+    /// A new supplier is always paid to its own account; only the supplier can change it (set_payout).
+    PayoutNotSupplier,
+    /// The supplier can invoice an order itself only once both gate counts confirm the delivery.
+    DeliveryNotConfirmed,
+    /// An invoice the supplier submits itself must be for the full escrowed amount.
+    NotFullAmount,
 }
 
 impl From<LogError> for Error {
@@ -294,6 +307,8 @@ pub enum Event {
     DateProposalCleared { order_id: OrderId },
     RefereeProposed { order_id: OrderId, by: AccountAddress, referee: AccountAddress },
     RefereeChanged { order_id: OrderId, referee: AccountAddress },
+    /// The supplier invoiced its own confirmed delivery (the buyer's agent did not).
+    SupplierInvoiced { order_id: OrderId, supplier: AccountAddress, invoice_hash: HashSha2256, amount: Amount },
 }
 
 // ---------- parameters ----------
@@ -505,9 +520,22 @@ fn before_deadline(ctx: &ReceiveContext, o: &Order) -> ContractResult<()> {
     Ok(())
 }
 
-/// Invoices and approvals: before the date, or any time once the referee ruled the goods delivered.
+/// The last moment to invoice and approve. A referee "Delivered" ruling already moved
+/// invoice_by; a delivery both gate counters confirmed gets a grace week past the date, so the
+/// supplier is never left waiting on the buyer's agent until it is too late.
+fn invoice_deadline(o: &Order) -> Timestamp {
+    if !o.ruled_delivered && delivery_confirmed(o) {
+        Timestamp::from_timestamp_millis(o.invoice_by.timestamp_millis().saturating_add(CONFIRMED_INVOICE_GRACE_MS))
+    } else {
+        o.invoice_by
+    }
+}
+
+/// Invoices and approvals: before the deadline, or any time once the referee ruled the goods delivered.
 fn invoice_window(ctx: &ReceiveContext, o: &Order) -> ContractResult<()> {
-    if o.ruled_delivered { Ok(()) } else { before_deadline(ctx, o) }
+    if o.ruled_delivered { return Ok(()); }
+    ensure!(ctx.metadata().slot_time() <= invoice_deadline(o), Error::PastDeadline);
+    Ok(())
 }
 
 /// The buyer (admin) or the supplier of this order.
@@ -566,6 +594,9 @@ fn set_agent(host: &mut Host<State>, logger: &mut Logger, p: &AgentParams) -> Co
 
 fn add_supplier(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger, p: &SupplierParams) -> ContractResult<()> {
     ensure!(host.state().suppliers.get(&p.supplier).is_none(), Error::SupplierExists);
+    // Only the supplier decides where it is paid: it starts as the supplier's own account,
+    // and only the supplier can change it (set_payout, which restarts the hold).
+    ensure!(p.payout == p.supplier, Error::PayoutNotSupplier);
     let at = ctx.metadata().slot_time();
     let _ = host.state_mut().suppliers.insert(p.supplier, Supplier { payout: p.payout, payout_set_at: at });
     logger.log(&Event::SupplierRegistered { supplier: p.supplier, payout: p.payout, at })?;
@@ -727,7 +758,8 @@ fn refund(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> 
     let order_id: OrderId = ctx.parameter_cursor().get()?;
     let order = open_order(host, order_id)?;
     ensure!(!order.paid, Error::OrderClosed);
-    let expired = ctx.metadata().slot_time() > order.invoice_by && !ready_to_pay(&order) && !disputed(&order);
+    // A confirmed delivery stays locked through its grace week (invoice_deadline).
+    let expired = ctx.metadata().slot_time() > invoice_deadline(&order) && !ready_to_pay(&order) && !disputed(&order);
     ensure!(!order.accepted || expired, Error::RefundLocked);
     let admin = host.state().admin;
     close_and_refund(host, logger, order_id, order.amount, admin)
@@ -1027,6 +1059,31 @@ fn reject_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Log
     Ok(())
 }
 
+/// Fallback when the buyer's agent does not invoice: the supplier invoices its own
+/// confirmed delivery, for the full escrowed amount, which also counts as its approval.
+/// The agent stays the normal path; payment still runs every rule in execute_payment.
+#[receive(contract = "ctp_escrow", name = "supplier_invoice", parameter = "InvoiceParams", error = "Error", mutable, enable_logger)]
+fn supplier_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
+    let supplier = sender_account(ctx).map_err(|_| Error::NotSupplier)?;
+    let p: InvoiceParams = ctx.parameter_cursor().get()?;
+    let order = open_order(host, p.order_id)?;
+    ensure!(!order.paid, Error::OrderClosed);
+    ensure!(order.supplier == supplier, Error::NotSupplier);
+    ensure!(order.accepted, Error::OrderNotAccepted);
+    ensure!(delivery_confirmed(&order), Error::DeliveryNotConfirmed);
+    ensure!(order.invoice.is_none(), Error::InvoiceExists);
+    ensure!(p.amount == order.amount, Error::NotFullAmount);
+    invoice_window(ctx, &order)?;
+    if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
+        // The supplier is recorded as the submitter (agent_token_id 0: no agent involved).
+        o.invoice = Some(Invoice { agent: supplier, agent_token_id: 0, invoice_hash: p.invoice_hash, amount: p.amount });
+        o.supplier_approval = Some(Approval { invoice_hash: p.invoice_hash, amount: p.amount });
+    }
+    logger.log(&Event::SupplierInvoiced { order_id: p.order_id, supplier, invoice_hash: p.invoice_hash, amount: p.amount })?;
+    logger.log(&Event::InvoiceApproved { order_id: p.order_id, supplier, invoice_hash: p.invoice_hash, amount: p.amount })?;
+    Ok(())
+}
+
 // ---------- agent ----------
 
 #[receive(contract = "ctp_escrow", name = "submit_invoice", parameter = "InvoiceParams", error = "Error", mutable, enable_logger)]
@@ -1057,7 +1114,7 @@ fn execute_payment(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Lo
     // A paid order is final: no further decisions are logged for it.
     ensure!(!order.paid, Error::OrderClosed);
     let invoice = order.invoice.clone().ok_or(Error::NoInvoice)?;
-    if caller == invoice.agent {
+    if caller == invoice.agent && invoice.agent != order.supplier {
         // The agent that submitted the invoice: still registered here, and re-checked in the
         // registry at every decision, so a revoked or transferred agent is refused at once.
         let token = host.state().agents.get(&caller).map(|t| *t).ok_or(Error::NotAgent)?;

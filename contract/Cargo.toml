@@ -8,6 +8,8 @@ description = "Clear to Pay escrow: supplier payment rules enforced on-chain (Co
 [features]
 # Builds the AgentView test helper into the library (used by the mock registry).
 mock = []
+# Mainnet build: the payout hold is at least 24 hours.
+mainnet = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]
