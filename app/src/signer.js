@@ -1,5 +1,5 @@
 // Delivery signer space: count, seal, unseal. Only orders that name this account.
-import { currentAccount, listOrders } from './chain.js';
+import { ESCROW, currentAccount, listOrders } from './chain.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, short, store, notice } from './ui.js';
@@ -104,6 +104,7 @@ function card(o, me) {
   } else if (!mine) {
     fill(body,
       recountNote, unloadNote, approverNote,
+      whatNote(o),
       h('p', `Count the units that arrived for order #${o.id}, on your own. You are not shown the ordered amount, so your count stays independent.`),
       sealButton('Seal my count'),
       h('p.fine', 'Only a fingerprint of your count goes on-chain. This browser keeps the key to unseal it.'));
@@ -153,4 +154,15 @@ function backupBlock(saved) {
     h('p.fine', 'Only needed if you unseal on another device or clear this browser. Anyone with this code can see your count, so keep it private until both counts are unsealed.'),
     h('div.count-row', h('input.mono', { value: code, readOnly: true, 'aria-label': 'Backup code' }),
       h('button.btn.line.small', { type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(code); notice('ok', 'Backup code copied.'); } catch { notice('no', 'Could not copy. Select the code and copy it by hand.'); } } }, 'Copy')));
+}
+
+/** What the counter is counting (items, never quantities), from the purchase order if this
+ *  browser has it; otherwise the counter checks the paper purchase order at the gate. */
+function whatNote(o) {
+  const po = store.get(`ctp:po:${ESCROW.index}:${o.id}`);
+  const items = (po?.lines ?? []).map((l) => (l.item ?? '').trim()).filter(Boolean);
+  if (po?.supplier === o.supplier && items.length) {
+    return h('p.what', h('strong', `Order #${o.id} from ${po.supplierName || CAST.nameOf(o.supplier)}: `), items.join(', '), '.');
+  }
+  return h('p.what', h('strong', `Order #${o.id} from ${CAST.nameOf(o.supplier)}. `), 'Check the items against the purchase order the driver hands you.');
 }
