@@ -2,7 +2,7 @@
 // that nothing is sent when the contract would refuse.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readdirSync, chmodSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,7 +63,7 @@ test('a copied private key loads, with its public key for the on-chain check', (
   assert.equal(publicKeyOf(TEST_SK), TEST_PK);
   const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
   const file = join(dir, 'agent.key');
-  writeFileSync(file, `${TEST_SK}\n`);
+  writeFileSync(file, `${TEST_SK}\n`, { mode: 0o600 });
   const s = loadAgentSigner(file, AGENT.owner);
   assert.equal(s.publicKey, TEST_PK);
   writeFileSync(file, 'not a key');
@@ -78,7 +78,7 @@ test('verify keys are read from account credentials', () => {
 test('a key that does not belong to the agent account is never used to send', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
   const file = join(dir, 'agent.key');
-  writeFileSync(file, TEST_SK);
+  writeFileSync(file, TEST_SK, { mode: 0o600 });
   let sent = false;
   const client = {
     getAccountInfo: async () => ({ accountCredentials: { 0: { value: { contents: { credentialPublicKeys: { keys: { 0: { verifyKey: 'ab'.repeat(32) } } } } } } } }),
@@ -114,14 +114,16 @@ test('an invoice the contract would refuse is never sent', async () => {
   const file = join(dir, 'invoice.pdf');
   writeFileSync(file, 'invoice');
   const chain = fakeChain({ sim: { submit_invoice: { ok: false, error: 'NotOrderAgent', explain: 'Only the agent named on this order can submit its invoice.' } } });
-  const out = await makeTools(chain).submitInvoice({ order_id: 1, invoice_file: file, amount_ccd: '5' });
+  const out = await makeTools(chain, { invoiceDir: dir }).submitInvoice({ order_id: 1, invoice_file: file, amount_ccd: '5' });
   assert.match(out, /would refuse this invoice \(NotOrderAgent\)/);
   assert.equal(chain.sent.length, 0);
 });
 
 test('the invoice tool reads only regular files', async () => {
   const chain = fakeChain();
-  const out = await makeTools(chain).submitInvoice({ order_id: 1, invoice_file: tmpdir(), amount_ccd: '5' });
+  const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
+  mkdirSync(join(dir, 'folder'));
+  const out = await makeTools(chain, { invoiceDir: dir }).submitInvoice({ order_id: 1, invoice_file: join(dir, 'folder'), amount_ccd: '5' });
   assert.match(out, /not a regular file/);
   assert.equal(chain.sent.length, 0);
 });
@@ -131,7 +133,7 @@ test('an accepted invoice is sent with only its fingerprint', async () => {
   const file = join(dir, 'invoice.pdf');
   writeFileSync(file, 'invoice');
   const chain = fakeChain();
-  const out = await makeTools(chain).submitInvoice({ order_id: 1, invoice_file: file, amount_ccd: '5' });
+  const out = await makeTools(chain, { invoiceDir: dir }).submitInvoice({ order_id: 1, invoice_file: file, amount_ccd: '5' });
   assert.match(out, /Invoice submitted on order #1: 5 CCD/);
   assert.equal(chain.sent.length, 1);
   assert.equal(chain.sent[0].bytes.length, 48);
@@ -162,4 +164,49 @@ test('the server starts and lists its six tools', async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((x) => x.name).sort(), ['check_agent_badge', 'dry_run_payment', 'get_order', 'list_orders', 'request_payment', 'submit_invoice']);
   await client.close();
+});
+
+// Audit 24 Nov L2, L3, L1, M5.
+test('the invoice tool reads only from the invoices folder, never hidden or outside files', async () => {
+  const chain = fakeChain();
+  const root = mkdtempSync(join(tmpdir(), 'ctp-'));
+  const inv = join(root, 'invoices');
+  mkdirSync(inv);
+  mkdirSync(join(inv, '.ssh'));
+  writeFileSync(join(inv, '.ssh', 'id_ed25519'), 'secret');
+  writeFileSync(join(root, 'outside.pdf'), 'x');
+  const t = makeTools(chain, { invoiceDir: inv });
+  for (const f of [join(root, 'outside.pdf'), join(inv, '..', 'outside.pdf'), join(inv, '.ssh', 'id_ed25519')]) {
+    assert.match(await t.submitInvoice({ order_id: 1, invoice_file: f, amount_ccd: '5' }), /Invoices are read only from/);
+  }
+  assert.equal(chain.sent.length, 0);
+});
+
+test('a key file other users can read is refused', { skip: process.platform === 'win32' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
+  const file = join(dir, 'agent.key');
+  writeFileSync(file, TEST_SK);
+  chmodSync(file, 0o644);
+  assert.throws(() => loadAgentSigner(file, AGENT.owner), /chmod 600/);
+});
+
+test('the agent will not sign for a contract that is not running the verified code', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ctp-'));
+  const file = join(dir, 'agent.key');
+  writeFileSync(file, TEST_SK, { mode: 0o600 });
+  let sent = false;
+  const client = {
+    getInstanceInfo: async () => ({ sourceModule: { moduleRef: 'cd'.repeat(32) }, name: { value: 'init_ctp_escrow' } }),
+    getAccountInfo: async () => { sent = true; return {}; },
+  };
+  const chain = createEscrow({ escrow: { index: 1, subindex: 0 }, agent: AGENT, keyFile: file, client, verifiedModules: ['ab'.repeat(32)] });
+  await assert.rejects(chain.send('execute_payment', executeParams(1, '00'.repeat(32)), 1000), /not running the verified Clear to Pay code/);
+  assert.equal(sent, false);
+});
+
+test('a recently changed payout account is called out', async () => {
+  const chain = fakeChain();
+  chain.viewSupplier = async () => ({ payout: 'X'.repeat(50), payout_set_at: Date.now() - 2 * 3600000 });
+  chain.viewConfig = async () => ({ hold_ms: 72 * 3600000 });
+  assert.match(await makeTools(chain).getOrder({ order_id: 1 }), /payout account was changed about 2 hours ago/);
 });

@@ -10,6 +10,7 @@
 //                       server reads and dry-runs only). The key is never printed or returned.
 //   CTP_ESCROW          escrow contract index (default: the live one in app/src/chain.js)
 //   CTP_RECEIPTS_DIR    where payment receipts are kept (default ~/.local/share/clear-to-pay/receipts)
+//   CTP_INVOICE_DIR     the only folder invoices are read from (default ~/Downloads)
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -24,7 +25,8 @@ const [, id, badge, owner] = chainSrc.match(/AGENT = \{ id: (\d+), badge: '([^']
 
 const escrow = { index: Number(process.env.CTP_ESCROW ?? defaultIndex), subindex: 0 };
 const agent = { id: Number(id), badge, owner };
-const chain = createEscrow({ escrow, agent, keyFile: process.env.CTP_AGENT_KEY_FILE });
+const verifiedModules = [...chainSrc.match(/VERIFIED_MODULES = \[([^\]]*)\]/)[1].matchAll(/'([0-9a-f]{64})'/g)].map((m) => m[1]);
+const chain = createEscrow({ escrow, agent, keyFile: process.env.CTP_AGENT_KEY_FILE, verifiedModules });
 const tools = makeTools(chain);
 
 const server = new McpServer({ name: 'clear-to-pay', version: '0.1.0' }, {
@@ -72,7 +74,7 @@ server.registerTool('submit_invoice', {
   description: 'Submits the supplier’s invoice for an order: only the file’s SHA-256 and the amount go on-chain. Dry-runs first and sends only if the contract would accept it. The supplier must still approve it from its own account.',
   inputSchema: {
     ...order,
-    invoice_file: z.string().min(1).describe('Path to the invoice file on this computer'),
+    invoice_file: z.string().min(1).describe('Path to the invoice file, inside the invoices folder this server reads from (CTP_INVOICE_DIR, default the Downloads folder)'),
     amount_ccd: z.string().regex(/^\d+(\.\d{1,6})?$/).describe('Amount on the invoice, in CCD, for example "25" or "0.5"'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },

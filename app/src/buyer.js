@@ -203,26 +203,24 @@ function wizard() {
     if (!ADDR_RE.test(sup)) fill(status, chip('wait', 'Waiting'), ' Enter the supplier’s Concordium account.');
     else viewSupplier(sup).then((s) => {
       if (s) return fill(status, chip('ok', 'Registered'), ` Paid to its own account ${short(s.payout)}.`);
-      fill(status, chip('no', 'Not registered yet'), ' A new supplier is registered once, with its payout account.', registerSupplier(sup));
+      fill(status, chip('no', 'Not registered yet'), ' A new supplier is registered once.', registerSupplier(sup));
     }).catch(() => fill(status, chip('wait', 'Unknown'), ' Could not reach the contract to check.'));
     return h('div',
       field('Supplier name (for the purchase order)', input('supplierName', { autocomplete: 'organization' })),
-      field('Supplier’s Concordium account', input('supplier', { spellcheck: false, class: 'mono' }), 'Payment goes only to the payout account the supplier registered itself.'),
+      field('Supplier’s Concordium account', input('supplier', { spellcheck: false, class: 'mono' }), 'Payment goes only to the supplier’s own account, or one the supplier chose itself.'),
       status);
   }
 
-  /** Register a new supplier on this escrow (buyer admin). Its payout hold starts now. */
+  /** Register a new supplier on this escrow (buyer admin). It is paid to its own account;
+   *  only the supplier can choose another one (audit 24 Nov H2). Its payout hold starts now. */
   function registerSupplier(sup) {
-    const payout = h('input.mono', { value: sup, spellcheck: false, 'aria-label': 'Supplier payout account' });
     const btn = h('button.btn.dark.small', { type: 'button', onclick: async () => {
-      const p = payout.value.trim();
-      if (!ADDR_RE.test(p)) return notice('no', 'The payout account is not a valid Concordium address.');
       btn.disabled = true;
-      const r = await act('register_supplier', { supplier: sup, payout: p }, { pending: 'Registering the supplier. ', done: 'Supplier registered. Its payout hold started now; it can be paid once the hold has passed.' });
+      const r = await act('register_supplier', { supplier: sup, payout: sup }, { pending: 'Registering the supplier. ', done: 'Supplier registered, paid to its own account. Its payout hold started now; it can be paid once the hold has passed.' });
       if (r.ok) paint(); else btn.disabled = false;
     } }, 'Register this supplier');
     return h('div.reg-sup',
-      field('Its payout account', payout, 'Usually the supplier’s own account. After this, only the supplier can change it, and every change waits out the payout hold, so nobody can redirect its money with a “new bank details” message.'),
+      h('p.fine', 'It is paid to its own account. Only the supplier can choose another payout account, from its own wallet, and every change waits out the payout hold. You never type in where a supplier is paid, so a “new bank details” message cannot redirect its money.'),
       btn);
   }
 

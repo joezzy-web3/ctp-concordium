@@ -1,6 +1,6 @@
 // Supplier and Agent spaces.
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
-import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen } from './codec.js';
+import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen, invoiceDeadline, supplierCanInvoice } from './codec.js';
 import { dateBlock, refereeBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
 import { askForPayment, receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
@@ -41,6 +41,9 @@ export async function supplierView() {
   const payout = h('section.panel',
     h('h3', 'Your payout account'),
     h('p.big-addr.mono', sup.payout),
+    // A new supplier starts paid to its own account, so a different account still in its hold
+    // means it was changed recently. Make that impossible to miss (audit 24 Nov M5).
+    left > 0 && sup.payout !== me ? h('p.err', icon('alert', 16), `Your payout account was changed ${countdown(Date.now() - sup.payout_set_at)} ago. If you did not do this, your account key may be stolen: change it back now and tell the buyer. Nothing can be paid there until the hold ends.`) : null,
     left > 0 ? h('p', chip('hold', `Hold: ${countdown(left)} left`), ` Payments can go here from ${fmtDate(end)}.`) : h('p', chip('ok', 'Ready'), ' Payments can go here now.'),
     h('details.change',
       h('summary', 'Change payout account'),
@@ -101,9 +104,9 @@ export async function supplierView() {
     return h('section.panel.count',
       h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', approved ? 'Approved' : 'Invoice waiting for your approval'), h('span', chip(st.tone, st.label)))),
       h('div.big-amount.num', `${microToCcd(o.invoice.amount)} CCD`),
-      h('p.fine', `Escrowed for this order: ${microToCcd(o.amount)} CCD. Invoice ${o.invoice.invoice_hash.slice(0, 8)}…, submitted by Agent #${o.invoice.agent_token_id ?? AGENT.id}.`),
+      h('p.fine', `Escrowed for this order: ${microToCcd(o.amount)} CCD. Invoice ${o.invoice.invoice_hash.slice(0, 8)}…, submitted ${o.invoice.agent === o.supplier ? 'by you' : `by Agent #${o.invoice.agent_token_id ?? AGENT.id}`}.`),
       h('p.fine', `Counts: ${countsLine(o)}.`),
-      closed ? h('p.err', icon('alert', 16), `The latest date (${fmtDay(o.invoice_by)}) has passed, so approvals are closed. Ask the buyer to agree a new date.`) : null,
+      closed ? h('p.err', icon('alert', 16), `The last day to approve (${fmtDay(invoiceDeadline(o))}) has passed, so approvals are closed. Ask the buyer to agree a new date.`) : null,
       approved || closed ? null : [
         h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
         h('label.field', h('span', 'Amount you agree to be paid (CCD)'), amountIn),
@@ -124,9 +127,30 @@ export async function supplierView() {
         } }, 'Not my invoice: reject it'))],
       tools(o), receiptPanel(o));
   };
+  /** Fallback when the buyer's agent never invoices a confirmed delivery (audit 24 Nov H1). */
+  const selfInvoice = (o) => {
+    const fileState = h('p.live', 'Pick your invoice file. Only its fingerprint goes on the escrow.');
+    let hash = null;
+    const fileIn = h('input', { type: 'file', 'aria-label': 'Your invoice file', onchange: async (e) => {
+      const f = e.target.files?.[0];
+      hash = f ? await fileHash(f) : null;
+      if (hash) fill(fileState, chip('ok', 'Ready'), ` Fingerprint ${hash.slice(0, 8)}…`);
+    } });
+    return h('details.change',
+      h('summary', 'The agent has not invoiced? Invoice it yourself'),
+      h('p.fine', `Both counts confirm your delivery, so you can submit your own invoice for the full ${microToCcd(o.amount)} CCD. It counts as your approval. You have until ${fmtDay(invoiceDeadline(o))}; until then the buyer cannot take the money back.`),
+      h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
+      h('div.count-row', h('button.btn.gold', { type: 'button', onclick: async (e) => {
+        if (!hash) return notice('no', 'Pick your invoice file first.');
+        e.currentTarget.disabled = true;
+        const r = await act('supplier_invoice', { order_id: o.id, invoice_hash: hash, amount: o.amount.toString() }, { done: `You invoiced order #${o.id} for ${microToCcd(o.amount)} CCD. Ask for payment once the hold is over.` });
+        if (r.ok) location.reload(); else e.currentTarget.disabled = false;
+      } }, icon('check', 18), 'Submit my invoice')));
+  };
   const waitingCard = ({ o, st }) => h('section.panel.count',
     h('div.count-h', h('span.order-id.num', `#${o.id}`), h('div', h('b', `${microToCcd(o.amount)} CCD escrowed for you`), h('span', chip(st.tone, st.label)))),
     h('p.fine', `Counts: ${countsLine(o)}. Send your invoice to the buyer's agent; it submits the fingerprint and you approve it here.`),
+    supplierCanInvoice(o) ? selfInvoice(o) : null,
     tools(o));
 
   return frame(side,

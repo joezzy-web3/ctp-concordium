@@ -1,7 +1,7 @@
 // Contract error names and plain explanations. No browser or SDK imports, so the app
 // and the MCP server (Node) share them.
 // The contract's error variants in order; concordium-std gives the first one code -1.
-export const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed', 'AgentNotVerified', 'RegistryUnavailable', 'PastDeadline', 'BadDate', 'AlreadyAccepted', 'OrderNotAccepted', 'RefundLocked', 'InvoiceApprovedBySupplier', 'RecountNotNeeded', 'NoRecountsLeft', 'NotPendingAdmin', 'NotOrderParty', 'DateChanged', 'ZeroQuantity', 'BadReferee', 'BadRep', 'NotReferee', 'NoDispute', 'NotOrderAgent', 'SamePerson'];
+export const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed', 'AgentNotVerified', 'RegistryUnavailable', 'PastDeadline', 'BadDate', 'AlreadyAccepted', 'OrderNotAccepted', 'RefundLocked', 'InvoiceApprovedBySupplier', 'RecountNotNeeded', 'NoRecountsLeft', 'NotPendingAdmin', 'NotOrderParty', 'DateChanged', 'ZeroQuantity', 'BadReferee', 'BadRep', 'NotReferee', 'NoDispute', 'NotOrderAgent', 'SamePerson', 'PayoutNotSupplier', 'DeliveryNotConfirmed', 'NotFullAmount'];
 export const EXPLAIN = {
   NotAdmin: 'Only the buyer account can do this.',
   NotSigner: 'This account is not a listed signer.',
@@ -30,7 +30,7 @@ export const EXPLAIN = {
   BadDate: 'Pick a date in the future.',
   AlreadyAccepted: 'You already accepted this order.',
   OrderNotAccepted: 'Accept the order first. Then you can approve its invoice.',
-  RefundLocked: 'The supplier accepted this order, so the money is locked for it. You can take it back after the latest date if the order is not ready to pay and its delivery is not in dispute; a disputed delivery goes to the referee, or the supplier can release it.',
+  RefundLocked: 'The supplier accepted this order, so the money is locked for it. You can take it back after the latest date if the order is not ready to pay and its delivery is not in dispute. A delivery both counters confirmed gives the supplier a week past the date to invoice first. A disputed delivery goes to the referee, or the supplier can release it.',
   InvoiceApprovedBySupplier: 'The supplier approved this invoice and it matches the order. Only the supplier can reject it now.',
   RecountNotNeeded: 'A recount is only possible once the receiver and the supplier’s rep have both sealed, and the delivery is not confirmed.',
   NoRecountsLeft: 'Both recounts are used. If the delivery is still short, the money goes back after the latest date.',
@@ -44,6 +44,9 @@ export const EXPLAIN = {
   NoDispute: 'There is nothing to rule on: the supplier’s rep has not counted, or the counts already confirm the delivery.',
   NotOrderAgent: 'Only the agent named on this order can submit its invoice.',
   SamePerson: 'The receiver and the approver are proven to be the same person. Name two different people.',
+  PayoutNotSupplier: 'A new supplier is always paid to its own account. Only the supplier can choose another payout account, from its own wallet.',
+  DeliveryNotConfirmed: 'You can invoice yourself only once the receiver’s and your rep’s counts both confirm the delivery.',
+  NotFullAmount: 'An invoice you submit yourself must be for the full escrowed amount.',
 };
 export const errorName = (code) => ERRORS[-Number(code) - 1] ?? null;
 
