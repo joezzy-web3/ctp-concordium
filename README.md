@@ -1,31 +1,54 @@
 # Clear to Pay on Concordium
 
-**An AI agent can be fooled into believing an invoice. Clear to Pay makes sure that belief is not enough to move the company's money** — and on Concordium, every agent and every signer involved is accountable to a verified human or company.
+### The AI asks. The contract decides.
 
-**Try it:** [landing page](https://cleartopay-concordium.vercel.app/) · [app](https://cleartopay-concordium.vercel.app/app/) (Concordium Browser Wallet on testnet) · Also served from GitHub Pages, where the Agent Card keeps its registered address.
+In 2024 an AI agent guarding $47,000 had one rule: never send the money. One message later, it did. A rule in a prompt is not a rule.
 
-Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**.
+Clear to Pay lets AI agents handle supplier payments without being able to move money on their own. An agent (here, Claude) submits the invoice. Two people count the delivery blind, each able to prove with **Concordium ID** that they're real and different people. The supplier approves the exact invoice from its own account. Only then does the escrow contract on Concordium pay, and only to the supplier's own payout account. Tell the agent to skip the checks and the contract answers **Held**, on the record.
 
-## Status: live today vs in progress
+**Try it:** [landing page](https://cleartopay-concordium.vercel.app/) · [app](https://cleartopay-concordium.vercel.app/app/) (Concordium Browser Wallet, testnet) · [Judge mode](https://cleartopay-concordium.vercel.app/app/#/judge): attack the real contract · [Start your own escrow](https://cleartopay-concordium.vercel.app/app/#/start)
 
-Every row marked live links to on-chain evidence or runs in the test suite. Rows in progress are not claimed as protections until they are deployed.
+**Proof:** [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) and [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185) on escrow `<13151,0>`, whose module is **[Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde)**. 26 rule tests and 54 end-to-end tests on the compiled contract, 79 app, MCP and ID-check tests, two independent security reviews with every finding fixed.
+
+Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**. The idea started on [NEAR](https://github.com/joezzy-web3/clear-to-pay); the same agent is now linked across both chains.
+
+## How Clear to Pay meets the brief
+
+| The brief asks for | What Clear to Pay does, live on testnet |
+|---|---|
+| **Concordium identity, zero knowledge** | Not only the person behind the agent: the **people who count deliveries** prove with Concordium ID that they are real verified adults (the buyer turns it on per counter; a counter proves once). The escrow keeps only a salted fingerprint and refuses an order where the same person would count twice. |
+| **Agent Registry (ERC-8004 / CIS-8004)** | Agent #1287 is registered with an ERC-8004 Agent Card and the Verified by Concordium badge. The **contract itself reads the registry on-chain** when the agent is listed, at every invoice and at every payment request, and refuses a revoked, transferred or hijacked agent. |
+| **Link the agent you already run** | Agent #1287 is linked via CIS-8 to the original Clear to Pay agent on NEAR, `buyer.cleartopay.testnet`. |
+| **Agent payments** | The agent asks; the escrow pays the supplier only when every rule passes, and records a Decision event either way. |
+| **Accountability (EU AI Act record keeping)** | Every request the agent makes is decided and logged by the contract with its reason, including refusals. Each payment's receipt fingerprint is written into the contract's own Decision event. |
+| **Your existing framework** | An MCP server: Claude Desktop works the escrow without any change to Claude. |
+| **Path to production** | Any company can already start its own escrow from the verified code. Next: audit, mainnet, stablecoin payouts, sponsored fees. See [PATH_TO_PRODUCTION.md](PATH_TO_PRODUCTION.md). |
+
+## What's live
+
+Every row links to on-chain evidence or runs in the test suite.
 
 | Piece | Status | Evidence |
 |---|---|---|
+| **Escrow v6, full live run with Claude (24 Nov 2026):** receiver proved with Concordium ID, blind count 20 = 20, Claude submitted the invoice over MCP, refused to skip the checks, was sent anyway and got **Held** on-chain; the supplier approved from its own account and the same request **Cleared**, 2 CCD to the supplier's payout account | **Live (testnet)** | `<13151,0>`, module `196930b8…` **Verified on CCDExplorer**; [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) · [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185); 26 rule tests, 54 end-to-end tests. The same flow first ran on `<13106,0>` on 21 Nov |
+| Counters proven with Concordium ID (zero knowledge): each receiver and approver proves they are a verified adult; the escrow keeps only a salted fingerprint and refuses an order whose two counters are the same person | **Live (testnet)**: the receiver on order #1 of `<13151,0>` was verified and recorded on the escrow | ID checks in the app (`#/buyer/ids`), `test/idcheck.test.js`, design in `docs/F01_SIGNER_IDENTITY.md` |
+| The contract checks the agent in the CIS-8004 registry itself, when the agent is added and at every invoice and payment request | **Live (testnet)** | it read the real registry for Agent #1287 at setup and again at the invoice in the first live order; end-to-end tests cover revoked, transferred and hijacked agents |
 | Agent #1287 registered (CIS-8004), Agent Card anchored, Verified by Concordium badge | **Live (testnet)** | registry `check-badge`: all 15 checks pass; card anchor tx below |
 | Cross-chain link to the Clear to Pay agent on NEAR (CIS-8) | **Live (testnet)** | CIS-8 checked the NEAR signature; registry confirmed the binding before attaching it (link tx below) |
-| **Escrow v6, full live run with Claude (24 Nov 2026):** receiver proved with Concordium ID, blind count 20 = 20, Claude submitted the invoice over MCP, refused to skip the checks, was sent anyway and got **Held** on-chain; the supplier approved from its own account and the same request **Cleared**, 2 CCD to the supplier's payout account | **Live (testnet)** | `<13151,0>`, module `196930b8…` **Verified on CCDExplorer**; [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) · [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185); 26 rule tests, 54 end-to-end tests. The same flow first ran on `<13106,0>` on 21 Nov |
-| Escrow contract v4: two named people in two roles count blind (each seal bound to its signer), the supplier accepts the order and its latest date, approves its own invoice and amount, payout hold on new payout accounts, pays only on CLEARED, logs every decision | **Live (testnet)**, full order paid on 20 Nov 2026 | `<13098,0>`, module `ad60bdff…a28c7e52` = verifiable build ([first payment](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947)); 20 rule tests, 34 end-to-end tests |
-| The contract checks the agent in the CIS-8004 registry itself, when the agent is added and at every invoice and payment request | **Live (testnet)** | it read the real registry for Agent #1287 at setup and again at the invoice in the first live order; end-to-end tests cover revoked, transferred and hijacked agents |
-| Escrow v5: each side has a counter the other does not choose (buyer's receiver, supplier's delivery rep), a referee for disputes, one agent per order, seals bound to signer and round, refunds to the funder | **Live (testnet)**, deployed 20 Nov 2026 | `<13102,0>`, module `ae80470a…` = verifiable build; 23 rule tests, 47 end-to-end tests on the compiled contract, one per attack from the 20 Nov audit |
-| MCP server: any MCP client (Claude Desktop and others) works the escrow as Agent #1287: list and read orders, dry-run a payment, submit an invoice, ask for payment. The contract still decides every payment | **Built and tested** | `mcp/`, `npm test` (tools run against a fake chain; the server starts and lists its tools); setup in `mcp/README.md` |
+| MCP server: Claude Desktop (or any MCP client) works the escrow as Agent #1287: read orders, dry-run a payment, submit an invoice, ask for payment. The contract still decides every payment | **Live (testnet)**: Claude ran the whole 24 Nov run through it, including the refusal and the Held and Cleared requests | `mcp/`, `npm test`; setup in `mcp/README.md` |
+| **Any company can start its own escrow** in the app (`#/start`): create it from the verified module, list its own people and agent, order. Each escrow is its own contract with its own money and admin; the app refuses any contract not running the verified code | **Live (testnet)** | `app/src/start.js`; open any escrow with `…/app/?escrow=<index>` |
 | Payment receipts: the receipt's fingerprint is written into the contract's own Decision event | **Live (testnet)** | `receipt/escrowReceipt.js`, `npm test`; check a receipt in the app under Judge mode |
 | Badge gate: refuse counterparty agents whose badge or card does not check out | **Live (off-chain code)** | `gate/`, `npm test` |
-| Counters proven with Concordium ID (zero knowledge): each receiver and approver proves they are a verified adult; the escrow keeps only a salted fingerprint and refuses an order whose two counters are the same person | **Live (testnet)**: the receiver on order #1 of `<13151,0>` was verified and recorded on the escrow | ID checks in the app (`#/buyer/ids`), `test/idcheck.test.js`, design in `docs/F01_SIGNER_IDENTITY.md` |
-| **Any company can start its own escrow** in the app (`#/start`): create it from the verified module, list its own people and agent, order. Each escrow is its own contract with its own money and admin; the app refuses any contract not running the verified code | **Live (testnet)** | `app/src/start.js`; open any escrow with `…/app/?escrow=<index>` |
 | Stablecoin payout, sponsored fees, shared escrow, mainnet | Next steps, each an extension of what runs today | [PATH_TO_PRODUCTION.md](PATH_TO_PRODUCTION.md) |
 
-The Agent Card describes the product as a whole; it will be re-anchored with the escrow contract address once the final demo contract is deployed.
+<details><summary>Earlier escrow versions (each audited, fixed and redeployed)</summary>
+
+| Piece | Status | Evidence |
+|---|---|---|
+| Escrow v5: each side has a counter the other does not choose (buyer's receiver, supplier's delivery rep), a referee for disputes, one agent per order, seals bound to signer and round, refunds to the funder | **Live (testnet)**, deployed 20 Nov 2026 | `<13102,0>`, module `ae80470a…` = verifiable build; 23 rule tests, 47 end-to-end tests on the compiled contract, one per attack from the 20 Nov audit |
+| Escrow contract v4: two named people in two roles count blind (each seal bound to its signer), the supplier accepts the order and its latest date, approves its own invoice and amount, payout hold on new payout accounts, pays only on CLEARED, logs every decision | **Live (testnet)**, full order paid on 20 Nov 2026 | `<13098,0>`, module `ad60bdff…a28c7e52` = verifiable build ([first payment](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947)); 20 rule tests, 34 end-to-end tests |
+
+</details>
 
 ## Testnet references
 | What | Value |
@@ -34,12 +57,12 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 | Key registry (CIS-8) | `<12801,0>` |
 | Explorer | [Escrow `<13151,0>` on CCDExplorer](https://ccdexplorer.io/testnet/instance/13151/0) (module **Verified**) · [on CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13151&dcontractAddressSubIndex=0) · [Agent Registry `<12802,0>`](https://ccdexplorer.io/testnet/instance/12802/0) |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
-| **Escrow contract (live, test run)** | `<13151,0>` (v6) · module `196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde`, **Verified on CCDExplorer** (source and module match) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://cleartopay-concordium.vercel.app/app/) |
+| **Escrow contract (live, test run)** | `<13151,0>` (v6) · module `196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde`, **Verified on CCDExplorer** (source and module match) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting (new escrows default to 72 hours) · [app](https://cleartopay-concordium.vercel.app/app/) |
 | **Escrow contract (first v6 run, 21 Nov)** | `<13106,0>`, the same v6 code as module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73`, built before the source link was embedded |
 | **Escrow contract (earlier)** | `<13092,0>` (v2), superseded by v4 · module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27` |
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
-Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model; no code reused).
+Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model, rebuilt from scratch for Concordium).
 
 ## Check the contract yourself
 
@@ -60,7 +83,7 @@ While building this, we found that CCDExplorer could not verify builds from the 
 
 ## How a payment clears (escrow contract)
 
-`contract/` holds the escrow; `contract/DESIGN.md` has every rule (it describes v5, deploying next). In the app, each person has their own space: buyer, delivery signers, supplier, agent and referee.
+`contract/` holds the escrow; `contract/DESIGN.md` has every rule. In the app, each person has their own space: buyer, delivery signers, supplier, agent and referee.
 
 1. The buyer creates the order, locks the money in the contract, names its receiver (and, for a company, an approver), the agent and a referee, and sets the latest date for delivery and invoice. An individual buying for themselves is their own receiver.
 2. The supplier accepts the order and that date from its own account, and names its delivery rep (the driver).
