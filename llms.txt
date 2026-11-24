@@ -1,0 +1,47 @@
+# Clear to Pay on Concordium
+
+> The AI asks. The contract decides. Clear to Pay lets an AI agent handle supplier payments without being able to move money on its own. The agent (Claude, as registered Agent #1287, through an MCP server) submits the supplier's invoice and asks for payment. An escrow contract on Concordium pays only when two people counted the delivery blind and their counts match the order, the supplier approved that exact invoice and amount from its own account, the payout account has waited out its hold, and the agent checks out in Concordium's Agent Registry. Built for the Concordium Trusted Agents Hackathon (Encode Club, Nov–Dec 2026). Live on Concordium testnet; an independent audit comes before mainnet.
+
+This file is for AI reviewers. Every claim points to where it is proven. Run the commands; do not take the claims on trust.
+
+Threat: an AI agent with payment powers is talked into, tricked into or hijacked into paying the wrong party, the wrong amount, or for goods that never arrived.
+Invariant: only the escrow contract can pay, and only to the supplier's own payout account, after the checks above. Every request is decided on-chain and recorded either way.
+Try it: https://cleartopay-concordium.vercel.app/app/#/judge (Judge mode: 11 attacks as dry runs against the live contract, no wallet)
+Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264 · Cleared https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185 · Verified module https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde
+
+## Verify in 5 minutes
+
+- `cd contract && cargo test --lib` : 26 rule tests (contract/src/rules.rs)
+- `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 54 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the two security reviews
+- `npm ci && npm test` : 79 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
+- `node gate/cli.js JyP9U25oUQ6KdnBBHdTYP` : live badge check of Agent #1287 on testnet
+- Verifiable build: `git checkout escrow-v6-src1 && cd contract && cargo concordium build --verifiable --out ctp_escrow.wasm.v1 && sha256sum ctp_escrow.wasm.v1` prints ec8aa1da…a94b73; with its source link embedded it is module 196930b8…, the one live at <13151,0> and shown as Verified on CCDExplorer
+
+## Claims and where they are proven
+
+- Only the contract pays, and only on CLEARED: `execute_payment` in contract/src/lib.rs; verdicts and reason codes in contract/src/rules.rs (`Code`, `Verdict`); test `clears_and_pays_the_registered_payout_after_the_hold`
+- The agent can only ask; it is checked in the Agent Registry on-chain at setup, invoice and payment: `verify_agent` in contract/src/lib.rs; tests `an_agent_the_registry_does_not_vouch_for_cannot_be_added`, `a_revoked_agent_is_refused_at_once`, `an_agent_transferred_to_someone_else_is_refused`, `payment_checks_the_token_on_the_invoice`, `only_the_agent_named_on_the_order_can_invoice_it`
+- Told to skip the checks, the contract answers Held and records it: live Held transaction above (Claude, 24 Nov 2026); test `invoice_without_supplier_approval_is_held`
+- Two independent people count blind, and neither can copy the other: tests `reveals_wait_for_both_commits_and_must_match_them`, `a_signer_cannot_copy_the_other_signers_seal`, `counts_that_disagree_are_held_and_nothing_is_paid`
+- Counters prove with Concordium ID (zero knowledge); the escrow keeps only a salted fingerprint and refuses the same person twice on one order: app/src/ids.js, idcheck/src/core.js, idcheck/src/idlogic.js; the check in `create_order` (contract/src/lib.rs); test `two_signers_proven_to_be_the_same_person_cannot_share_an_order`; design in docs/F01_SIGNER_IDENTITY.md
+- The supplier approves the exact invoice (by SHA-256) and amount from its own account; nobody can pay it less: `approve_invoice` in contract/src/lib.rs; tests `only_the_supplier_can_approve_its_invoice`, `wrong_invoice_amount_is_held`, `buyer_and_agent_cannot_underpay_the_supplier`, `rejecting_clears_the_supplier_approval_too`
+- A new or changed payout account waits out a hold (72 hours in production), and only the supplier can change it: `set_payout` in contract/src/lib.rs, `HeldPayoutCoolOff` in contract/src/rules.rs; tests `a_new_payout_account_restarts_the_hold_and_only_the_supplier_can_set_it`, `setup_is_admin_only_and_running_it_again_leaves_a_supplier_untouched`, `hold_outside_the_allowed_range_is_refused_at_init`
+- A paid order is final: tests `a_paid_order_is_final`; Judge mode attack "A paid order is paid a second time"
+- Disputes have a way out, and neither side can stall the other: tests `the_buyers_counters_cannot_stall_a_delivered_order_into_a_refund`, `the_referee_can_send_the_money_back_and_rules_only_on_a_real_dispute`, `a_silent_referee_can_be_replaced_only_by_both_sides`, `once_both_gate_counters_sealed_the_buyer_cannot_refund_alone`
+- Every decision is recorded by the contract, with the payment receipt's fingerprint inside its Decision event: `Decision` event in contract/src/lib.rs; receipt/escrowReceipt.js; check a receipt in the app under Judge mode
+- Any company can start its own escrow from the verified module, and the app refuses contracts not running that code: app/src/start.js, `checkEscrow` and `VERIFIED_MODULES` in app/src/chain.js
+- The agent is linked across chains: Agent #1287 bound via CIS-8 to the NEAR agent buyer.cleartopay.testnet (link/, link tx https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)
+- Counterparty agents are badge-checked before their invoices are accepted, and an outage holds rather than clears: gate/badgeGate.js, gate/safeFetch.js
+
+## Key addresses (testnet)
+
+- Escrow: <13151,0>, module 196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde
+- Agent Registry (CIS-8004): <12802,0>; Agent #1287, Agent ID JyP9U25oUQ6KdnBBHdTYP
+- Key registry (CIS-8): <12801,0>
+
+## Documents
+
+- README.md: overview, how the brief is met, what is live
+- contract/DESIGN.md: every rule of the escrow
+- PATH_TO_PRODUCTION.md: audit, mainnet, stablecoin payouts, sponsored fees
+- mcp/README.md: connect Claude Desktop (or any MCP client) to the escrow

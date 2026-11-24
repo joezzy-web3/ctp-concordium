@@ -1,28 +1,40 @@
 # Clear to Pay on Concordium
 
+[![test](https://github.com/joezzy-web3/ctp-concordium/actions/workflows/test.yml/badge.svg)](https://github.com/joezzy-web3/ctp-concordium/actions/workflows/test.yml) ![Concordium testnet](https://img.shields.io/badge/Concordium-testnet-10264A) [![Verified on CCDExplorer](https://img.shields.io/badge/CCDExplorer-Verified-1E8E5E)](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) ![Licence MIT](https://img.shields.io/badge/licence-MIT-E3B23C)
+
 ### The AI asks. The contract decides.
 
 In 2024 an AI agent guarding $47,000 had one rule: never send the money. One message later, it did. A rule in a prompt is not a rule.
 
 Clear to Pay lets AI agents handle supplier payments without being able to move money on their own. An agent (here, Claude) submits the invoice. Two people count the delivery blind, each able to prove with **Concordium ID** that they're real and different people. The supplier approves the exact invoice from its own account. Only then does the escrow contract on Concordium pay, and only to the supplier's own payout account. Tell the agent to skip the checks and the contract answers **Held**, on the record.
 
-**Try it:** [landing page](https://cleartopay-concordium.vercel.app/) · [app](https://cleartopay-concordium.vercel.app/app/) (Concordium Browser Wallet, testnet) · [Judge mode](https://cleartopay-concordium.vercel.app/app/#/judge): attack the real contract · [Start your own escrow](https://cleartopay-concordium.vercel.app/app/#/start)
+> **Judges: 3 minutes, nothing to install.**
+> 1. **See it happen on-chain.** Claude was told to skip the checks and pay; the contract answered **[Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264)**. The supplier approved its invoice from its own account, Claude asked again: **[Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185)**, 2 CCD to the supplier's payout account. Both on escrow `<13151,0>`.
+> 2. **Check the code is the code.** CCDExplorer downloads our source, rebuilds it and shows **[Verified: source and module match](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde)**.
+> 3. **Try to break it yourself, no wallet.** [Judge mode](https://cleartopay-concordium.vercel.app/app/#/judge) runs 11 attacks against the live contract as dry runs (the real contract's answer, nothing spent): hijacked agents, a hijacked supplier account, a buyer stalling to claw money back, a paid order paid twice.
+> 4. **Run it for a company.** [Start your own escrow](https://cleartopay-concordium.vercel.app/app/#/start) in three steps (Concordium Browser Wallet on testnet).
 
-**Proof:** [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) and [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185) on escrow `<13151,0>`, whose module is **[Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde)**. 26 rule tests and 54 end-to-end tests on the compiled contract, 79 app, MCP and ID-check tests, two independent security reviews with every finding fixed.
+## Judge summary
+
+**Threat:** an AI agent with payment powers is talked into, tricked into or hijacked into paying the wrong party, the wrong amount, or for goods that never arrived.
+**Invariant:** only the escrow contract can pay, and only to the supplier's own payout account, when two blind counts by independent people match the order, the supplier approved that exact invoice and amount from its own account, the payout account has waited out its hold, and the agent checks out in Concordium's Agent Registry. Every request is decided on-chain, and recorded either way.
+**Try it:** [the app](https://cleartopay-concordium.vercel.app/app/) · [Judge mode](https://cleartopay-concordium.vercel.app/app/#/judge) (no wallet) · [landing page](https://cleartopay-concordium.vercel.app/)
+**Proof:** [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) · [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185) · [Verified module](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) · 26 rule tests and 54 end-to-end tests on the compiled contract, 79 app, MCP and ID-check tests · two independent security reviews, every finding fixed
+**Status:** live on Concordium testnet; an independent audit comes before mainnet ([path to production](PATH_TO_PRODUCTION.md)). For AI reviewers: [llms.txt](llms.txt).
 
 Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**. The idea started on [NEAR](https://github.com/joezzy-web3/clear-to-pay); the same agent is now linked across both chains.
 
 ## How Clear to Pay meets the brief
 
-| The brief asks for | What Clear to Pay does, live on testnet |
-|---|---|
-| **Concordium identity, zero knowledge** | Not only the person behind the agent: the **people who count deliveries** prove with Concordium ID that they are real verified adults (the buyer turns it on per counter; a counter proves once). The escrow keeps only a salted fingerprint and refuses an order where the same person would count twice. |
-| **Agent Registry (ERC-8004 / CIS-8004)** | Agent #1287 is registered with an ERC-8004 Agent Card and the Verified by Concordium badge. The **contract itself reads the registry on-chain** when the agent is listed, at every invoice and at every payment request, and refuses a revoked, transferred or hijacked agent. |
-| **Link the agent you already run** | Agent #1287 is linked via CIS-8 to the original Clear to Pay agent on NEAR, `buyer.cleartopay.testnet`. |
-| **Agent payments** | The agent asks; the escrow pays the supplier only when every rule passes, and records a Decision event either way. |
-| **Accountability (EU AI Act record keeping)** | Every request the agent makes is decided and logged by the contract with its reason, including refusals. Each payment's receipt fingerprint is written into the contract's own Decision event. |
-| **Your existing framework** | An MCP server: Claude Desktop works the escrow without any change to Claude. |
-| **Path to production** | Any company can already start its own escrow from the verified code. Next: audit, mainnet, stablecoin payouts, sponsored fees. See [PATH_TO_PRODUCTION.md](PATH_TO_PRODUCTION.md). |
+| The brief asks for | What Clear to Pay does, live on testnet | Code |
+|---|---|---|
+| **Concordium identity, zero knowledge** | Not only the person behind the agent: the **people who count deliveries** prove with Concordium ID that they are real verified adults (the buyer turns it on per counter; a counter proves once). The escrow keeps only a salted fingerprint and refuses an order where the same person would count twice. | `app/src/ids.js`, `idcheck/src/core.js`; the same-person check in `create_order`, `contract/src/lib.rs`; test `two_signers_proven_to_be_the_same_person_cannot_share_an_order` |
+| **Agent Registry (ERC-8004 / CIS-8004)** | Agent #1287 is registered with an ERC-8004 Agent Card and the Verified by Concordium badge. The **contract itself reads the registry on-chain** when the agent is listed, at every invoice and at every payment request, and refuses a revoked, transferred or hijacked agent. | `verify_agent` in `contract/src/lib.rs`; tests `a_revoked_agent_is_refused_at_once`, `an_agent_transferred_to_someone_else_is_refused` |
+| **Link the agent you already run** | Agent #1287 is linked via CIS-8 to the original Clear to Pay agent on NEAR, `buyer.cleartopay.testnet`. | `link/` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
+| **Agent payments** | The agent asks; the escrow pays the supplier only when every rule passes, and records a Decision event either way. | `execute_payment` in `contract/src/lib.rs`, the rules in `contract/src/rules.rs` |
+| **Accountability (EU AI Act record keeping)** | Every request the agent makes is decided and logged by the contract with its reason, including refusals. Each payment's receipt fingerprint is written into the contract's own Decision event. | `Decision` events in `contract/src/lib.rs`, `receipt/escrowReceipt.js` |
+| **Your existing framework** | An MCP server: Claude Desktop works the escrow without any change to Claude. | `mcp/` (setup in `mcp/README.md`) |
+| **Path to production** | Any company can already start its own escrow from the verified code. Next: audit, mainnet, stablecoin payouts, sponsored fees. See [PATH_TO_PRODUCTION.md](PATH_TO_PRODUCTION.md). | `app/src/start.js` |
 
 ## What's live
 
@@ -100,6 +112,19 @@ Design choices, and what protects the user:
 - **Stalls have a way out.** A lost seal key can be replaced before anyone unseals, a miscount gets a recount (at most 2, opened by the buyer or supplier), a disagreement goes to the referee, and an offline agent is replaced by the supplier or buyer asking under the same rules.
 - **Fails safe.** If the contract cannot read the agent registry, it refuses.
 - **Checks scale with the risk of the order.** ID checks and the approver are optional: the buyer chooses which counters prove their ID, and whether an order needs an approver. A small or high-volume buyer runs the minimum: buyer, one receiver, supplier. A counter proves their ID once; the escrow keeps them on its signer list, so every later order and delivery adds no extra steps.
+
+## Why a contract, not a smarter prompt or a policy wallet
+
+- **A smarter prompt** can be talked around: that is how Freysa lost $47,000. Clear to Pay never asks the model whether to pay. Claude reads, submits and asks; the contract decides.
+- **A person clicking Approve** sees what the screen shows them. They cannot know whether 20 bags arrived at the gate, or whether the payout account was changed this morning.
+- **A policy wallet** (spending limits, allowlisted payees) answers *may this agent spend this much, to this address?* Clear to Pay answers *is this invoice owed?* That takes checks a spending policy cannot express: two independent people counted the delivery blind, the supplier approved this exact invoice and amount from its own account, and the payee is the supplier's own account, aged by the payout hold. A hijacked but allowlisted payee still gets paid under a spending limit; under Clear to Pay it is **Held**.
+
+## If a supplier is hacked
+
+- **The money can't be redirected in a hurry.** Only the supplier can change its payout account (`set_payout` checks the sender), and every change restarts the payout hold: 72 hours on a production escrow. Until it passes, payment is **Held** (`HeldPayoutCoolOff`). Test: `a_new_payout_account_restarts_the_hold_and_only_the_supplier_can_set_it`; Judge mode: *A hijacked supplier account redirects the payout and asks to be paid*.
+- **The buyer can't be used to redirect it either.** Running setup again never changes a registered supplier's payout account (`setup_is_admin_only_and_running_it_again_leaves_a_supplier_untouched`).
+- **The amount can't be inflated.** Payment is fixed by the escrowed amount, the counts and the supplier's approval of that exact invoice; anything else is **Held** (`wrong_invoice_amount_is_held`, `buyer_and_agent_cannot_underpay_the_supplier`).
+- **If the agent is hijacked instead,** it can only ask. The contract checks it in the registry at every invoice and payment, and only the agent named on the order may invoice it (`only_the_agent_named_on_the_order_can_invoice_it`).
 
 ## Payment receipts
 
