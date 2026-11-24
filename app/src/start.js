@@ -32,9 +32,14 @@ function current() {
 
 // ---------- 1. create ----------
 function createPanel() {
-  const hold = h('select', { 'aria-label': 'Payout hold' },
-    h('option', { value: 'test' }, '1 minute (try the whole flow in one sitting)'),
-    h('option', { value: 'prod' }, '72 hours (production setting)'));
+  const hold = h('select', { 'aria-label': 'Wait before paying a new or changed payout account' },
+    h('option', { value: 'prod', selected: true }, '72 hours (recommended for a real company)'),
+    h('option', { value: 'test' }, '1 minute (test only: no real protection)'));
+  const holdNote = h('small.hint');
+  const sayHold = () => fill(holdNote, hold.value === 'test'
+    ? [chip('hold', 'Test only'), ' Use this just to try the whole flow in one sitting. A 1-minute wait does not stop payout-account scams.']
+    : 'Stops “we changed our bank details, pay today” scams: a new or changed account waits 72 hours, time for the real supplier or you to notice.');
+  hold.addEventListener('change', sayHold); sayHold();
   const out = h('div.live');
   const btn = h('button.btn.gold', { type: 'button', onclick: async () => {
     btn.disabled = true;
@@ -55,7 +60,9 @@ function createPanel() {
   return h('section.panel',
     h('h3', '1. Create your escrow'),
     h('p', 'Made from the module ', h('span.mono', '196930b8…'), ', the build CCDExplorer shows as Verified. The account you approve with becomes the buyer admin.'),
-    field('Payout hold on new payout accounts', hold, 'A new or changed payout account waits this long before it can be paid.'),
+    field('Wait before paying a new or changed payout account', hold),
+    holdNote,
+    h('p.hint', 'Set once, for this escrow’s whole life. Nobody can shorten it later: not you, not anyone who takes over your wallet.'),
     btn, out);
 }
 

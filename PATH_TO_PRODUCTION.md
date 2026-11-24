@@ -11,7 +11,7 @@ Each step below extends that working system. None of them changes the core rule:
 **Next:**
 - A human security audit of the escrow contract, scoped to the payment rules and the registry check.
 - Deploy the same verifiable build to mainnet, with Agent #1287's mainnet counterpart registered in the Concordium agent registry. Only the init parameters change.
-- Set production values at init: a payout hold of days rather than the 1-minute hold used for demos, so a new payout account can be challenged before money moves.
+- Raise the contract's minimum payout hold for mainnet to 24 hours or more. On testnet the app defaults to 72 hours and offers 1 minute only as a labelled test setting; on mainnet no escrow can be created with a hold short enough to rush a new payout account.
 - Start with a per-order cap during the pilot, raised as order history builds.
 
 **What protects users in the meantime:** the testnet build already refuses by default. If the contract cannot read the registry, or anything is missing, the request is Held, never paid.
