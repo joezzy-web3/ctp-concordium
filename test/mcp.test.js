@@ -156,13 +156,13 @@ test('read-only mode dry-runs but sends nothing', async () => {
   assert.equal(chain.sent.length, 0);
 });
 
-test('the server starts and lists its six tools', async () => {
+test('the server starts and lists its seven tools', async () => {
   const env = { ...process.env };
   delete env.CTP_AGENT_KEY_FILE;
   const client = new Client({ name: 'test', version: '0' });
   await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../mcp/server.js', import.meta.url))], env }));
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((x) => x.name).sort(), ['check_agent_badge', 'dry_run_payment', 'get_order', 'list_orders', 'request_payment', 'submit_invoice']);
+  assert.deepEqual(tools.map((x) => x.name).sort(), ['check_agent_badge', 'dry_run_payment', 'get_order', 'list_orders', 'preclear_order', 'request_payment', 'submit_invoice']);
   await client.close();
 });
 

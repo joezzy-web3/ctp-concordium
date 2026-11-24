@@ -52,7 +52,7 @@ function payoutWarning(o, sup, holdMs, now = Date.now()) {
   return ` Warning: the supplier’s payout account was changed about ${hours} hour${hours === 1 ? '' : 's'} ago, to ${short(sup.payout)}. Confirm it with the supplier on a number already on file before anyone relies on it; the contract will not pay there until the hold ends.`;
 }
 
-export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ?? join(homedir(), '.local/share/clear-to-pay/receipts'), invoiceDir = process.env.CTP_INVOICE_DIR ?? join(homedir(), 'Downloads'), fetch: fetchImpl } = {}) {
+export function makeTools(chain, { payer, preclearUrl, receiptsDir = process.env.CTP_RECEIPTS_DIR ?? join(homedir(), '.local/share/clear-to-pay/receipts'), invoiceDir = process.env.CTP_INVOICE_DIR ?? join(homedir(), 'Downloads'), fetch: fetchImpl } = {}) {
   const { escrow, agent } = chain;
   const where = `escrow <${escrow.index},${escrow.subindex}> on Concordium testnet`;
 
@@ -143,5 +143,20 @@ export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ??
     return `The contract recorded its decision on order #${id}: ${d ? verdictText(d) : 'no decision found.'} A held answer is final for this request and is on the record with its reasons; the AI cannot override it. Decision: ${ccdscanTx(r.tx)} Receipt saved at ${path}.`;
   }
 
-  return { listOrders, getOrder, checkBadge, dryRunPayment, submitInvoice, requestPayment };
+  /** Pays Clear to Pay's x402 pre-clear service from the capped spending wallet. */
+  async function preclearOrder({ order_id: id }) {
+    if (!payer) return 'Pre-clear needs a spending wallet (CTP_SPEND_KEY_FILE and CTP_SPEND_ACCOUNT). Nothing was paid. A free dry run is available with dry_run_payment.';
+    const url = `${preclearUrl}?escrow=${escrow.index}&order=${id}`;
+    let r;
+    try { r = await payer.pay(url); } catch (e) { return `Could not complete the paid check: ${e?.message ?? e}. If a payment was signed, it is counted in today's spending.`; }
+    if (r.refused) return `Refused by the spending limits, before anything was signed: ${r.refused} Nothing was paid.`;
+    if (!r.ok) return `The pre-clear service answered ${r.status}: ${r.body?.message ?? r.body?.error ?? 'no reason given'}. ${r.amount ? 'The fee was offered but the service did not confirm it.' : 'Nothing was paid.'}`;
+    const b = r.body ?? {};
+    const fee = `${microToCcd(BigInt(r.amount))} ${r.asset}`;
+    const tx = r.receipt?.transaction ?? b.fee?.transaction;
+    const verdict = b.verdict === 'Cleared' ? 'it would clear now' : b.verdict === 'Held' ? `it would be held: ${(b.reasons ?? []).join(' ')}` : `the contract would refuse the request (${b.reason ?? 'no reason'})`;
+    return `Paid pre-clear for order #${id} on ${where}: ${verdict} This is the escrow contract's own dry run; nothing was sent to the escrow. Fee: ${fee} paid over x402 to ${short(b.fee?.payTo)}${tx ? ` (${ccdscanTx(tx)})` : ''}. Spent today: ${microToCcd(BigInt(r.spentToday))} ${r.asset}.`;
+  }
+
+  return { listOrders, getOrder, checkBadge, dryRunPayment, submitInvoice, requestPayment, preclearOrder };
 }
