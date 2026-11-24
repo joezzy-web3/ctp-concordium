@@ -31,9 +31,10 @@ The Agent Card describes the product as a whole; it will be re-anchored with the
 |---|---|
 | Agent Registry (CIS-8004) | `<12802,0>` |
 | Key registry (CIS-8) | `<12801,0>` |
-| Explorer | [Escrow `<13106,0>` on CCDExplorer](https://ccdexplorer.io/testnet/instance/13106/0) · [on CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13106&dcontractAddressSubIndex=0) · [Agent Registry `<12802,0>`](https://ccdexplorer.io/testnet/instance/12802/0) |
+| Explorer | [Escrow `<13151,0>` on CCDExplorer](https://ccdexplorer.io/testnet/instance/13151/0) (module **Verified**) · [on CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13151&dcontractAddressSubIndex=0) · [Agent Registry `<12802,0>`](https://ccdexplorer.io/testnet/instance/12802/0) |
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
-| **Escrow contract (live, test run)** | `<13106,0>` (v6, audit of 21 Nov fixed) · module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73` (verifiable build, CI run 44887957697) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://cleartopay-concordium.vercel.app/app/) |
+| **Escrow contract (live, test run)** | `<13151,0>` (v6) · module `196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde`, **Verified on CCDExplorer** (source and module match) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting · [app](https://cleartopay-concordium.vercel.app/app/) |
+| **Escrow contract (21 Nov run)** | `<13106,0>`, the same v6 code as module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73`, built before the source link was embedded |
 | **Escrow contract (earlier)** | `<13092,0>` (v2), superseded by v4 · module `532e6af284237b73fec30571e715cbd2e6567a1c110d82aeaa7cea64da537f27` |
 | **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
@@ -41,19 +42,19 @@ Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay
 
 ## Check the contract yourself
 
-The escrow at `<13106,0>` runs module `ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73`. Anyone can confirm it was built from the code in this repo, using Concordium's own build image:
+The escrow at `<13151,0>` runs module `196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde`. CCDExplorer downloads its source from the link embedded in the module, rebuilds it in Concordium's verifiable build image and shows **[Verified: source and module match](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde)**.
 
-1. Download the published source archive: [release `escrow-v6-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v6-src1) (`ctp_escrow.wasm.v1.tar`, SHA-256 `491ddddcc2691d5c2c0cd407d8257e9cd7ec1213d50fc334169fea78b27bbcc0`).
+To check it yourself:
+
+1. Download the source archive: [release `escrow-v6-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v6-src1) (`ctp_escrow.wasm.v1.tar`, SHA-256 `491ddddcc2691d5c2c0cd407d8257e9cd7ec1213d50fc334169fea78b27bbcc0`).
 2. With Docker and `cargo-concordium` installed, from `contract/`:
    ```
    cargo concordium build --verifiable --out ctp_escrow.wasm.v1
    sha256sum ctp_escrow.wasm.v1
    ```
-   The hash is the module reference: `ec8aa1da…a94b73`, the same as the module behind `<13106,0>` on CCDExplorer.
+   This prints `ec8aa1da…a94b73`: the same code before its source link was embedded. The [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45031516327) does exactly this in public, then embeds the link with `edit-build-info --verify`, which gives `196930b8…`.
 
-CI does exactly this in public: the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45031516327) rebuilt `ec8aa1da` byte for byte, then `cargo concordium verify-build` and `edit-build-info --verify` confirmed the archive matches. The same module with its source link embedded is deployed as `196930b8…` (deploy tx `5fda39e0…`), and every future escrow version ships with that link.
-
-CCDExplorer's automatic check doesn't yet confirm builds from this image; the steps above check it directly.
+While building this, we found that CCDExplorer could not verify builds from the `wasm32v1` image. We reported it with the module, archive and CI run; the CCDExplorer maintainer confirmed the bug and shipped a fix, and this module now verifies.
 
 ## How a payment clears (escrow contract)
 

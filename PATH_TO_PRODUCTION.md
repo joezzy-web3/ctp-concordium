@@ -58,7 +58,7 @@ Run with one buyer and its regular suppliers on a recurring order, such as weekl
 
 ## Where to check the work
 
-- Escrow `<13106,0>` on [CCDExplorer](https://ccdexplorer.io/testnet/instance/13106/0) and [CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13106&dcontractAddressSubIndex=0)
+- Escrow `<13151,0>` on [CCDExplorer](https://ccdexplorer.io/testnet/instance/13151/0) and [CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13151&dcontractAddressSubIndex=0)
 - Contract rules and design: [contract/DESIGN.md](contract/DESIGN.md)
 - Signer identity design: [docs/F01_SIGNER_IDENTITY.md](docs/F01_SIGNER_IDENTITY.md)
 - MCP server: [mcp/README.md](mcp/README.md)
