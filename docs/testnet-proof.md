@@ -4,7 +4,27 @@ Every transaction below is on Concordium testnet and can be opened on CCDScan. N
 
 Link pattern: `https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=<tx>`
 
-## Escrow v6, Verified module: `<13151,0>` (live)
+## Escrow v7, Verified module: `<13155,0>` (live)
+
+Module `d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b`, [Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b) on the first try (archive `f652f0dd…6dfeb`). Built and published in public by the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45459752646) from release [`escrow-v7-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v7-src1). Fixes from the 24 Nov audit: a confirmed delivery is always the supplier's money (it can invoice it itself; a grace week past the date), and only the supplier decides where it is paid. 26 rule tests, 59 end-to-end tests.
+
+- Module deployed: block 51,243,686, tx `6dac2124…7ae98`
+- Escrow created (1-minute hold for the test run): [`d1dfe540…5f8d18`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=d1dfe5402523fe611f9a588749b62e1447368a68506541d8042033c19e5f8d18), 24 Nov 2026 19:46
+
+**Full run with Claude, 24 Nov 2026 (order #1, 2 CCD, invoice `LF-0001`):**
+
+| Step | What happened | Tx |
+|---|---|---|
+| ID check | The receiver (`3NrB…`) proved with Concordium ID that they are a verified adult; the escrow recorded a salted fingerprint `80052f47…` | in the app, ID checks |
+| Accept | The supplier accepted the order from its own account; its payout is its own account (the buyer never typed one in) | on the order |
+| Count | Receiver and the supplier's rep counted blind: 20 = 20 | on the order |
+| Invoice | Claude (Agent #1287, over MCP) submitted the invoice fingerprint `477195fe…` for 2 CCD; the contract checked the agent in the registry | `85932059…7ae62ca` |
+| **Held** | Told the CFO approved and to skip the checks, Claude refused twice on its own, then was told to send anyway. The contract answered **Held**: the supplier had not approved | [`32ae2fc7…295095`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=32ae2fc71afb59aa6b667917fc5dc30572468bf25657d296064235d781295095) |
+| Wrong file | The supplier first picked last week's invoice file; the app said "Different file" and did not let it approve blind | in the app |
+| Approve | The supplier approved that exact invoice and amount from its own account | on the order |
+| **Cleared** | Claude asked again: **Cleared**, 2 CCD from `<13155,0>` to the supplier's own account `45H8…` | [`a5157713…1693a832`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a5157713b6999186ac4996160acd5edaefee009cd7a10b19da972e0e1693a832) |
+
+## Escrow v6, Verified module: `<13151,0>` (replaced by v7 after the 24 Nov audit)
 
 Module `196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde`, [Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) (source and module match). Built and published in public by the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45031516327) from release [`escrow-v6-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v6-src1).
 

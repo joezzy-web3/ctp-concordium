@@ -1,11 +1,12 @@
 # F-01: the two signers are two different verified people
 
-Status: **live on testnet.** The receiver on order #1 of escrow `<13151,0>` proved with Concordium ID and was recorded on the escrow (24 Nov 2026). The proof runs inside the app under ID checks (`#/buyer/ids`).
+Status: **live on testnet.** The receiver on order #1 of escrow `<13155,0>` proved with Concordium ID and was recorded on the escrow (24 Nov 2026). The proof runs inside the app under ID checks (`#/buyer/ids`).
 
 ## As built
 - **Page:** `idcheck/`. The buyer creates a proof request for one counter and anchors it with RegisterData. The counter opens the request link, and their wallet answers with `requestVerifiablePresentationV1`. The buyer pastes the answer link back.
 - **Checks:** `VerificationAuditRecordV1.createChecked` (context match, `verifyWithNode`, credentials active, request anchored, claims match the request), then the proof must be about exactly one credential of the counter's own account.
-- **Person tag:** `SHA-256("CTP-person/v1" ‖ escrow ‖ salt ‖ issuer ‖ document number)`. The salt is derived from the buyer wallet's deterministic signature on a fixed message, so only the buyer can recompute it and it never has to be stored.
+- **Person tag:** `SHA-256("CTP-person/v1" ‖ escrow ‖ salt ‖ issuer ‖ document number)`. The salt is derived from the buyer wallet's deterministic signature on a fixed message that names the site it may be signed on, so only the buyer can recompute it and it never has to be stored.
+- **The document number stays off-chain.** It reaches only the buyer's page. The app deletes the answer as soon as it is recorded, and unrecorded answers after 24 hours; the downloadable audit record is labelled private. Encrypting the answer link for the buyer's page is the next step (PATH_TO_PRODUCTION).
 - **On-chain:** the audit record is anchored with RegisterData; `add_signer` records `person_tag` and `id_audit` (the audit anchor hash). `create_order` refuses `SamePerson` when the receiver and approver carry the same tag.
 - **Design choice:** tags are optional on the contract, so an individual buyer without an approver, or a buyer who has not run the check yet, still trades. Every tagged signer is a proven verified adult, and an audit record exists for each.
 - **No server:** request and answer travel as links after `#`, compressed, and never reach a server.
@@ -35,7 +36,7 @@ A presentation proves facts about one identity. There is no built-in, privacy-pr
 
 What protects the signer: the document number never goes on-chain and is not stored by the app; only a salted fingerprint is. What protects the supplier and auditors: every check leaves an audit record anchored on-chain, which they can ask for and re-verify independently. A buyer who faked a tag would be exposed by that audit.
 
-## Flow (proposed)
+## Flow (as built)
 1. **Buyer, "Verify signer":** picks the signer's account. The app reads its credential (`getAccountInfo`), builds a request with account claims: reveal `idDocIssuer` and `idDocNo`, minimum age 18, and resource id `ctp-escrow:<index,0>:signer`. It anchors the request with RegisterData (buyer's wallet).
 2. **Signer, "Prove I am a verified person":** on the signer's own device, the app calls `requestVerifiablePresentationV1(request)`. The wallet shows exactly what is revealed and asks for consent.
 3. **Buyer's app:**

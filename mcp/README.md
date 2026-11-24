@@ -32,6 +32,8 @@ and sends nothing the contract would refuse.
 
    A bare key is checked against the agent account's keys on-chain before anything is sent.
    Use whichever file you made as `CTP_AGENT_KEY_FILE` below. Never open or share it.
+   Keep it readable only by you (`chmod 600`) and out of synced folders such as Google Drive
+   or OneDrive: on Linux and macOS the server refuses a key file other users can read.
    Skip this step to run read-only (reads and dry runs only).
 3. Find two paths: `which node` and `echo $HOME`.
 4. In Windows, open `%APPDATA%\Claude\claude_desktop_config.json` (Claude Desktop:
@@ -43,6 +45,7 @@ and sends nothing the contract would refuse.
     "clear-to-pay": {
       "command": "wsl.exe",
       "args": ["-e", "env",
+        "CTP_INVOICE_DIR=/home/YOU/clear-to-pay/invoices",
         "CTP_AGENT_KEY_FILE=/home/YOU/.config/clear-to-pay/keys/agent.key",
         "/PATH/FROM/which/node", "/home/YOU/ctp-concordium/mcp/server.js"]
     }
@@ -53,8 +56,14 @@ and sends nothing the contract would refuse.
 5. Quit Claude Desktop fully (system tray) and open it again. The tools appear under the
    tools icon in a new chat.
 
+`CTP_INVOICE_DIR` is the only folder the server reads invoices from (default `~/Downloads`).
+Files outside it, hidden files and links that lead outside it are refused, so a
+prompt-injected assistant cannot fingerprint a key or any other file.
+
 Optional environment: `CTP_ESCROW` (contract index, default the live one) and
-`CTP_RECEIPTS_DIR` (default `~/.local/share/clear-to-pay/receipts`).
+`CTP_RECEIPTS_DIR` (default `~/.local/share/clear-to-pay/receipts`). The server signs only
+for an escrow running the verified Clear to Pay module, and flags a supplier payout account
+that changed within the hold.
 
 ## Try it
 
