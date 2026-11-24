@@ -1,13 +1,57 @@
 // Chain access for the app: the browser wallet for signing, a testnet gRPC-web
 // node for reading the escrow contract and waiting for finalization.
 import { detectConcordiumProvider } from '@concordium/browser-wallet-api-helpers';
-import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, DataBlob, Energy, ReceiveName, TransactionHash } from '@concordium/web-sdk';
+import { AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, ContractName, DataBlob, Energy, ModuleReference, ReceiveName, TransactionHash } from '@concordium/web-sdk';
 import { ConcordiumGRPCWebClient } from '@concordium/web-sdk/grpc';
 import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
 import { decodeConfig, decodeOrder, decodeSupplier, decodeDecision } from './codec.js';
 
 export const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
-export const ESCROW = { index: Number(globalThis.CTP_ESCROW ?? 13151), subindex: 0 };
+const DEFAULT_ESCROW = Number(globalThis.CTP_ESCROW ?? 13151);
+/** The demo escrow anyone can walk through with the demo cast. */
+export const DEMO_ESCROW = 13151;
+/** Modules built from this repo's verifiable build. An escrow on any other module is refused. */
+export const VERIFIED_MODULES = [
+  '196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde', // v6 with its source link (Verified on CCDExplorer)
+  'ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73', // the same v6 build before the link
+];
+/** The module new escrows are created from. */
+export const ESCROW_MODULE = VERIFIED_MODULES[0];
+const ESCROW_KEY = 'ctp:escrow';
+const validIndex = (v) => /^\d{1,12}$/.test(String(v ?? '').trim());
+function pickEscrow() {
+  let q = null;
+  try { q = new URLSearchParams(globalThis.location?.search ?? '').get('escrow'); } catch { /* no URL */ }
+  if (validIndex(q)) { try { localStorage.setItem(ESCROW_KEY, String(Number(q))); } catch { /* storage unavailable */ } return Number(q); }
+  let saved = null;
+  try { saved = localStorage.getItem(ESCROW_KEY); } catch { /* storage unavailable */ }
+  return validIndex(saved) ? Number(saved) : DEFAULT_ESCROW;
+}
+export const ESCROW = { index: pickEscrow(), subindex: 0 };
+export const isDemo = ESCROW.index === DEMO_ESCROW;
+
+/** Switch the app to another escrow (a full reload, so nothing from the old one lingers). */
+export function openEscrow(index, hash = '#/buyer') {
+  try { localStorage.setItem(ESCROW_KEY, String(index)); } catch { /* storage unavailable */ }
+  const u = new URL(location.href);
+  u.searchParams.set('escrow', String(index));
+  u.hash = hash;
+  location.href = u.toString();
+}
+
+/** Is this contract a Clear to Pay escrow running verified code? */
+export async function checkEscrow(index) {
+  try {
+    const limit = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 10000));
+    const info = await Promise.race([node.getInstanceInfo(ContractAddress.create(index, 0)), limit]);
+    const ref = String(info?.sourceModule?.moduleRef ?? info?.sourceModule ?? '').toLowerCase();
+    const name = String(info?.name?.value ?? info?.name ?? '');
+    if (!VERIFIED_MODULES.includes(ref) || !name.endsWith('ctp_escrow')) return { ok: false, reason: 'This contract is not a Clear to Pay escrow running the verified code.' };
+    return { ok: true, admin: null };
+  } catch {
+    return { ok: false, reason: 'Could not find a contract at that address on testnet (or could not reach testnet). Check the number and your connection.' };
+  }
+}
 export const AGENT = { id: 1287, badge: 'JyP9U25oUQ6KdnBBHdTYP', owner: '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG' };
 const CONTRACT = ContractAddress.create(ESCROW.index, ESCROW.subindex);
 
@@ -186,6 +230,31 @@ async function withSwitchHint(e) {
 
 // ---------- wallet: ID checks (F-01) ----------
 /** Records small data on-chain from the connected account (RegisterData) and waits for it. */
+const INIT_SCHEMA_B64 = 'FAACAAAABwAAAGhvbGRfbXMFCAAAAHJlZ2lzdHJ5DA==';
+const REGISTRY = { index: 12802, subindex: 0 }; // CIS-8004 Agent Registry on testnet
+/** Create a new escrow from the verified module. The connected account becomes its buyer admin. */
+export async function createEscrow(holdMs) {
+  if (!provider || !account) await connect();
+  let tx;
+  try {
+    tx = await provider.sendTransaction(account, AccountTransactionType.InitContract,
+      { amount: CcdAmount.zero(), moduleRef: ModuleReference.fromHexString(ESCROW_MODULE), initName: ContractName.fromString('ctp_escrow'), maxContractExecutionEnergy: Energy.create(30000) },
+      { hold_ms: holdMs, registry: REGISTRY }, { type: 'parameter', value: INIT_SCHEMA_B64 });
+  } catch (e) {
+    return { ok: false, reason: (await withSwitchHint(e))?.message ?? String(e) };
+  }
+  const limit = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 180000));
+  try {
+    const item = await Promise.race([node.waitForTransactionFinalization(TransactionHash.fromHexString(tx), 180000), limit]);
+    const sum = item.summary;
+    const addr = sum?.contractInitialized?.address ?? (sum?.events ?? []).find((e) => e.address)?.address;
+    if (sum?.transactionType === 'failed' || !addr) return { ok: false, tx, reason: 'The chain did not create the escrow. Check it on CCDScan.' };
+    return { ok: true, tx, index: Number(addr.index) };
+  } catch {
+    return { ok: null, tx, reason: 'Sent, but not confirmed from here yet. Find the new contract on CCDScan, then open it below.' };
+  }
+}
+
 export async function registerData(bytes) {
   await connect();
   if (!account) throw new Error('Connect your wallet first.');

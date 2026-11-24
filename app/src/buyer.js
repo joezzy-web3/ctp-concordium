@@ -1,5 +1,5 @@
 // Buyer space: Readiness, New order (wizard with review and one signature), Orders.
-import { AGENT, ESCROW, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
+import { AGENT, ESCROW, isDemo, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
 import { ccdToMicro, microToCcd, orderStage, invoiceApproved, gateSealed, deliveryConfirmed } from './codec.js';
 import { dateBlock, refereeBlock, recountButton, askPaymentButton, refundControl, buyerCanReject, countsLine, dayEnd, defaultDue, iso, fmtDay } from './ordertools.js';
 import { receiptPanel } from './payreceipt.js';
@@ -19,7 +19,7 @@ function sidebar(sub) {
   return h('aside.side',
     h('div.who', h('span.avatar', 'B'), h('div', h('b', 'Buyer'), h('span.mono', me ? short(me) : 'Not connected'))),
     h('nav', { 'aria-label': 'Buyer sections' }, item('', 'Dashboard', 'grid'), item('new', 'New order', 'plus'), item('orders', 'Orders', 'list'), item('ids', 'ID checks', 'user')),
-    h('a.side-foot', { href: CONTRACT_URL, target: '_blank', rel: 'noopener' }, `Escrow <${ESCROW.index},${ESCROW.subindex}>`, icon('external', 14)));
+    h('div.side-foot', h('a', { href: CONTRACT_URL, target: '_blank', rel: 'noopener' }, `Escrow <${ESCROW.index},${ESCROW.subindex}>${isDemo ? ' · demo' : ''}`, icon('external', 14)), h('a.side-switch', { href: '#/start' }, isDemo ? 'Start your own escrow' : 'Switch escrow')));
 }
 
 export async function buyerView(sub = '') {
@@ -46,11 +46,11 @@ const NEXT_STEP = {
   approverwindow: 'The approver has a window to count before the payment can go.',
   revealing: 'The signers reveal their sealed counts.',
   mismatch: 'The counts do not match: ask for a recount, or wait for the rest of the delivery.',
-  invoice: `Agent #${AGENT.id} submits the invoice.`,
+  invoice: `Agent #${CAST.agentId} submits the invoice.`,
   approval: 'The supplier approves the invoice and its amount.',
   amount: 'The invoice amount differs from the escrow: refund and reorder.',
   hold: 'The supplier’s payout account is still in its hold.',
-  ready: `Agent #${AGENT.id} asks the contract to pay.`,
+  ready: `Agent #${CAST.agentId} asks the contract to pay.`,
 };
 
 async function dashboard() {
@@ -103,9 +103,10 @@ async function dashboard() {
           h('h3', 'Readiness'),
           h('ul.ready-list.compact',
             row(me === cfg.admin ? 'ok' : 'hold', 'Buyer account', me === cfg.admin ? 'Connected as the buyer admin.' : `Connect ${short(cfg.admin)} to create orders.`),
-            b.known ? row(b.ok ? 'ok' : 'no', `Agent #${AGENT.id}`, b.ok ? 'Verified by Concordium.' : 'Badge does not check out.')
+            CAST.agent !== AGENT.owner ? row('ok', `Agent #${CAST.agentId}`, 'Your own agent. The contract checked it in the Concordium registry when you listed it, and checks it again at every invoice and payment.')
+            : b.known ? row(b.ok ? 'ok' : 'no', `Agent #${AGENT.id}`, b.ok ? 'Verified by Concordium.' : 'Badge does not check out.')
               : row('hold', `Agent #${AGENT.id}`, 'Registry not reachable from here.', h('a.inline', { href: `https://agent-registry-mcp.concordium.com/v1/check-badge/${AGENT.badge}?network=testnet`, target: '_blank', rel: 'noopener' }, 'Check', icon('external', 14))),
-            sup ? row('ok', 'Cast set up', `Supplier registered; its payout hold is ${holdText(cfg.hold_ms)}.`) : row('hold', 'Cast not set up', 'List the receiver, approver, agent and supplier in one approval.', setupButton(me === cfg.admin)),
+            sup ? row('ok', 'Cast set up', `Supplier registered; its payout hold is ${holdText(cfg.hold_ms)}.`) : (isDemo ? row('hold', 'Cast not set up', 'List the receiver, approver, agent and supplier in one approval.', setupButton(me === cfg.admin)) : row('hold', 'People not listed yet', 'List your receiver, approver, supplier and agent on your escrow.', h('a.inline', { href: '#/start' }, 'List them', icon('arrow', 14)))),
             idRow(row))))),
   );
 }
@@ -142,8 +143,9 @@ function setupButton(isAdmin) {
 // ---------- new order wizard ----------
 const STEPS = ['Supplier', 'Order lines', 'Who counts', 'Review'];
 const blank = () => ({ step: 0, supplier: CAST.supplier, supplierName: CAST.supplierName, place: '', notes: '', due: defaultDue(), lines: [{ item: '', qty: '', price: '' }], receiver: CAST.receiver, approver: CAST.approver, referee: CAST.referee ?? '' });
-const load = () => ({ ...blank(), ...store.get('ctp:draft', {}) });
-const save = (d) => store.set('ctp:draft', d);
+const DRAFT = `ctp:draft:${ESCROW.index}`;
+const load = () => ({ ...blank(), ...store.get(DRAFT, {}) });
+const save = (d) => store.set(DRAFT, d);
 
 function totals(d) {
   let units = 0n, micro = 0n, ok = d.lines.length > 0;
@@ -170,7 +172,7 @@ function problems(d, step) {
     else if (d.approver.trim() && !ADDR_RE.test(d.approver.trim())) p.push('Enter a full account for the approver, or leave it empty.');
     else if (d.approver.trim() && d.receiver.trim() === d.approver.trim()) p.push('The receiver and the approver must be two different people.');
     if (!ADDR_RE.test((d.referee ?? '').trim())) p.push('Enter the referee’s account.');
-    else if ([d.receiver, d.approver, d.supplier, CAST.buyer, AGENT.owner].map((x) => x.trim()).filter(Boolean).includes(d.referee.trim())) p.push('The referee must be someone independent: not the buyer, the supplier, the two counters or the agent.');
+    else if ([d.receiver, d.approver, d.supplier, CAST.buyer, CAST.agent].map((x) => x.trim()).filter(Boolean).includes(d.referee.trim())) p.push('The referee must be someone independent: not the buyer, the supplier, the two counters or the agent.');
   }
   return p;
 }
@@ -243,20 +245,20 @@ function wizard() {
     const idBox = h('span', 'This order locks in escrow');
     listOrders().then((os) => { d.orderId = (os.at(-1)?.id ?? 0) + 1; fill(idBox, 'Order ', h('b.num', `#${d.orderId}`), ' locks in escrow'); }).catch(() => fill(idBox, 'Could not read the next order number; reload before signing.'));
     const sec = (i, title, ...content) => h('section.rv', h('div.rv-h', h('h3', title), h('button.btn.text.small', { type: 'button', onclick: () => go(i) }, icon('edit', 16), 'Edit')), ...content);
-    const params = () => ({ order_id: d.orderId, supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() ? { Some: [d.approver.trim()] } : { None: [] }, invoice_by: iso(dayEnd(d.due)), agent: AGENT.owner, referee: d.referee.trim() });
+    const params = () => ({ order_id: d.orderId, supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() ? { Some: [d.approver.trim()] } : { None: [] }, invoice_by: iso(dayEnd(d.due)), agent: CAST.agent, referee: d.referee.trim() });
     const sign = h('button.btn.gold.wide', { type: 'button', onclick: async () => {
       if (!d.orderId) return notice('no', 'Could not work out the next order number. Reload and try again.');
       if (currentAccount() !== CAST.buyer) notice('wait', 'This must be signed by the buyer account; the contract refuses anyone else.');
       sign.disabled = true;
       const r = await act('create_order', params(), { micro: t.micro, pending: `Order #${d.orderId} sent. `, done: `Order #${d.orderId} created. ${microToCcd(t.micro)} CCD is locked in escrow.` });
       sign.disabled = false;
-      if (r.ok) { store.set(`ctp:po:${d.orderId}`, d); store.set(`ctp:po:${ESCROW.index}:${d.orderId}`, d); store.del('ctp:draft'); location.hash = '#/buyer/orders'; }
+      if (r.ok) { store.set(`ctp:po:${ESCROW.index}:${d.orderId}`, d); store.del(DRAFT); location.hash = '#/buyer/orders'; }
     } }, 'Sign with wallet');
     return h('div.review',
       h('div.rv-col',
         sec(0, 'Supplier', h('p', h('b', d.supplierName), h('br'), h('span.mono', short(d.supplier)))),
         sec(1, 'Order lines', h('ul.rv-lines', d.lines.map((l) => h('li', h('span', `${l.item} × ${l.qty}`), h('b.num', `${microToCcd(BigInt(l.qty) * ccdToMicro(l.price))} CCD`)))), d.place ? h('p.mute', `Deliver to ${d.place}`) : null, h('p', 'Latest date for delivery and invoice: ', h('b', fmtDay(dayEnd(d.due))))),
-        sec(2, 'Who counts', h('p', `Receiver ${short(d.receiver)}`, h('br'), d.approver.trim() ? `Approver ${short(d.approver)}` : 'No approver (individual buyer)', h('br'), `Referee ${short(d.referee)}`, h('br'), `Agent #${AGENT.id} submits the invoice`))),
+        sec(2, 'Who counts', h('p', `Receiver ${short(d.receiver)}`, h('br'), d.approver.trim() ? `Approver ${short(d.approver)}` : 'No approver (individual buyer)', h('br'), `Referee ${short(d.referee)}`, h('br'), `Agent #${CAST.agentId} submits the invoice`))),
       h('aside.pay',
         idBox,
         h('div.big.num', `${microToCcd(t.micro)} CCD`),
@@ -265,7 +267,7 @@ function wizard() {
         h('button.btn.out.wide', { type: 'button', onclick: () => printPO({ ...d, orderId: d.orderId, micro: t.micro, units: t.units }) }, icon('download', 16), 'Download purchase order (PDF)'),
         h('details.wallet', h('summary', 'What your wallet will sign'),
           h('p', `Contract <${ESCROW.index},${ESCROW.subindex}>, ctp_escrow.create_order, attaching ${microToCcd(t.micro)} CCD.`),
-          h('pre', JSON.stringify({ order_id: d.orderId ?? 'next', supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() || null, invoice_by: dayEnd(d.due) > 0 ? iso(dayEnd(d.due)) : '', agent: AGENT.owner, referee: (d.referee ?? '').trim() }, null, 2)))));
+          h('pre', JSON.stringify({ order_id: d.orderId ?? 'next', supplier: d.supplier.trim(), expected_qty: Number(t.units), receiver: d.receiver.trim(), approver: d.approver.trim() || null, invoice_by: dayEnd(d.due) > 0 ? iso(dayEnd(d.due)) : '', agent: CAST.agent, referee: (d.referee ?? '').trim() }, null, 2)))));
   }
 
   function paint(errs = []) {
@@ -312,7 +314,7 @@ async function ordersView() {
   const list = h('ul.orders', [...orders].reverse().map((o) => {
     const st = orderStage(o, sups[o.supplier], cfg.hold_ms);
     const r = reached(o);
-    const po = store.get(`ctp:po:${o.id}`);
+    const po = store.get(`ctp:po:${ESCROW.index}:${o.id}`) ?? (isDemo ? store.get(`ctp:po:${o.id}`) : null);
     const detail = h('div.order-d',
       h('ol.timeline', TIMELINE.map(([k, label]) => h('li', { class: r[k] ? 'done' : null }, h('span.tl-dot', r[k] ? icon('check', 12) : null), label))),
       h('dl.facts',
