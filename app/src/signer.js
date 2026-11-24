@@ -76,7 +76,7 @@ function card(o, me) {
   const unloadNote = role === 'SupplierRep' && !o.paid && !o.refunded
     ? (receiverSealed
       ? h('p', chip('ok', 'Receiver has sealed'), ' The buyer’s receiver has counted. You can unload.')
-      : h('p', chip('hold', 'Receiver has not sealed'), ' Do not unload until the buyer’s receiver has sealed their count. No count, no unload.'))
+      : h('p.err', icon('alert', 18), h('b', 'Receiver has NOT sealed: do not unload.'), ' Wait until the buyer’s receiver has sealed their count. No count, no unload.'))
     : null;
   const approverNote = role === 'Approver' && !mine
     ? h('p.fine', 'You check the delivery inside. After the gate counts, the payment waits for you for the hold period: unseal the same number and it can go at once; a different number holds it. Staying silent never blocks it for longer than that.')
@@ -123,7 +123,8 @@ function card(o, me) {
       btn.disabled = true;
       const r = await act('reveal_count', { order_id: o.id, qty: Number(s.qty), salt: Array.from(s.key.match(/../g), (x) => parseInt(x, 16)) }, { pending: 'Unsealing. ', done: `Your count (${s.qty}) is unsealed for order #${o.id}.` });
       btn.disabled = false;
-      if (r.ok) location.reload();
+      // The count is public now: drop its key, so a shared gate tablet keeps nothing (audit 24 Nov L5).
+      if (r.ok) { store.del(keyName(me, o)); location.reload(); }
     } }, 'Unseal my count');
     fill(body,
       unloadNote,

@@ -19,10 +19,21 @@ Clear to Pay lets AI agents handle supplier payments without being able to move 
 **Threat:** an AI agent with payment powers is talked into, tricked into or hijacked into paying the wrong party, the wrong amount, or for goods that never arrived.
 **Invariant:** only the escrow contract can pay, and only to the supplier's own payout account, when two blind counts by independent people match the order, the supplier approved that exact invoice and amount from its own account, the payout account has waited out its hold, and the agent checks out in Concordium's Agent Registry. Every request is decided on-chain, and recorded either way.
 **Try it:** [the app](https://cleartopay-concordium.vercel.app/app/) · [Judge mode](https://cleartopay-concordium.vercel.app/app/#/judge) (no wallet) · [landing page](https://cleartopay-concordium.vercel.app/)
-**Proof:** [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) · [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185) · [Verified module](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) · 26 rule tests and 54 end-to-end tests on the compiled contract, 79 app, MCP and ID-check tests · two independent security reviews, every finding fixed
-**Status:** live on Concordium testnet; an independent audit comes before mainnet ([path to production](PATH_TO_PRODUCTION.md)). For AI reviewers: [llms.txt](llms.txt).
+**Proof:** [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) · [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185) · [Verified module](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) · 26 rule tests and 54 end-to-end tests on the compiled contract, 79 app, MCP and ID-check tests · three security reviews (19, 20, 21 Nov), every finding fixed
+**Status:** live on Concordium testnet; an independent audit comes before mainnet ([path to production](PATH_TO_PRODUCTION.md)). [Threat model](THREAT_MODEL.md) · [Proof log](docs/testnet-proof.md) · For AI reviewers: [llms.txt](llms.txt).
 
 Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/programmes/concordium-trusted-agents-hackathon) (Encode Club, Nov–Dec 2026). Runs on **Concordium testnet**. The idea started on [NEAR](https://github.com/joezzy-web3/clear-to-pay); the same agent is now linked across both chains.
+
+## Why now
+
+AI agents are starting to pay invoices, and the fraud that targets invoice payments is at a record high.
+
+- **$3.05 billion lost to business email compromise in 2025**, across 24,768 complaints: about **$123,000 a case**. Most of it went by wire transfer, a payment pushed to an account someone changed. ([FBI IC3 2025 Internet Crime Report](https://www.ic3.gov/AnnualReport/Reports/2025_IC3Report.pdf))
+- **74% of US organizations were hit by business email compromise in 2025**, up from 63% in 2024. ([AFP 2026 Payments Fraud and Control Survey](https://www.financialprofessionals.org/about/learn-more/press-releases/Details/over-75-percent-of-us-firms-experienced-payments-fraud-in-2025-while-ai-adoption-for-fraud-mitigation-lags))
+- **AI fraud now has its own chapter.** The FBI's 2025 report is the first in 25 years with an AI section: 22,364 complaints and $893 million lost, both flagged as undercounts. ([FBI IC3 2025](https://www.ic3.gov/AnnualReport/Reports/2025_IC3Report.pdf))
+- **67% of finance teams already run AI in accounts payable; 39% have the operating model to run it at scale.** ([Forrester Consulting for Basware, 2026](https://www.cpapracticeadvisor.com/2026/07/28/finance-leaders-are-ready-to-increase-ai-but-most-arent-ready-to-control-it/187497/))
+
+That gap is what Clear to Pay is for. An invoice agent that can be talked into a payment is a new way in for the oldest fraud in procurement. Clear to Pay keeps the agent useful and takes the payment decision away from it.
 
 ## How Clear to Pay meets the brief
 
@@ -61,6 +72,23 @@ Every row links to on-chain evidence or runs in the test suite.
 | Escrow contract v4: two named people in two roles count blind (each seal bound to its signer), the supplier accepts the order and its latest date, approves its own invoice and amount, payout hold on new payout accounts, pays only on CLEARED, logs every decision | **Live (testnet)**, full order paid on 20 Nov 2026 | `<13098,0>`, module `ad60bdff…a28c7e52` = verifiable build ([first payment](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947)); 20 rule tests, 34 end-to-end tests |
 
 </details>
+
+## How we got here
+
+Clear to Pay started as a habit, not a hackathon idea. In a shipyard, nothing is paid until the goods are counted at the gate against the purchase order and the invoice matches what arrived. Ships sail when cleared. This project puts that check into code, so an AI agent can do the paperwork without holding the money.
+
+| When | What | Evidence |
+|---|---|---|
+| 30 Oct 2026 | First build on NEAR: supplier registry with a 72-hour cool-off on payout changes, signed invoices and delivery notes, CI with a secret scan, first security review the same day | [NEAR repo, first commits](https://github.com/joezzy-web3/clear-to-pay/commits/main) |
+| 1 Nov | Baseline: the same attacks against an allowlist-and-limits guard (paid 9 of 11) and Clear to Pay (paid 0 of 11); first threat model | [baseline](https://github.com/joezzy-web3/clear-to-pay/blob/main/docs/baseline.md) · [threat model](https://github.com/joezzy-web3/clear-to-pay/blob/main/THREAT_MODEL.md) |
+| 30 Oct – 12 Nov | Eleven security reviews on NEAR, every finding answered in the README | [Security review](https://github.com/joezzy-web3/clear-to-pay#security-review) |
+| 19 Nov | Rebuilt from scratch for Concordium: Agent #1287 registered and linked to the NEAR agent, escrow v1 and v2 deployed, first audit (F-01 to F-15) | [proof log](docs/testnet-proof.md) |
+| 20 Nov | First full payment on-chain (v4); second audit, fixed in v5 | [Cleared, v4](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e921b5657c0105d768122ee070dad4efd97eec9ac4a806d45fc2cb40852f2947) · [v5 fixes](https://github.com/joezzy-web3/ctp-concordium/commit/fbbcb5caf04eca9a48a8a5d777258993c59663b3) |
+| 21 Nov | Third audit, fixed in v6; first v6 run | [v6 fixes](https://github.com/joezzy-web3/ctp-concordium/commit/948e9b6f406af42e8e3401989e03b7095e5b156d) |
+| 22–24 Nov | Found that CCDExplorer could not verify `wasm32v1` builds, reported it, the maintainer fixed it; module **Verified** | [Verified module](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) |
+| 24 Nov | Full run with Claude on `<13151,0>`: Held, then Cleared. Any company can start its own escrow | [Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a982793ae64558268d5433bdcd81e81676efc6d2ea1dc5e18a770297c656b264) · [Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a59615fdb70d30d3e8ca4c3c1824ad788cbd652ca9925efa782a913230a79185) |
+
+Over 300 commits across the two repos, fourteen security reviews, and every threat mapped to a test in [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Testnet references
 | What | Value |

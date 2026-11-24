@@ -27,6 +27,8 @@ const ORDER: OrderId = 42;
 /// The agreed deadline for the test order: 10 days after the chain starts.
 const DUE_MS: u64 = 10 * 24 * 3600 * 1000;
 const DUE: Timestamp = Timestamp::from_timestamp_millis(DUE_MS);
+/// The grace week after the date for a delivery both gate counters confirmed.
+const GRACE_MS: u64 = 7 * 24 * 3600 * 1000;
 const QTY: u64 = 100;
 const PRICE: Amount = Amount::from_ccd(1_250);
 const INVOICE: HashSha2256 = HashSha2256([0xaa; 32]);
@@ -152,8 +154,11 @@ fn setup_with_order(escrow: Amount) -> T {
             SignerParams { account: OTHER_SIGNER, role: Role::Receiver, person_tag: None, id_audit: None },
         ],
         agents: vec![AgentParams { account: AGENT, agent_token_id: 1287 }, AgentParams { account: OTHER_AGENT, agent_token_id: 1288 }],
-        suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: PAYOUT }],
+        // A new supplier is always paid to its own account (audit 24 Nov H2)...
+        suppliers: vec![SupplierParams { supplier: SUPPLIER, payout: SUPPLIER }],
     });
+    // ...and only the supplier chooses another payout account, which starts its hold.
+    t.ok(SUPPLIER, "set_payout", &PAYOUT);
     t.call(ADMIN, "create_order", &order_params(ORDER), escrow).expect("create_order");
     t.ok(SUPPLIER, "accept_order", &AcceptParams { order_id: ORDER, invoice_by: DUE, rep: REP });
     t
@@ -358,6 +363,9 @@ fn after_the_date_an_unready_order_takes_nothing_new_and_the_buyer_can_refund() 
     // The supplier never approved in time.
     assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
     t.past_due();
+    // The delivery was confirmed, so the supplier keeps a grace week past the date (audit 24 Nov H1).
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    t.wait(GRACE_MS);
     assert_eq!(t.err(SUPPLIER, "approve_invoice", &ApproveParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::PastDeadline);
     let before = t.balance(ADMIN);
     t.ok(ADMIN, "refund", &ORDER);
@@ -1011,4 +1019,73 @@ fn the_buyers_counters_are_neither_the_supplier_nor_the_agent() {
     let mut p = order_params(78);
     p.approver = Some(AGENT);
     assert_eq!(t.call(ADMIN, "create_order", &p, PRICE).expect_err("agent as approver").parse_return_value::<Error>().unwrap(), Error::BadOrderSigners);
+}
+
+// ---------- audit 24 Nov ----------
+
+#[test]
+fn a_confirmed_delivery_is_not_refundable_when_the_buyers_agent_never_invoices() {
+    // Audit 24 Nov H1: the buyer pulls its own agent after the gate counts.
+    let mut t = setup();
+    count(&mut t, QTY, QTY);
+    t.ok(ADMIN, "remove_agent", &AGENT);
+    assert_eq!(t.err(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::NotAgent);
+    t.past_due();
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+}
+
+#[test]
+fn a_silent_agent_cannot_turn_a_confirmed_delivery_into_a_refund() {
+    let mut t = setup();
+    count(&mut t, QTY, QTY);
+    t.past_due(); // the agent simply never submitted
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+}
+
+#[test]
+fn the_supplier_invoices_its_own_confirmed_delivery_and_is_paid() {
+    let mut t = setup();
+    // Not before the delivery is confirmed.
+    assert_eq!(t.err(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::DeliveryNotConfirmed);
+    count(&mut t, QTY, QTY);
+    t.ok(ADMIN, "remove_agent", &AGENT);
+    t.past_due(); // the date has passed with no invoice from the agent
+    // Only the supplier, and only for the full escrowed amount.
+    assert_eq!(t.err(STRANGER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::NotSupplier);
+    assert_eq!(t.err(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: Amount::from_ccd(1) }), Error::NotFullAmount);
+    let r = t.ok(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    let evs = T::events(&r);
+    assert!(evs.contains(&Event::SupplierInvoiced { order_id: ORDER, supplier: SUPPLIER, invoice_hash: INVOICE, amount: PRICE }));
+    assert!(evs.contains(&Event::InvoiceApproved { order_id: ORDER, supplier: SUPPLIER, invoice_hash: INVOICE, amount: PRICE }));
+    assert_eq!(t.err(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::InvoiceExists);
+    // Ready to pay: the buyer can no longer take it back, even after the grace week.
+    t.wait(GRACE_MS);
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    // The supplier asks; every rule still runs, and it is paid to its own payout account.
+    let before = t.balance(PAYOUT);
+    let r = t.ok(SUPPLIER, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
+    assert_eq!(t.decision(&r), (Verdict::Cleared, vec![], Some(PAYOUT)));
+    assert_eq!(t.balance(PAYOUT), before + PRICE);
+}
+
+#[test]
+fn after_the_grace_week_an_uninvoiced_delivery_can_be_refunded() {
+    let mut t = setup();
+    count(&mut t, QTY, QTY);
+    t.past_due();
+    t.wait(GRACE_MS);
+    assert_eq!(t.err(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE }), Error::PastDeadline);
+    t.ok(ADMIN, "refund", &ORDER);
+}
+
+#[test]
+fn only_the_supplier_decides_where_it_is_paid() {
+    // Audit 24 Nov H2: the buyer cannot type in a payout account for a supplier.
+    let mut t = setup();
+    assert_eq!(t.err(ADMIN, "register_supplier", &SupplierParams { supplier: STRANGER, payout: NEW_PAYOUT }), Error::PayoutNotSupplier);
+    let p = SetupParams { signers: vec![], agents: vec![], suppliers: vec![SupplierParams { supplier: STRANGER, payout: NEW_PAYOUT }] };
+    assert_eq!(t.err(ADMIN, "setup", &p), Error::PayoutNotSupplier);
+    t.ok(ADMIN, "register_supplier", &SupplierParams { supplier: STRANGER, payout: STRANGER });
+    let s = t.ok(STRANGER, "view_supplier", &STRANGER).parse_return_value::<Supplier>().unwrap();
+    assert_eq!(s.payout, STRANGER);
 }

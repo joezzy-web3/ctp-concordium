@@ -24,7 +24,15 @@ const engine = async () => (core ??= await import('./idcheck-core.js'));
 
 const verified = () => store.get(K, []);
 const asked = () => store.get(ASKED, {});
-const answers = () => store.get(ANSWERS, {});
+const DAY_MS = 24 * 3600 * 1000;
+/** Answers made in this browser. Unrecorded ones are deleted after 24 hours: they carry the
+ *  counter's ID document number (audit 24 Nov M1). */
+const answers = () => {
+  const all = store.get(ANSWERS, {});
+  const fresh = Object.fromEntries(Object.entries(all).filter(([, v]) => Date.now() - (v?.at ?? 0) < DAY_MS));
+  if (Object.keys(fresh).length !== Object.keys(all).length) store.set(ANSWERS, fresh);
+  return fresh;
+};
 
 /** Copy, or share on a phone (WhatsApp and the like), plus a same-browser shortcut. */
 function handoff(url, what, openLabel) {
@@ -155,7 +163,7 @@ function howPanel() {
     h('ol.guide',
       step(1, 'You ask', 'Create a request for one counter and send them the link.'),
       step(2, 'They prove', 'Their own Concordium wallet makes a zero-knowledge proof: a verified adult, sharing only their ID document number with this page.'),
-      step(3, 'You record', 'The app checks the proof against the chain, makes a salted fingerprint, records an audit anchor, and saves the fingerprint on the escrow. The document number is never stored.')));
+      step(3, 'You record', 'The app checks the proof against the chain, makes a salted fingerprint, records an audit anchor, and saves only the fingerprint on the escrow. The document number goes to your page, never on-chain; this browser deletes its copy as soon as it is recorded, and unrecorded answers after 24 hours. Send the answer link privately: it carries the proof.')));
 }
 
 async function checkLocal(result, tx) {
@@ -209,7 +217,7 @@ async function recordIt(result, tx, a, record, attrs) {
   const twin = others.find((v) => v.tag === tag);
   store.set(K, [...others, { account: a.signer, role: a.role, tag, audit: audit.hash, auditTx, at: Date.now(), request: tx }]);
   const got = answers(); delete got[tx]; store.set(ANSWERS, got);
-  const file = h('a.btn.line.small', { href: URL.createObjectURL(new Blob([JSON.stringify({ escrow: `<${ESCROW.index},0>`, account: a.signer, role: a.role, person_tag: tag, id_audit: audit.hash, audit_anchor_tx: auditTx, audit_record: audit.json }, null, 2)], { type: 'application/json' })), download: `ctp-id-audit-${a.signer.slice(0, 8)}.json` }, icon('download', 16), 'Audit record');
+  const file = h('a.btn.line.small', { href: URL.createObjectURL(new Blob([JSON.stringify({ escrow: `<${ESCROW.index},0>`, account: a.signer, role: a.role, person_tag: tag, id_audit: audit.hash, audit_anchor_tx: auditTx, audit_record: audit.json }, null, 2)], { type: 'application/json' })), download: `ctp-id-audit-${a.signer.slice(0, 8)}-PRIVATE.json`, title: 'Contains the counter’s ID document number. Keep it private.' }, icon('download', 16), 'Audit record (private: has the ID number)');
   fill(result, h(`section.panel.result.${twin ? 'no' : 'ok'}`,
     h('h3', icon(twin ? 'alert' : 'check', 18), twin ? ' Recorded: same person as another counter' : ` ${CAST.nameOf(a.signer)} is verified on the escrow`),
     h('p', twin

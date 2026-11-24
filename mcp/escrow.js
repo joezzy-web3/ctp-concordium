@@ -2,7 +2,7 @@
 // key. Sending signs with the agent's own account key, read from a wallet export file
 // whose path comes from the environment. The key never leaves this process and is never
 // printed or returned.
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import {
   AccountAddress, AccountTransactionType, CcdAmount, ContractAddress, Energy, Parameter, ReceiveName,
@@ -62,6 +62,13 @@ export function publicKeyOf(hex) {
 export function loadAgentSigner(path, expectedAddress) {
   if (!path) throw new Error('CTP_AGENT_KEY_FILE is not set, so this server can read and dry-run but not send.');
   let raw;
+  // The key file must not be readable by other users (audit 24 Nov L3). Windows files, and
+  // Windows drives seen from WSL (/mnt/c/...), have no Unix permissions to check.
+  if (process.platform !== 'win32' && !/^\/mnt\/[a-z]\//i.test(path)) {
+    let mode;
+    try { mode = statSync(path).mode; } catch { throw new Error('Could not read the agent key file.'); }
+    if (mode & 0o077) throw new Error(`The agent key file can be read by other users on this computer. Run: chmod 600 "${path}" (and keep it out of synced folders such as Google Drive or OneDrive). Nothing was sent.`);
+  }
   try { raw = readFileSync(path, 'utf8').trim(); } catch { throw new Error('Could not read the agent key file.'); }
   if (/^[0-9a-f]{64}$/i.test(raw)) return { address: expectedAddress, signer: buildBasicAccountSigner(raw), publicKey: publicKeyOf(raw) };
   let wallet;
@@ -78,7 +85,7 @@ export function accountVerifyKeys(info) {
   return out;
 }
 
-export function createEscrow({ escrow, agent, keyFile, client } = {}) {
+export function createEscrow({ escrow, agent, keyFile, client, verifiedModules } = {}) {
   const node = client ?? new ConcordiumGRPCNodeClient(NODE.host, NODE.port, credentials.createSsl(), { timeout: 15000 });
   const contract = ContractAddress.create(escrow.index, escrow.subindex);
   const method = (m) => ReceiveName.fromString(`ctp_escrow.${m}`);
@@ -96,8 +103,23 @@ export function createEscrow({ escrow, agent, keyFile, client } = {}) {
     return { ok: false, ...rejection(res?.reason), energy: Number(res?.usedEnergy?.value ?? 0) };
   }
 
+  /** Refuses to sign for a contract that is not a Clear to Pay escrow running the verified
+   *  code (audit 24 Nov L1). Checked once, before the first transaction. */
+  let verified = null;
+  async function ensureVerified() {
+    if (!verifiedModules) return;
+    verified ??= (async () => {
+      const info = await node.getInstanceInfo(contract);
+      const ref = String(info?.sourceModule?.moduleRef ?? info?.sourceModule ?? '').toLowerCase();
+      const name = String(info?.name?.value ?? info?.name ?? '');
+      if (!verifiedModules.includes(ref) || !name.endsWith('ctp_escrow')) throw new Error(`Escrow <${escrow.index},${escrow.subindex}> is not running the verified Clear to Pay code, so this agent will not sign for it. Nothing was sent.`);
+    })();
+    try { await verified; } catch (e) { verified = null; throw e; }
+  }
+
   /** Signs as the agent and sends; waits for finalization. */
   async function send(m, bytes, energy) {
+    await ensureVerified();
     const { address, signer, publicKey } = loadAgentSigner(keyFile, agent.owner);
     const sender = AccountAddress.fromBase58(address);
     if (publicKey && !accountVerifyKeys(await node.getAccountInfo(sender)).has(publicKey)) {

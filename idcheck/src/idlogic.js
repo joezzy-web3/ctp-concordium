@@ -12,7 +12,7 @@ export const sha256 = async (bytes) => new Uint8Array(await globalThis.crypto.su
 
 export const TAG_DOMAIN = 'CTP-person/v1';
 export const RESOURCE = (escrow, account) => `ctp-escrow:<${escrow.index},${escrow.subindex}>:signer:${account}`;
-export const SALT_MESSAGE = (escrow) => `Clear to Pay person-tag salt v1 for escrow <${escrow.index},${escrow.subindex}>. Signing this reveals nothing and moves no funds.`;
+export const SALT_MESSAGE = (escrow) => `Clear to Pay person-tag salt v2 for escrow <${escrow.index},${escrow.subindex}>. Only sign this on cleartopay-concordium.vercel.app. Signing this reveals nothing and moves no funds.`;
 
 /** Trims, uppercases and drops inner spaces, so "a12 345" and "A12345" are one document. */
 export const normDoc = (s) => String(s ?? '').trim().toUpperCase().replace(/\s+/g, '');

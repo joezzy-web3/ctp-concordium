@@ -2,9 +2,9 @@
 // chain. Every answer is plain text an AI can relay. The contract is the judge: these tools
 // only read, dry-run, and send what the agent account is allowed to send.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, isAbsolute } from 'node:path';
 import { orderStage, microToCcd, ccdToMicro, deliveryConfirmed, invoiceApproved } from '../app/src/codec.js';
 import { CODE_TEXT } from '../app/src/errors.js';
 import { buildEscrowReceipt, escrowReceiptHash } from '../receipt/escrowReceipt.js';
@@ -44,7 +44,15 @@ async function stageOf(chain, o, cache = {}) {
   return orderStage(o, cache[o.supplier], cache.cfg.hold_ms);
 }
 
-export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ?? join(homedir(), '.local/share/clear-to-pay/receipts'), fetch: fetchImpl } = {}) {
+/** A recently changed payout account, in words, or ''. A new supplier starts paid to its own
+ *  account, so a different account still in its hold was changed recently (audit 24 Nov M5). */
+function payoutWarning(o, sup, holdMs, now = Date.now()) {
+  if (!sup || sup.payout === o.supplier || now - sup.payout_set_at >= holdMs) return '';
+  const hours = Math.max(1, Math.round((now - sup.payout_set_at) / 3600000));
+  return ` Warning: the supplier’s payout account was changed about ${hours} hour${hours === 1 ? '' : 's'} ago, to ${short(sup.payout)}. Confirm it with the supplier on a number already on file before anyone relies on it; the contract will not pay there until the hold ends.`;
+}
+
+export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ?? join(homedir(), '.local/share/clear-to-pay/receipts'), invoiceDir = process.env.CTP_INVOICE_DIR ?? join(homedir(), 'Downloads'), fetch: fetchImpl } = {}) {
   const { escrow, agent } = chain;
   const where = `escrow <${escrow.index},${escrow.subindex}> on Concordium testnet`;
 
@@ -72,9 +80,9 @@ export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ??
       `Escrowed: ${microToCcd(o.amount)} CCD for ${o.expected_qty} units. Latest date for delivery and invoice: ${day(o.invoice_by)}.`,
       `Supplier ${short(o.supplier)}${o.accepted ? ', accepted' : ', not accepted yet'}. Receiver ${short(o.receiver)}, approver ${o.approver ? short(o.approver) : 'none (individual buyer)'}, supplier’s rep ${short(o.rep)}, referee ${short(o.referee)}.`,
       `Counts: ${counts}. Delivery confirmed: ${deliveryConfirmed(o) ? 'yes' : 'no'}.`,
-      o.invoice ? `Invoice: ${microToCcd(o.invoice.amount)} CCD, fingerprint ${o.invoice.invoice_hash.slice(0, 12)}…, by Agent #${o.invoice.agent_token_id}. Supplier approved: ${invoiceApproved(o) ? 'yes' : 'no'}.` : 'Invoice: none yet.',
+      o.invoice ? `Invoice: ${microToCcd(o.invoice.amount)} CCD, fingerprint ${o.invoice.invoice_hash.slice(0, 12)}…, ${o.invoice.agent === o.supplier ? 'submitted by the supplier itself' : `by Agent #${o.invoice.agent_token_id}`}. Supplier approved: ${invoiceApproved(o) ? 'yes' : 'no'}.` : 'Invoice: none yet.',
       `Named agent: ${o.agent === agent.owner ? `this agent (#${agent.id})` : short(o.agent)}.`,
-    ].join('\n');
+    ].join('\n') + payoutWarning(o, await chain.viewSupplier(o.supplier), (await chain.viewConfig()).hold_ms);
   }
 
   async function checkBadge() {
@@ -92,13 +100,19 @@ export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ??
   async function submitInvoice({ order_id: id, invoice_file: file, amount_ccd: amountCcd }) {
     const micro = ccdToMicro(String(amountCcd));
     if (micro == null) return 'The amount must be a CCD number, for example 25 or 0.5.';
+    // Only files inside the invoices folder, after following links, and never hidden ones, so a
+    // prompt-injected assistant cannot fingerprint a key or any other file (audit 24 Nov L2).
+    let real, root;
+    try { real = realpathSync(file); root = realpathSync(invoiceDir); } catch { return `Could not open the invoice file at ${file}.`; }
+    const rel = relative(root, real);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel) || rel.split(/[\\/]/).some((p) => p.startsWith('.'))) return `Invoices are read only from ${invoiceDir} (set CTP_INVOICE_DIR to change it). Move the invoice file there and try again.`;
     let st;
-    try { st = statSync(file); } catch { return `Could not open the invoice file at ${file}.`; }
+    try { st = statSync(real); } catch { return `Could not open the invoice file at ${file}.`; }
     // Only a regular file: never a device, pipe or folder (audit 21 Nov L1).
     if (!st.isFile()) return 'That path is not a regular file. Give the path of the invoice file itself.';
     const size = st.size;
     if (size > MAX_INVOICE_BYTES) return 'That file is larger than 10 MB; an invoice should be smaller.';
-    const hash = createHash('sha256').update(readFileSync(file)).digest('hex');
+    const hash = createHash('sha256').update(readFileSync(real)).digest('hex');
     const bytes = invoiceParams(id, hash, micro);
     const dry = await chain.simulate('submit_invoice', bytes);
     if (!dry.ok) return `The contract would refuse this invoice (${dry.error}). ${dry.explain} Nothing was sent.`;
@@ -117,7 +131,7 @@ export function makeTools(chain, { receiptsDir = process.env.CTP_RECEIPTS_DIR ??
     const bytes = executeParams(id, hash);
     const dry = await chain.simulate('execute_payment', bytes);
     if (!dry.ok) return `The contract would refuse this request (${dry.error}). ${dry.explain} Nothing was sent.`;
-    const preview = dry.decisions[0] ? verdictText(dry.decisions[0]) : 'no decision';
+    const preview = (dry.decisions[0] ? verdictText(dry.decisions[0]) : 'no decision') + payoutWarning(o, sup, (await chain.viewConfig()).hold_ms);
     if (!chain.canSend) return `Dry run: ${preview} Sending needs CTP_AGENT_KEY_FILE; nothing was sent.`;
     // Kept before sending, so no fingerprint lands on-chain without its receipt (audit M3).
     mkdirSync(receiptsDir, { recursive: true });

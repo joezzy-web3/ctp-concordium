@@ -12,6 +12,8 @@ const DEFAULT_ESCROW = Number(globalThis.CTP_ESCROW ?? 13151);
 export const DEMO_ESCROW = 13151;
 /** Modules built from this repo's verifiable build. An escrow on any other module is refused. */
 export const VERIFIED_MODULES = [
+  'd6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b', // v7 with its source link (release escrow-v7-src1)
+  'f36a55cc8d528d97decba0acfadba11f2e1d0b8c01be57c0f4b7a7b87513c735', // the same v7 build before the link
   '196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde', // v6 with its source link (Verified on CCDExplorer)
   'ec8aa1da1bf370b3241a723862ff089cd6549b41e8f38e19bd7fcfad33a94b73', // the same v6 build before the link
 ];

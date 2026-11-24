@@ -4,7 +4,7 @@
 // press the buttons without a wallet.
 import { AGENT, ESCROW, listOrders, simulate, decisionsIn, viewConfig, viewSupplier } from './chain.js';
 import { CAST } from './cast.js';
-import { accountBytes, invoiceApproved, pastDue, readyToPay, microToCcd, deliveryOnRecord, deliveryConfirmed } from './codec.js';
+import { accountBytes, invoiceApproved, pastDue, readyToPay, microToCcd, deliveryOnRecord, deliveryConfirmed, invoiceDeadline } from './codec.js';
 import { CODE_TEXT, verifyReceiptCard } from './payreceipt.js';
 import { h, fill, icon, chip, short } from './ui.js';
 
@@ -50,6 +50,25 @@ const ATTACKS = [
     run: (o) => ['execute_payment', cat(u64(o.id), ZERO32)],
     expect: 'Held',
     code: 'HeldPayoutCoolOff',
+  },
+  {
+    title: '“Our bank details changed”: a clerk registers a supplier with the scammer’s payout account',
+    threat: 'The oldest accounts-payable scam. On Clear to Pay the buyer never types in where a supplier is paid: a new supplier is paid to its own account, and only the supplier can change it.',
+    who: 'Buyer admin', invoker: CAST.buyer,
+    need: null,
+    pick: () => ({ id: null }),
+    // A new supplier (the referee's account stands in) with someone else's account as its payout.
+    run: async () => ['register_supplier', cat(await accountBytes(CAST.referee), await accountBytes(CAST.receiver))],
+    expect: 'PayoutNotSupplier',
+  },
+  {
+    title: 'The buyer pulls its agent after delivery and waits out the date to claw the money back',
+    threat: 'Both sides counted the goods, but the buyer’s agent never sends the invoice. The supplier can invoice itself, and keeps a grace week past the date in which the buyer cannot refund.',
+    who: 'Buyer admin', invoker: CAST.buyer,
+    need: 'a confirmed delivery with no approved invoice, past its date but inside the grace week',
+    pick: (os) => newest(os, (o) => isOpen(o) && o.accepted && deliveryConfirmed(o) && !readyToPay(o) && pastDue(o) && Date.now() <= invoiceDeadline(o)),
+    run: (o) => ['refund', u64(o.id)],
+    expect: 'RefundLocked',
   },
   {
     title: 'The agent approves its own fake invoice',

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, recountAllowed, readyToPay, deliveryConfirmed, disputed, orderStage, approverWindowEnd, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
+import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, invoiceOpen, supplierCanInvoice, recountAllowed, readyToPay, deliveryConfirmed, disputed, orderStage, approverWindowEnd, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
 import { createHash } from 'node:crypto';
 import { accountBytes } from '../link/encode.js';
 
@@ -45,6 +45,7 @@ test('decodes the contract config, including the registry it asks', async () => 
   assert.deepEqual(await decodeConfig(hex(F.config)), { admin: BUYER, pending_admin: AG, hold_ms: 60000, registry: { index: 12802, subindex: 0 } });
 });
 
+const short0 = (o) => ({ ...o, reveals: o.reveals.map((r) => (r.role === 'SupplierRep' ? { ...r, qty: r.qty - 1n } : r)) });
 test('refund, recount and payment rules mirror the contract', async () => {
   const o = await base();
   const due = o.invoice_by;
@@ -64,7 +65,14 @@ test('refund, recount and payment rules mirror the contract', async () => {
   assert.equal(readyToPay(ready), true);
   assert.equal(disputed(ready), false);
   assert.equal(refundAllowed(ready, due + 1), false, 'ready by the date: locked for the supplier');
-  assert.equal(refundAllowed({ ...ready, supplier_approval: null }, due + 1), true, 'confirmed, but no invoice approved by the agreed date');
+  // Audit 24 Nov H1: a confirmed delivery gets a grace week past the date to invoice.
+  const WEEK = 7 * 24 * 3600 * 1000;
+  assert.equal(refundAllowed({ ...ready, supplier_approval: null }, due + 1), false, 'confirmed: locked through the grace week');
+  assert.equal(invoiceOpen({ ...ready, supplier_approval: null }, due + 1), true, 'the supplier can still invoice and approve');
+  assert.equal(supplierCanInvoice({ ...ready, invoice: null, supplier_approval: null }, due + 1), true, 'the supplier can invoice itself');
+  assert.equal(supplierCanInvoice({ ...short0(ready), invoice: null }, due - 1), false, 'not before the counts confirm it');
+  assert.equal(refundAllowed({ ...ready, supplier_approval: null }, due + WEEK + 1), true, 'confirmed, but nothing approved by the end of the grace week');
+  assert.equal(orderStage({ ...ready, supplier_approval: null }, null, 0, due + 1).key, 'grace');
   assert.equal(deliveryConfirmed({ ...ready, reveals: [...ready.reveals, RV('Approver', AP, 95n)] }), false, 'an approver who disagrees holds it');
   assert.equal(deliveryConfirmed({ ...ready, reveals: [...ready.reveals, RV('Approver', AP, 100n)] }), true);
   assert.equal(deliveryConfirmed({ ...repCounted, ruled_delivered: true }), true, 'a referee ruling settles the counts');

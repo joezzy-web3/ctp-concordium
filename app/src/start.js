@@ -18,7 +18,7 @@ export async function startView() {
       h('p.lead', 'Any company can run Clear to Pay on its own escrow: the same verified code as the demo, with its own money, orders and people. Nobody else can touch it.'),
       h('ol.start-steps',
         h('li', h('b', 'Create your escrow'), h('span', 'One wallet approval. Your account becomes its buyer admin.')),
-        h('li', h('b', 'List your people'), h('span', 'Your receiver, an optional approver, your supplier and its payout account, and the AI agent.')),
+        h('li', h('b', 'List your people'), h('span', 'Your receiver, an optional approver, your supplier, and the AI agent.')),
         h('li', h('b', 'Order'), h('span', 'Create orders as usual. The contract decides every payment.'))),
       current()),
     isDemo ? createPanel() : await peoplePanel(),
@@ -77,7 +77,6 @@ async function peoplePanel() {
     approver: input({ value: CAST.approver, placeholder: 'Optional: approver’s account' }),
     supplierName: input({ value: CAST.supplierName === 'Supplier' ? '' : CAST.supplierName, placeholder: 'Supplier name, e.g. your rice supplier' }),
     supplier: input({ value: CAST.supplier, placeholder: 'Supplier’s Concordium account' }),
-    payout: input({ value: CAST.supplier, placeholder: 'Payout account (usually the supplier’s own)' }),
     agentOwn: h('input', { type: 'checkbox' }),
     agent: input({ value: CAST.agent === AGENT.owner ? '' : CAST.agent, placeholder: 'Your agent’s account' }),
     agentId: input({ value: CAST.agentId === AGENT.id ? '' : String(CAST.agentId), placeholder: 'Agent ID in the registry', inputMode: 'numeric' }),
@@ -93,8 +92,8 @@ async function peoplePanel() {
     if (!ADDR_RE.test(v('receiver'))) errs.push('Enter the receiver’s account.');
     if (v('approver') && !ADDR_RE.test(v('approver'))) errs.push('The approver’s account is not a valid address.');
     if (!ADDR_RE.test(v('supplier'))) errs.push('Enter the supplier’s account.');
-    const payout = v('payout') || v('supplier');
-    if (!ADDR_RE.test(payout)) errs.push('The payout account is not a valid address.');
+    // Paid to its own account; only the supplier can choose another (audit 24 Nov H2).
+    const payout = v('supplier');
     const own = f.agentOwn.checked;
     if (own && (!ADDR_RE.test(v('agent')) || !/^\d+$/.test(v('agentId')))) errs.push('Enter your agent’s account and its ID in the registry.');
     const people = [v('receiver'), v('approver'), v('supplier')].filter(Boolean);
@@ -121,8 +120,7 @@ async function peoplePanel() {
       field('Receiver (counts at the gate)', f.receiver),
       field('Approver (optional, recommended for companies)', f.approver, 'A second person who checks inside.'),
       field('Supplier name', f.supplierName, 'Shown on screen and on your purchase orders.'),
-      field('Supplier’s account', f.supplier),
-      field('Supplier’s payout account', f.payout, 'Where payments go. Only the supplier can change it later, and every change waits out the hold.')),
+      field('Supplier’s account', f.supplier, 'It is paid to this account. Only the supplier can choose another payout account, from its own wallet, and every change waits out the hold.')),
     h('fieldset.agent-pick',
       h('legend', 'AI agent'),
       h('p', `By default your orders use Agent #${AGENT.id} (Clear to Pay’s Claude agent). The contract checks the agent in Concordium’s Agent Registry before accepting it, and the agent can only ever ask: the contract decides.`),

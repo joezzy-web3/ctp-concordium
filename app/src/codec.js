@@ -151,14 +151,20 @@ export const disputed = (o) => !o.paid && !o.refunded && deliveryOnRecord(o) && 
 export const invoiceApproved = (o) => Boolean(o.invoice && o.supplier_approval && o.supplier_approval.invoice_hash === o.invoice.invoice_hash && o.supplier_approval.amount === o.invoice.amount && o.invoice.amount === o.amount);
 export const readyToPay = (o) => deliveryConfirmed(o) && invoiceApproved(o);
 export const pastDue = (o, now = Date.now()) => now > o.invoice_by;
-/** The buyer can take the money back: before the supplier accepts, or after the date if not ready. */
-export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (pastDue(o, now) && !readyToPay(o) && !(deliveryOnRecord(o) && !deliveryConfirmed(o))));
+/** Same rule as the contract: a delivery both gate counters confirmed gets a grace week past the
+ *  date to invoice (CONFIRMED_INVOICE_GRACE_MS); otherwise the date itself. */
+export const CONFIRMED_INVOICE_GRACE_MS = 7 * 24 * 3600 * 1000;
+export const invoiceDeadline = (o) => (!o.ruled_delivered && deliveryConfirmed(o) ? o.invoice_by + CONFIRMED_INVOICE_GRACE_MS : o.invoice_by);
+/** The buyer can take the money back: before the supplier accepts, or after the invoice deadline if not ready. */
+export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (now > invoiceDeadline(o) && !readyToPay(o) && !(deliveryOnRecord(o) && !deliveryConfirmed(o))));
+/** The supplier can invoice its own confirmed delivery when no invoice is on the order. */
+export const supplierCanInvoice = (o, now = Date.now()) => !o.paid && !o.refunded && o.accepted && deliveryConfirmed(o) && !o.invoice && invoiceOpen(o, now);
 /** Same rule as rules.rs: a named approver who has not unsealed gets the hold period after
  *  the gate counts. Returns when that window ends, or null when there is none. */
 export const approverWindowEnd = (o, holdMs) => (o.approver && !o.ruled_delivered && countOf(o, 'Approver') === undefined && o.gate_counted_at != null ? o.gate_counted_at + holdMs : null);
 export const recountAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && !pastDue(o, now) && gateSealed(o) && !deliveryConfirmed(o) && o.recounts < MAX_RECOUNTS;
 /** Invoices and approvals: before the date, or any time after the referee ruled the goods delivered. */
-export const invoiceOpen = (o, now = Date.now()) => o.ruled_delivered || !pastDue(o, now);
+export const invoiceOpen = (o, now = Date.now()) => o.ruled_delivered || now <= invoiceDeadline(o);
 
 /** Supplier, as returned by view_supplier. payout_set_at is milliseconds since 1970. */
 export async function decodeSupplier(bytes) {
@@ -184,6 +190,7 @@ export function orderStage(o, supplier, holdMs, now = Date.now()) {
   if (o.refunded) return { key: 'refunded', label: 'Refunded', tone: 'mute' };
   if (o.paid) return { key: 'paid', label: 'Paid', tone: 'ok' };
   if (pastDue(o, now) && !readyToPay(o) && disputed(o)) return { key: 'dispute', label: 'Date passed, delivery disputed: the referee decides', tone: 'hold' };
+  if (pastDue(o, now) && !readyToPay(o) && !o.ruled_delivered && deliveryConfirmed(o) && now <= invoiceDeadline(o)) return { key: 'grace', label: 'Delivered, date passed: the supplier has until the grace week ends to invoice', tone: 'hold', until: invoiceDeadline(o) };
   if (pastDue(o, now) && !readyToPay(o) && !(o.ruled_delivered)) return { key: 'expired', label: 'Date passed, not ready: buyer can take the money back', tone: 'hold' };
   if (!o.accepted) return { key: 'accept', label: 'Waiting for the supplier to accept', tone: 'wait' };
   if (!deliveryConfirmed(o)) {
