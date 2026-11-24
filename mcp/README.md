@@ -65,6 +65,26 @@ Optional environment: `CTP_ESCROW` (contract index, default the live one) and
 for an escrow running the verified Clear to Pay module, and flags a supplier payout account
 that changed within the hold.
 
+## Paid checks over x402 (optional)
+
+The `preclear_order` tool pays Clear to Pay's pre-clear service (`/api/preclear`) a small fee over
+x402 and returns the escrow contract's own answer: would this order clear now, or be held, and why.
+The fee goes to Agent #1287's account; a sponsor account pays the network fee.
+
+It pays from a **separate spending wallet**, never the agent's key, and its limits are code
+(`x402/payer.js`), checked before anything is signed: one payee (Agent #1287), one service, CCD
+only, at most 0.05 CCD a payment and 0.5 CCD a day. Its payments are recorded in
+`~/.local/share/clear-to-pay/spend.json`.
+
+Add to the `args` list, next to `CTP_AGENT_KEY_FILE`:
+
+```
+"CTP_SPEND_KEY_FILE=/home/YOU/.config/clear-to-pay/keys/spend.key",
+"CTP_SPEND_ACCOUNT=<the spending wallet's address>",
+```
+
+Make the key file the same way as the agent's (step 2), named `spend.key`, with `chmod 600`.
+
 ## Try it
 
 - "List my Clear to Pay orders."

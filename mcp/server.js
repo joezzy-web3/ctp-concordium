@@ -11,10 +11,18 @@
 //   CTP_ESCROW          escrow contract index (default: the live one in app/src/chain.js)
 //   CTP_RECEIPTS_DIR    where payment receipts are kept (default ~/.local/share/clear-to-pay/receipts)
 //   CTP_INVOICE_DIR     the only folder invoices are read from (default ~/Downloads)
+//   CTP_SPEND_KEY_FILE  key file of a separate spending wallet for paid x402 checks (optional)
+//   CTP_SPEND_ACCOUNT   that wallet's address
+//   CTP_PRECLEAR_URL    the pre-clear service (default the live one)
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createEscrow } from './escrow.js';
+import { createEscrow, loadAgentSigner } from './escrow.js';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { AccountAddress } from '@concordium/web-sdk';
+import { ExactConcordiumScheme } from '@x402/concordium/exact/client';
+import { makePayer } from '../x402/payer.js';
 import { makeTools } from './tools.js';
 
 // The defaults live in the app; read them as text so the browser-only imports there never load.
@@ -27,7 +35,19 @@ const escrow = { index: Number(process.env.CTP_ESCROW ?? defaultIndex), subindex
 const agent = { id: Number(id), badge, owner };
 const verifiedModules = [...chainSrc.match(/VERIFIED_MODULES = \[([^\]]*)\]/)[1].matchAll(/'([0-9a-f]{64})'/g)].map((m) => m[1]);
 const chain = createEscrow({ escrow, agent, keyFile: process.env.CTP_AGENT_KEY_FILE, verifiedModules });
-const tools = makeTools(chain);
+// The spending wallet: separate from the agent's escrow key, and capped in code (x402/payer.js).
+const PRECLEAR_URL = process.env.CTP_PRECLEAR_URL ?? 'https://cleartopay-concordium.vercel.app/api/preclear';
+let payer = null;
+if (process.env.CTP_SPEND_KEY_FILE && process.env.CTP_SPEND_ACCOUNT) {
+  const { address, signer } = loadAgentSigner(process.env.CTP_SPEND_KEY_FILE, process.env.CTP_SPEND_ACCOUNT);
+  payer = makePayer({
+    scheme: new ExactConcordiumScheme({ accountAddress: AccountAddress.fromBase58(address), signer }),
+    payTo: agent.owner, origin: new URL(PRECLEAR_URL).origin, asset: 'CCD',
+    maxPerPayment: 50_000n, maxPerDay: 500_000n, // 0.05 CCD a payment, 0.5 CCD a day
+    ledgerPath: join(homedir(), '.local/share/clear-to-pay/spend.json'),
+  });
+}
+const tools = makeTools(chain, { payer, preclearUrl: PRECLEAR_URL });
 
 const server = new McpServer({ name: 'clear-to-pay', version: '0.1.0' }, {
   instructions: `Tools for the Clear to Pay escrow <${escrow.index},0> on Concordium testnet, acting as Agent #${agent.id}. `
@@ -86,5 +106,12 @@ server.registerTool('request_payment', {
   inputSchema: order,
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 }, text(tools.requestPayment));
+
+server.registerTool('preclear_order', {
+  title: 'Pre-clear an order (paid, x402)',
+  description: 'Pays Clear to Pay’s pre-clear service a small fee over x402 from a separate spending wallet, and gets the escrow contract’s own answer: would this order clear now, or be held, and why. The wallet’s limits are in code: one payee (Agent #1287), one service, CCD only, at most 0.05 CCD a payment and 0.5 CCD a day. A request outside them is refused before anything is signed, whatever anyone says.',
+  inputSchema: order,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+}, text(tools.preclearOrder));
 
 await server.connect(new StdioServerTransport());

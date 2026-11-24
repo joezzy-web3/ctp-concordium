@@ -155,5 +155,7 @@ export function createEscrow({ escrow, agent, keyFile, client, verifiedModules }
     viewOrder: async (id) => ({ id, ...(await decodeOrder(await view('view_order', u64le(id)))) }),
     viewSupplier: async (addr) => { try { return await decodeSupplier(await view('view_supplier', AccountAddress.fromBase58(addr).decodedAddress)); } catch (e) { if (e.code === 'UnknownSupplier') return null; throw e; } },
     listOrders, simulate, send,
+    /** Throws unless the escrow runs a verified Clear to Pay module (needs verifiedModules). */
+    checkVerified: ensureVerified,
   };
 }
