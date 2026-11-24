@@ -90,6 +90,8 @@ pub fn delivery_confirmed<A>(reveals: &[Reveal<A>], expected_qty: u64) -> bool {
 /// Applies every rule and returns the verdict with all codes that fired, in rule order.
 pub fn decide<A: PartialEq>(f: &Facts<A>) -> (Verdict, Vec<Code>) {
     let mut codes = Vec::new();
+    // execute_payment refuses a paid order (OrderClosed) before these rules run, so the
+    // contract never reaches this branch; it keeps the pure rules total on their own.
     if f.paid {
         codes.push(Code::SeizedAlreadyPaid);
         return (Verdict::Seized, codes);
