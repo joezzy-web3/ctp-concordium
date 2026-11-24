@@ -1,6 +1,7 @@
 // App shell: role tabs, role band with a short guide, wallet button, hash routes,
 // and smooth section changes with the browser's view transitions.
-import { connect, connectedAccounts, currentAccount, logout, onAccount, restore, useAccount } from './chain.js';
+import { DEMO_ESCROW, ESCROW, isDemo, checkEscrow, openEscrow, connect, connectedAccounts, currentAccount, logout, onAccount, restore, useAccount } from './chain.js';
+import { startView } from './start.js';
 import { CAST, roleOf } from './cast.js';
 import { h, fill, $, short, icon, notice, store } from './ui.js';
 import { buyerView } from './buyer.js';
@@ -34,6 +35,7 @@ const ROLES = {
   ] },
   referee: { name: 'Referee', line: 'Settle a disputed delivery: the supplier’s rep counted, but the counts do not confirm it.', guide: [] },
   judge: { name: 'Judge mode', line: 'Try the attacks that empty company accounts today, against the real contract.', guide: [] },
+  start: { name: 'Your own escrow', line: 'Create an escrow for your company from the verified code, list your people, and order.', guide: [] },
 };
 
 const routes = {
@@ -43,9 +45,18 @@ const routes = {
   supplier: () => supplierView(),
   agent: () => agentView(),
   referee: () => refereeView(),
-  judge: () => judgeView(),
+  judge: () => (isDemo ? judgeView() : demoOnly()),
+  start: () => startView(),
 };
-const ORDER = ['', 'buyer', 'signer', 'supplier', 'agent', 'referee', 'judge'];
+const ORDER = ['', 'buyer', 'signer', 'supplier', 'agent', 'referee', 'judge', 'start'];
+
+/** Judge mode runs its attacks with the demo cast, so it lives on the demo escrow. */
+function demoOnly() {
+  return h('section.panel.empty', h('h2', 'Judge mode runs on the demo escrow'), h('p', 'Its attacks use the demo cast. Your own escrow is untouched.'), h('button.btn.dark', { type: 'button', onclick: () => openEscrow(DEMO_ESCROW, '#/judge') }, 'Open the demo escrow'));
+}
+
+/** A non-demo escrow must run the verified Clear to Pay code, or the app will not open it. */
+let escrowOk = isDemo ? Promise.resolve({ ok: true }) : checkEscrow(ESCROW.index);
 
 // ---------- shell ----------
 function band(role) {
@@ -85,6 +96,7 @@ function pickView() {
     tile('agent', 'Agent', 'Submit invoices, ask for payment.'),
     tile('referee', 'Referee', 'Settle a disputed delivery.'),
     tile('judge', 'Judge mode', 'Try to fool it on the real contract.'),
+    tile('start', 'Your own escrow', isDemo ? 'Start one for your company in three steps.' : `You are on escrow <${ESCROW.index},0>. Switch or set it up.`),
   );
 }
 
@@ -95,10 +107,11 @@ async function render() {
   const index = ORDER.indexOf(role);
   const dir = index >= lastIndex ? 'forward' : 'back';
   lastIndex = index;
+  const chk = await escrowOk;
   const swap = async () => {
     tabs(role);
     band(role);
-    const node = await view(sub);
+    const node = chk.ok || role === 'start' ? await view(sub) : h('section.panel.empty', h('h2', `Escrow <${ESCROW.index},0> can’t be opened`), h('p', chk.reason), h('button.btn.dark', { type: 'button', onclick: () => openEscrow(DEMO_ESCROW) }, 'Back to the demo escrow'), ' ', h('a.btn', { href: '#/start' }, 'Open another'));
     fill($('#view'), node);
     document.title = `${ROLES[role]?.name ?? 'Choose your role'} · Clear to Pay`;
   };
@@ -151,6 +164,7 @@ async function openMenu() {
         h('li', `On ${location.host}, tap Edit.`),
         h('li', 'Tick every account you want here, then close.')),
       h('p', 'They appear in this menu straight away.')),
+    h('a.acct-item', { role: 'menuitem', href: '#/start', onclick: () => closeMenu() }, h('b', isDemo ? 'Start your own escrow' : 'Switch escrow'), h('span.mono', `<${ESCROW.index},0>${isDemo ? ' demo' : ''}`)),
     h('button.acct-item.out', { type: 'button', role: 'menuitem', onclick: () => {
       closeMenu();
       logout();

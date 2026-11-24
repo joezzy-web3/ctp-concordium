@@ -6,7 +6,7 @@ import { h, fill, icon, chip, short, store, notice } from './ui.js';
 import { sealOf, toHex as hex, pastDue, deliveryConfirmed, gateSealed, MAX_RECOUNTS } from './codec.js';
 
 /** One key per order and count round, so a recount always gets a fresh seal. */
-const keyName = (acct, o) => `ctp:seal:${acct}:${o.id}:${o.recounts}`;
+const keyName = (acct, o) => `ctp:seal:${ESCROW.index}:${acct}:${o.id}:${o.recounts}`;
 /** Backup code = "count-key" so it can be pasted back on another device. */
 const backupCode = (s) => `${s.qty}-${s.key}`;
 function parseBackup(code) {

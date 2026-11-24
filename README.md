@@ -22,6 +22,7 @@ Every row marked live links to on-chain evidence or runs in the test suite. Rows
 | Payment receipts: the receipt's fingerprint is written into the contract's own Decision event | **Live (testnet)** | `receipt/escrowReceipt.js`, `npm test`; check a receipt in the app under Judge mode |
 | Badge gate: refuse counterparty agents whose badge or card does not check out | **Live (off-chain code)** | `gate/`, `npm test` |
 | Counters proven with Concordium ID (zero knowledge): each receiver and approver proves they are a verified adult; the escrow keeps only a salted fingerprint and refuses an order whose two counters are the same person | **Live (testnet)**: the receiver on order #1 of `<13151,0>` was verified and recorded on the escrow | ID checks in the app (`#/buyer/ids`), `test/idcheck.test.js`, design in `docs/F01_SIGNER_IDENTITY.md` |
+| **Any company can start its own escrow** in the app (`#/start`): create it from the verified module, list its own people and agent, order. Each escrow is its own contract with its own money and admin; the app refuses any contract not running the verified code | **Live (testnet)** | `app/src/start.js`; open any escrow with `…/app/?escrow=<index>` |
 | Stablecoin payout, sponsored fees, shared escrow, mainnet | Next steps, each an extension of what runs today | [PATH_TO_PRODUCTION.md](PATH_TO_PRODUCTION.md) |
 
 The Agent Card describes the product as a whole; it will be re-anchored with the escrow contract address once the final demo contract is deployed.

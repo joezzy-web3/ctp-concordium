@@ -11,7 +11,7 @@ Each step below extends that working system. None of them changes the core rule:
 **Next:**
 - A human security audit of the escrow contract, scoped to the payment rules and the registry check.
 - Deploy the same verifiable build to mainnet, with Agent #1287's mainnet counterpart registered in the Concordium agent registry. Only the init parameters change.
-- Set production values at init: a payout hold of days rather than the 1-minute hold used for demos, so a new payout account can be challenged before money moves.
+- Raise the contract's minimum payout hold for mainnet to 24 hours or more. On testnet the app defaults to 72 hours and offers 1 minute only as a labelled test setting; on mainnet no escrow can be created with a hold short enough to rush a new payout account.
 - Start with a per-order cap during the pilot, raised as order history builds.
 
 **What protects users in the meantime:** the testnet build already refuses by default. If the contract cannot read the registry, or anything is missing, the request is Held, never paid.
@@ -28,11 +28,11 @@ Each step below extends that working system. None of them changes the core rule:
 
 **Next:** use sponsored transactions so the buyer pays the counters' fees. A storekeeper at the gate needs a wallet and an identity, never a CCD balance. Signatures stay theirs, so the protection does not change.
 
-## 4. One escrow for many buyers
+## 4. Every company on its own escrow
 
-**Today:** each buyer runs its own escrow instance. That keeps every buyer's money and rules fully separate, by design.
+**Today:** any company starts its own escrow in the app in three steps: create it from the verified module (one wallet approval; that account becomes its buyer admin), list its own receiver, approver, supplier and agent, and order. Each escrow is its own contract, so every buyer's money, orders and people are fully separate. The app only opens escrows running the verified Clear to Pay code.
 
-**Next:** a shared escrow where many buyers keep separate, isolated order books in one contract. Onboarding a new buyer becomes a setup step instead of a deployment, which suits marketplaces and procurement platforms that serve many companies.
+**Next:** a shared escrow where many buyers keep isolated order books in one contract, for procurement platforms that onboard companies without a deployment each.
 
 ## 5. Checks that scale with the risk of the order
 
