@@ -24,6 +24,9 @@ import { AccountAddress } from '@concordium/web-sdk';
 import { ExactConcordiumScheme } from '@x402/concordium/exact/client';
 import { makePayer } from '../x402/payer.js';
 import { makeTools } from './tools.js';
+import { checkAgentIdentity } from '../idcheck/src/agentid-chain.js';
+import { ConcordiumGRPCNodeClient, credentials } from '@concordium/web-sdk/nodejs';
+import { NODE } from './escrow.js';
 
 // The defaults live in the app; read them as text so the browser-only imports there never load.
 import { readFileSync } from 'node:fs';
@@ -50,7 +53,14 @@ if (!spendIsAgent && process.env.CTP_SPEND_KEY_FILE && process.env.CTP_SPEND_ACC
     ledgerPath: join(homedir(), '.local/share/clear-to-pay/spend.json'),
   });
 }
-const tools = makeTools(chain, { payer, preclearUrl: PRECLEAR_URL });
+// Who stands behind the agent: the owner's published Concordium ID proof (app/agent-identity.json).
+const ownerProof = async () => {
+  let file;
+  try { file = JSON.parse(readFileSync(new URL('../app/agent-identity.json', import.meta.url), 'utf8')); } catch { return null; }
+  const grpc = new ConcordiumGRPCNodeClient(NODE.host, NODE.port, credentials.createSsl(), { timeout: 15000 });
+  return checkAgentIdentity(file, { agentId: agent.id, owner: agent.owner, grpc });
+};
+const tools = makeTools(chain, { payer, preclearUrl: PRECLEAR_URL, ownerProof });
 
 const server = new McpServer({ name: 'clear-to-pay', version: '0.1.0' }, {
   instructions: `Tools for the Clear to Pay escrow <${escrow.index},0> on Concordium testnet, acting as Agent #${agent.id}. `
@@ -84,6 +94,12 @@ server.registerTool('check_agent_badge', {
   description: `Asks Concordium's agent registry whether Agent #${agent.id} is active and owned by the account this server acts as.`,
   annotations: read,
 }, text(tools.checkBadge));
+
+server.registerTool('agent_identity', {
+  title: 'Who stands behind this agent?',
+  description: `Checks, against the chain, the Concordium ID proof published by Agent #${agent.id}'s owner: a verified adult, and their country of residence. Nothing else about the owner is revealed.`,
+  annotations: read,
+}, text(tools.agentIdentity));
 
 server.registerTool('dry_run_payment', {
   title: 'Would the contract pay?',

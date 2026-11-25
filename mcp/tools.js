@@ -11,6 +11,7 @@ import { buildEscrowReceipt, escrowReceiptHash } from '../receipt/escrowReceipt.
 import { canonicalize } from '../receipt/canonical.js';
 import { checkCounterparty } from '../gate/badgeGate.js';
 import { executeParams, invoiceParams } from './escrow.js';
+import { identityLine } from '../idcheck/src/agentid.js';
 
 const NETWORK = 'concordium:testnet';
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -52,7 +53,7 @@ function payoutWarning(o, sup, holdMs, now = Date.now()) {
   return ` Warning: the supplier’s payout account was changed about ${hours} hour${hours === 1 ? '' : 's'} ago, to ${short(sup.payout)}. Confirm it with the supplier on a number already on file before anyone relies on it; the contract will not pay there until the hold ends.`;
 }
 
-export function makeTools(chain, { payer, preclearUrl, receiptsDir = process.env.CTP_RECEIPTS_DIR ?? join(homedir(), '.local/share/clear-to-pay/receipts'), invoiceDir = process.env.CTP_INVOICE_DIR ?? join(homedir(), 'Downloads'), fetch: fetchImpl } = {}) {
+export function makeTools(chain, { payer, preclearUrl, ownerProof, receiptsDir = process.env.CTP_RECEIPTS_DIR ?? join(homedir(), '.local/share/clear-to-pay/receipts'), invoiceDir = process.env.CTP_INVOICE_DIR ?? join(homedir(), 'Downloads'), fetch: fetchImpl } = {}) {
   const { escrow, agent } = chain;
   const where = `escrow <${escrow.index},${escrow.subindex}> on Concordium testnet`;
 
@@ -179,5 +180,16 @@ export function makeTools(chain, { payer, preclearUrl, receiptsDir = process.env
     return `Paid pre-clear for order #${id} on ${where}: ${verdict} This is the escrow contract's own dry run; nothing was sent to the escrow. Fee: ${fee} paid over x402 to ${short(b.fee?.payTo)}${tx ? ` (${ccdscanTx(tx)})` : ''}. Spent today: ${microToCcd(BigInt(r.spentToday))} ${r.asset}.`;
   }
 
-  return { listOrders, getOrder, checkBadge, dryRunPayment, submitInvoice, requestPayment, preclearOrder };
+  /** Who stands behind this agent: the owner's Concordium ID proof, checked against the chain. */
+  async function agentIdentity() {
+    if (!ownerProof) return `Agent #${agent.id}'s owner has not published an ID proof yet.`;
+    let r;
+    try { r = await ownerProof(); } catch (e) { return `Agent #${agent.id}'s owner proof could not be checked: ${e?.message ?? e}`; }
+    if (!r) return `Agent #${agent.id}'s owner has not published an ID proof yet.`;
+    return r.ok
+      ? `${identityLine(r, agent.id)} Checked now against Concordium testnet: the proof is the one anchored on-chain, it still verifies, its identity credential is still active, and it is about the owner's own account (${short(agent.owner)}).`
+      : identityLine(r, agent.id);
+  }
+
+  return { listOrders, getOrder, checkBadge, dryRunPayment, submitInvoice, requestPayment, preclearOrder, agentIdentity };
 }

@@ -43,7 +43,7 @@ const routes = {
   buyer: (sub) => buyerView(sub),
   signer: (sub) => (sub === 'prove' ? proveView() : signerView(sub)),
   supplier: (sub) => supplierView(sub),
-  agent: () => agentView(),
+  agent: (sub) => agentView(sub),
   referee: (sub) => refereeView(sub),
   judge: () => (isDemo ? judgeView() : demoOnly()),
   start: () => startView(),
