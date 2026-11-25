@@ -1,6 +1,6 @@
 # F-01: the two signers are two different verified people
 
-Status: **live on testnet.** The receiver on order #1 of escrow `<13161,0>` (and before it `<13155,0>`) proved with Concordium ID and was recorded on the escrow (24 Nov 2026). The proof runs inside the app under ID checks (`#/buyer/ids`).
+Status: **live on testnet.** The receiver on order #1 of escrow `<13161,0>` proved with Concordium ID and was recorded on the escrow (25 Nov 2026; first done on `<13151,0>` and `<13155,0>` on 24 Nov). The proof runs inside the app under ID checks (`#/buyer/ids`).
 
 ## As built
 - **Page:** `idcheck/`. The buyer creates a proof request for one counter and anchors it with RegisterData. The counter opens the request link, and their wallet answers with `requestVerifiablePresentationV1`. The buyer pastes the answer link back.
@@ -32,7 +32,7 @@ A presentation proves facts about one identity. There is no built-in, privacy-pr
 
 - Each signer **reveals their ID document number and issuer to the buyer's app only**, for one comparison.
 - The app keeps only `person_tag = SHA-256("CTP-person/v1" ‖ escrow address ‖ secret salt ‖ idDocIssuer ‖ idDocNo)`. The secret salt is held by the buyer with the audit records, so the on-chain tag cannot be brute-forced from guessed document numbers.
-- The contract stores the tag with the signer and refuses an order whose receiver and approver have the same tag, or have no tag.
+- The contract stores the tag with the signer and refuses an order whose receiver and approver carry the same tag (`SamePerson`). Tags are optional, so an individual buyer with no approver, or one who has not run the check, still trades.
 
 What protects the signer: the document number never goes on-chain and is not stored by the app; only a salted fingerprint is. What protects the supplier and auditors: every check leaves an audit record anchored on-chain, which they can ask for and re-verify independently. A buyer who faked a tag would be exposed by that audit.
 
@@ -44,19 +44,28 @@ What protects the signer: the document number never goes on-chain and is not sto
    - checks it is bound to that signer's account and to this request
    - computes `person_tag`
    - creates the audit record and anchors it (RegisterData)
-4. **Contract:** `add_signer{account, role, person_tag, id_audit}` (the audit anchor's hash). `create_order` refuses `SamePerson` if the receiver's and approver's tags match, and `SignerNotVerified` if either has no tag.
+4. **Contract:** `add_signer{account, role, person_tag, id_audit}` (the audit anchor's hash). `create_order` refuses `SamePerson` if the receiver's and approver's tags match. A signer without a tag can still be named: the check is the buyer's choice, and the app shows which counters are ID-checked.
 5. **Judge mode / auditors:** given the audit record, anyone re-runs `verifyAnchor` and `verifyWithNode`, and recomputes the tag with the salt the buyer discloses to them.
 
-## Contract changes (small)
-- `SignerParams` gains `person_tag: HashSha2256` and `id_audit: HashSha2256`. State maps the signer to `(role, person_tag, id_audit)`.
-- `create_order`: both named signers have tags, and the tags differ. Two new errors, appended at the end.
-- Optional: refuse one `person_tag` on two accounts in the same role, so a person cannot be listed twice.
-- Events: `SignerSet` gains `person_tag` and `id_audit`.
+## Contract, as built
+- `SignerParams` carries `person_tag: Option<HashSha2256>` and `id_audit: Option<HashSha2256>`; the state keeps them with the signer's role, and `SignerSet` logs them.
+- `create_order` refuses `SamePerson` when the receiver and the approver carry the same tag. There is no error for a missing tag: tags are optional by design.
+- Test: `two_signers_proven_to_be_the_same_person_cannot_share_an_order`.
 
 ## Also possible: the supplier proves it is a registered company
 With a business identity, the supplier can reveal `legalName` and `lei` (or `businessNumber` and `registrationAuth`) when it registers. The buyer then knows it pays a real company, and the PO and receipts can carry the verified legal name. This uses the same flow with different statements.
 
-## Questions for office hours (Tue 24 Nov)
+## Original plan (19–24 Nov)
+
+Kept as a record of how F-01 was planned. The sections above describe what shipped.
+
+### Contract changes, as planned
+- `SignerParams` gains `person_tag: HashSha2256` and `id_audit: HashSha2256`. State maps the signer to `(role, person_tag, id_audit)`.
+- `create_order`: both named signers have tags, and the tags differ. Two new errors, appended at the end. (Shipped differently: tags are optional and only `SamePerson` is checked; see Contract, as built.)
+- Optional: refuse one `person_tag` on two accounts in the same role, so a person cannot be listed twice.
+- Events: `SignerSet` gains `person_tag` and `id_audit`.
+
+### Questions for office hours (Tue 24 Nov)
 1. Does the current Browser Wallet release support `requestVerifiablePresentationV1` with **account claims** on testnet? Does the Concordium ID app?
 2. Is there, or is there planned, a privacy-preserving way to prove that **two accounts belong to different identities** (a per-verifier pseudonym or nullifier), so no document number has to be revealed?
 3. Which attribute is most reliably present across testnet identity providers for telling people apart: `idDocNo`, `nationalIdNo`, or something else? Can we create two test identities for the demo?
@@ -64,11 +73,11 @@ With a business identity, the supplier can reveal `legalName` and `lei` (or `bus
 5. Is anchoring the request and the audit record with RegisterData from the buyer's wallet the intended pattern, or is there a preferred verifier service?
 6. Any plans for contracts to check a presentation, or a registry of verification anchors a contract could read?
 
-## Effort
+### Effort, as estimated
 About 2 days once the wallet path is confirmed:
 - request, wallet and verify in the app: 1 day
 - contract fields, errors and tests, plus a new deploy: half a day
 - audit-record check in Judge mode: half a day
 
-## How we describe it until it ships
+### How we described it before it shipped
 "Each order names two different accounts in two different roles, and every Concordium account belongs to an ID-verified identity. Next, each signer proves with Concordium ID that they are a different verified person; only a salted fingerprint goes on-chain, and every check leaves an anchored audit record."

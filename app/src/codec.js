@@ -158,7 +158,11 @@ export const invoiceDeadline = (o) => (!o.ruled_delivered && deliveryConfirmed(o
 /** The buyer can take the money back: before the supplier accepts, or after the invoice deadline if not ready. */
 export const refundAllowed = (o, now = Date.now()) => !o.paid && !o.refunded && (!o.accepted || (now > invoiceDeadline(o) && !readyToPay(o) && !(deliveryOnRecord(o) && !deliveryConfirmed(o))));
 /** The supplier can invoice its own confirmed delivery when no invoice is on the order. */
-export const supplierCanInvoice = (o, now = Date.now()) => !o.paid && !o.refunded && o.accepted && deliveryConfirmed(o) && !o.invoice && invoiceOpen(o, now);
+/** v8: the supplier can submit its own invoice for a confirmed delivery whenever no invoice is
+ *  approved yet, which also replaces a wrong one from the agent (same rule as the contract). */
+export const supplierCanInvoice = (o, now = Date.now()) => !o.paid && !o.refunded && o.accepted && deliveryConfirmed(o) && !invoiceApproved(o) && invoiceOpen(o, now);
+/** The agent's invoice can never be paid as it stands: wrong amount. */
+export const invoiceWrongAmount = (o) => Boolean(o.invoice) && o.invoice.amount !== o.amount;
 /** Same rule as rules.rs: a named approver who has not unsealed gets the hold period after
  *  the gate counts. Returns when that window ends, or null when there is none. */
 export const approverWindowEnd = (o, holdMs) => (o.approver && !o.ruled_delivered && countOf(o, 'Approver') === undefined && o.gate_counted_at != null ? o.gate_counted_at + holdMs : null);

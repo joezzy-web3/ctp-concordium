@@ -1,5 +1,7 @@
 # Plan and open items
 
+**Status (25 Nov 2026):** build order items 1–4 done; escrow v8 live at `<13161,0>` with full runs (Held, Cleared, x402 pre-clear). Open before 9 Dec: demo video upload, writeup. Before mainnet: see [PATH_TO_PRODUCTION.md](PATH_TO_PRODUCTION.md). The sections below are the working log, oldest decisions first.
+
 ## Dates (UTC)
 - **Checkpoint 1:** Sun 22 Nov, 23:59 (idea text; draft Sat 21 Nov)
 - **Office hours:** from Tue 24 Nov, 15:00 (ask: Agent IDP on testnet; NEAR namespace in CIS-8)
@@ -7,16 +9,16 @@
 
 ## Build order (agreed 19 Nov)
 1. ~~NEAR link~~ done 19 Nov
-2. **Escrow contract in Rust on testnet:** the two-signer rule, blind delivery counts, the 72-hour hold on new payout accounts and the badge requirement enforced on-chain; the contract itself emits the decision record, so a receipt can no longer be anchored by just anyone
-3. Verified human signers with Concordium ID proofs
-4. Payments: x402 service fees (and PLT stablecoin payout from escrow)
-5. PATH_TO_PRODUCTION.md, mainnet registration, UI pass, demo video, audit prompt
+2. ~~**Escrow contract in Rust on testnet:** the two-signer rule, blind delivery counts, the 72-hour hold on new payout accounts and the badge requirement enforced on-chain; the contract itself emits the decision record, so a receipt can no longer be anchored by just anyone~~ done 20 Nov (v4), now v8
+3. ~~Verified human signers with Concordium ID proofs~~ done 24 Nov
+4. ~~Payments: x402 service fees~~ done 24–25 Nov (PLT stablecoin payout stays in PATH_TO_PRODUCTION)
+5. PATH_TO_PRODUCTION.md, UI pass and demo video done; mainnet registration comes with mainnet
 6. Stretch: supplier trust passport, one-click team onboarding
 
 ## Audit 19 Nov (external AI, report F-01 to F-15)
 - Fixed and tested: F-03 supplier approves its own invoice; F-05 removed signers cannot reveal; F-06 orders name their two signers; F-07 strict receipt validation; F-08/F-04 honest wording and a live-vs-in-progress table; F-09 hardened card fetch; F-10 pinned link bundle; F-11 timeouts and best-effort wipe documented; F-12 CI runs contract rules, WASM build and 14 end-to-end tests, rebuilds page bundles, runs on Windows; F-13 no HTML injection in pages; F-14 byte-exact JSON and wider ignores; F-15 hold range at init; decisions final once paid.
 - F-02 fixed in escrow v3 (built and tested, to deploy): the contract asks the CIS-8004 registry `agentOf` itself at add_agent, submit_invoice and execute_payment; parser tested against the registry's real answer for Agent #1287. Also v3: `reject_invoice` (buyer or supplier) so a hijacked agent cannot jam an order.
-- Open: F-01 two verified people (Concordium ID proofs; needs a verifier design: question for office hours Tue 24 Nov); re-anchor the Agent Card with the final escrow address.
+- F-01 two verified people: shipped 24 Nov (see docs/F01_SIGNER_IDENTITY.md). Then open: re-anchor the Agent Card with the final escrow address.
 - Reproducible contract: `Cargo.lock` committed, Rust pinned to 1.97.0, verifiable build in CI (`concordium/verifiable-sc-wasm32v1:1`), module SHA-256 at `d1bd4bf`: `29e25639c578ee88e44a98f22ced8ef1057a4cc511bcdba252b96896d7d48914`. End-to-end tests 14/14 in CI and on the developer machine.
 - **Module to deploy:** verifiable build of commit `471f25f` (CI run 44586331198, artifact `ctp_escrow-verifiable`), SHA-256 = module reference `6c8a0802c70dce0a169515ac0a32ceda0c60b2aa5fe8cd43e80fcf121f10a34c`; `verify-build` reports "Source and module match". Deploy page `deploy/` refuses any other file.
 
@@ -73,7 +75,7 @@ The brief: *take an AI agent you already run on another chain and make it accoun
 | An agent you already run, on another chain | The Clear to Pay agent already guards supplier payments on **NEAR**; linked to Agent #1287 by a CIS-8 key binding | Agent Registry (CIS-8004), CIS-8, ERC-8004 / A2A Agent Card |
 | Prove a verified human stands behind it | Verified by Concordium badge; owner account backed by Concordium ID; signers prove a role attribute in zero knowledge | Badge, Concordium ID, Verify and Access |
 | Other agents check it before dealing with it | Clear to Pay checks every counterparty agent's badge and card hash; refuses unverified ones with a reason code | Agent Registry MCP server / REST (`check-badge`, `verify-agent-card`) |
-| Pay and get paid on its own | **Service money only:** other agents pay Clear to Pay per invoice check (get paid); Clear to Pay pays for the data it needs, e.g. a company-registry lookup (pay). **Supplier money never moves on an AI's word:** it stays in escrow until humans sign | x402, sponsored transactions, PLTs |
+| Pay and get paid on its own | **Service money only:** other agents pay Clear to Pay per invoice check (get paid); Claude pays Agent #1287's paid pre-clear check over x402 from a capped spending wallet (pay; live 25 Nov). **Supplier money never moves on an AI's word:** it stays in escrow until humans sign | x402, sponsored transactions, PLTs |
 | Leave a record | Accountability receipt for every pay or block decision, anchored on-chain, checkable by an auditor | EU AI Act Art. 12 audit trail |
 
 Judging: 1 depth of integration (identity + registry + payments), 2 path to production, 3 end-to-end demo, 4 usefulness. Submission needs a CCDExplorer link (ccdexplorer.io) plus testnet.ccdscan.io.

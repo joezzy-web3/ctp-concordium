@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, invoiceOpen, supplierCanInvoice, recountAllowed, readyToPay, deliveryConfirmed, disputed, orderStage, approverWindowEnd, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
+import { decodeOrder, decodeSupplier, decodeConfig, refundAllowed, invoiceOpen, supplierCanInvoice, invoiceWrongAmount, recountAllowed, readyToPay, deliveryConfirmed, disputed, orderStage, approverWindowEnd, microToCcd, accountAddress, ccdToMicro, sealPreimage, sealOf, accountBytes as addrBytes } from '../app/src/codec.js';
 import { createHash } from 'node:crypto';
 import { accountBytes } from '../link/encode.js';
 
@@ -71,6 +71,16 @@ test('refund, recount and payment rules mirror the contract', async () => {
   assert.equal(invoiceOpen({ ...ready, supplier_approval: null }, due + 1), true, 'the supplier can still invoice and approve');
   assert.equal(supplierCanInvoice({ ...ready, invoice: null, supplier_approval: null }, due + 1), true, 'the supplier can invoice itself');
   assert.equal(supplierCanInvoice({ ...short0(ready), invoice: null }, due - 1), false, 'not before the counts confirm it');
+  // Audit 25 Nov R1 (v8): a wrong or junk invoice from the agent must not hide the supplier's own invoice.
+  const agentInv = (amount, hash) => ({ agent: 'agent', agent_token_id: 1287n, invoice_hash: hash, amount });
+  const wrongAmount = { ...ready, invoice: agentInv(ready.amount - 1n, 'aa'.repeat(32)), supplier_approval: null };
+  assert.equal(invoiceWrongAmount(wrongAmount), true);
+  assert.equal(supplierCanInvoice(wrongAmount, due - 1), true, 'a wrong-amount invoice from the agent can be replaced');
+  const junkHash = { ...ready, invoice: agentInv(ready.amount, 'bb'.repeat(32)), supplier_approval: null };
+  assert.equal(invoiceWrongAmount(junkHash), false);
+  assert.equal(supplierCanInvoice(junkHash, due - 1), true, 'a junk-hash invoice the supplier has not approved can be replaced');
+  const approvedInv = { ...junkHash, supplier_approval: { invoice_hash: 'bb'.repeat(32), amount: ready.amount } };
+  assert.equal(supplierCanInvoice(approvedInv, due - 1), false, 'an approved invoice cannot be replaced');
   assert.equal(refundAllowed({ ...ready, supplier_approval: null }, due + WEEK + 1), true, 'confirmed, but nothing approved by the end of the grace week');
   assert.equal(orderStage({ ...ready, supplier_approval: null }, null, 0, due + 1).key, 'grace');
   assert.equal(deliveryConfirmed({ ...ready, reveals: [...ready.reveals, RV('Approver', AP, 95n)] }), false, 'an approver who disagrees holds it');

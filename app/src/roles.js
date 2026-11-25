@@ -1,6 +1,6 @@
 // Supplier and Agent spaces.
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
-import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen, invoiceDeadline, supplierCanInvoice, deliveryConfirmed } from './codec.js';
+import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen, invoiceDeadline, supplierCanInvoice, deliveryConfirmed, invoiceWrongAmount } from './codec.js';
 import { dateBlock, refereeBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
 import { askForPayment, receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
@@ -127,10 +127,11 @@ export async function supplierView(sub = '') {
           const r = await act('reject_invoice', o.id, { done: `Invoice on order #${o.id} rejected.` });
           if (r.ok) location.reload();
         } }, 'Not my invoice: reject it'))],
+      !approved && supplierCanInvoice(o) ? selfInvoice(o, true) : null,
       tools(o), receiptPanel(o));
   };
   /** Fallback when the buyer's agent never invoices a confirmed delivery (audit 24 Nov H1). */
-  const selfInvoice = (o) => {
+  const selfInvoice = (o, replace = false) => {
     const fileState = h('p.live', 'Pick your invoice file. Only its fingerprint goes on the escrow.');
     let hash = null;
     const fileIn = h('input', { type: 'file', 'aria-label': 'Your invoice file', onchange: async (e) => {
@@ -139,8 +140,9 @@ export async function supplierView(sub = '') {
       if (hash) fill(fileState, chip('ok', 'Ready'), ` Fingerprint ${hash.slice(0, 8)}…`);
     } });
     return h('details.change',
-      h('summary', 'The agent has not invoiced? Invoice it yourself'),
-      h('p.fine', `Both counts confirm your delivery, so you can submit your own invoice for the full ${microToCcd(o.amount)} CCD. It counts as your approval. You have until ${fmtDay(invoiceDeadline(o))}; until then the buyer cannot take the money back.`),
+      replace ? { open: invoiceWrongAmount(o) } : null,
+      h('summary', replace ? (invoiceWrongAmount(o) ? 'The agent’s invoice has the wrong amount: replace it with your own' : 'Not your invoice? Replace it with your own') : 'The agent has not invoiced? Invoice it yourself'),
+      h('p.fine', `Both counts confirm your delivery, so you can submit your own invoice for the full ${microToCcd(o.amount)} CCD. It counts as your approval${replace ? ' and replaces the agent’s invoice, which is recorded as rejected' : ''}. You have until ${fmtDay(invoiceDeadline(o))}; until then the buyer cannot take the money back.`),
       h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
       h('div.count-row', h('button.btn.gold', { type: 'button', onclick: async (e) => {
         if (!hash) return notice('no', 'Pick your invoice file first.');
@@ -169,6 +171,7 @@ export async function supplierView(sub = '') {
 /** What the supplier must do next on an order, or null when someone else acts. */
 function supplierNext(o, st, me) {
   if (!o.accepted) return pastDue(o) ? null : 'Accept the order and its date';
+  if (invoiceWrongAmount(o) && supplierCanInvoice(o)) return 'The agent’s invoice has the wrong amount: replace it with your own';
   if (o.invoice && !invoiceApproved(o) && invoiceOpen(o)) return 'Approve your invoice and amount';
   if (supplierCanInvoice(o)) return 'Delivered and counted: the agent has not invoiced, so invoice it yourself';
   if (st.key === 'ready') return 'Ask for your payment';
