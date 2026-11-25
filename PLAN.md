@@ -91,7 +91,7 @@ Judging: 1 depth of integration (identity + registry + payments), 2 path to prod
 - [x] Confirm the on-chain hash matches the hosted card (`verify_agent_card` / `GET /v1/verify-agent-card/{badge}` -> `match: true`).
 - [x] Badge gate: Clear to Pay refuses invoices from agents whose badge fails `check-badge` or `verify-agent-card` (reason codes).
 - [x] Verified human signers with Concordium ID (ZK proof of a role attribute). Ask at office hours whether Agent IDP is live on testnet.
-- [x] Escrow contract on testnet (Rust): v7 live at `<13155,0>`.
+- [x] Escrow contract on testnet (Rust): v8 live at `<13161,0>` (v7 `<13155,0>` before the 25 Nov re-check).
 - [x] EU AI Act Article 12 audit trail (Decision events with receipt fingerprints). PLT stablecoin payouts and sponsored fees: PATH_TO_PRODUCTION.md.
 - [x] PATH_TO_PRODUCTION.md: LEI-verified buyer companies, signer keys via wallet-as-a-service (Dfns, MPC) or Tether WDK, branded app (no crypto wallet in sight), ZK attribute proofs.
 

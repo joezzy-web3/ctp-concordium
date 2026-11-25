@@ -1,6 +1,6 @@
 # F-01: the two signers are two different verified people
 
-Status: **live on testnet.** The receiver on order #1 of escrow `<13155,0>` proved with Concordium ID and was recorded on the escrow (24 Nov 2026). The proof runs inside the app under ID checks (`#/buyer/ids`).
+Status: **live on testnet.** The receiver on order #1 of escrow `<13161,0>` (and before it `<13155,0>`) proved with Concordium ID and was recorded on the escrow (24 Nov 2026). The proof runs inside the app under ID checks (`#/buyer/ids`).
 
 ## As built
 - **Page:** `idcheck/`. The buyer creates a proof request for one counter and anchors it with RegisterData. The counter opens the request link, and their wallet answers with `requestVerifiablePresentationV1`. The buyer pastes the answer link back.
