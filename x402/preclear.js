@@ -29,13 +29,34 @@ const json = (status, body, headers = {}) => ({ status, headers: { 'content-type
  * @param {string} [o.network]
  * @param {number} [o.defaultEscrow]
  */
-export function makePreclear({ facilitator, chainFor, payTo, price = DEFAULT_PRICE, asset = 'CCD', network = TESTNET, defaultEscrow }) {
+export function makePreclear({ facilitator, chainFor, payTo, price = DEFAULT_PRICE, asset = 'CCD', network = TESTNET, defaultEscrow, ratePerMinute = 30, now = Date.now }) {
   const server = new x402ResourceServer(facilitator).register(network, new ExactConcordiumScheme());
   let ready = null;
   const init = () => (ready ??= server.initialize().catch((e) => { ready = null; throw e; }));
 
+  // Unpaid requests cost us chain reads, not the caller (audit X4): a short cache for order reads,
+  // and a per-caller rate limit (best effort, per server instance).
+  const cache = new Map();
+  const cached = async (key, ms, fn) => {
+    const hit = cache.get(key);
+    if (hit && now() - hit.at < ms) return hit.value;
+    const value = await fn();
+    cache.set(key, { at: now(), value });
+    if (cache.size > 500) cache.delete(cache.keys().next().value);
+    return value;
+  };
+  const hits = new Map();
+  const limited = (who) => {
+    if (!who) return false;
+    const recent = (hits.get(who) ?? []).filter((at) => now() - at < 60_000);
+    recent.push(now()); hits.set(who, recent);
+    if (hits.size > 5000) hits.delete(hits.keys().next().value);
+    return recent.length > ratePerMinute;
+  };
+
   /** Handles one HTTP request. `url` is the full request URL; `headers` a lower-cased header map. */
-  return async function handle({ url, headers = {} }) {
+  return async function handle({ url, headers = {}, caller }) {
+    if (limited(caller)) return json(429, { error: 'rate_limited', message: 'Too many requests. Try again in a minute.' }, { 'retry-after': '60' });
     const u = new URL(url);
     const escrow = Number(u.searchParams.get('escrow') ?? defaultEscrow);
     const orderId = Number(u.searchParams.get('order'));
@@ -46,9 +67,9 @@ export function makePreclear({ facilitator, chainFor, payTo, price = DEFAULT_PRI
     const resource = { url: `${u.origin}${u.pathname}?escrow=${escrow}&order=${orderId}`, description: `Pre-clear order #${orderId} on Clear to Pay escrow <${escrow},0>: would it clear now?`, mimeType: 'application/json' };
 
     const chain = chainFor(escrow);
-    try { await chain.checkVerified(); } catch (e) { return json(400, { error: 'unverified_escrow', message: e.message }); }
+    try { await cached(`v:${escrow}`, 10 * 60_000, () => chain.checkVerified()); } catch (e) { return json(400, { error: 'unverified_escrow', message: e.message }); }
     let order;
-    try { order = await chain.viewOrder(orderId); } catch (e) { return json(404, { error: 'unknown_order', message: e.message }); }
+    try { order = await cached(`o:${escrow}:${orderId}`, 5_000, () => chain.viewOrder(orderId)); } catch (e) { return json(404, { error: 'unknown_order', message: e.message }); }
 
     await init();
     const [requirements] = await server.buildPaymentRequirements({ scheme: 'exact', network, payTo, price: { amount: price, asset }, maxTimeoutSeconds: 120 });

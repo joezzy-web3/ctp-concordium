@@ -49,7 +49,7 @@ Each step below extends that working system. None of them changes the core rule:
 
 **Next:**
 - Connect purchasing systems (ERP and accounting tools) through the same MCP tools, so purchase orders and invoices flow in from the systems companies already use.
-- **Live today:** the agent already charges a per-check fee over x402 (the pre-clear service, sponsored payments, our own facilitator). Next: price it in a PLT stablecoin (the package already supports USDR on testnet), add more paid checks (counterparty badges, invoice duplicates across escrows), and run the facilitator as its own service with monitoring, as a revenue line separate from supplier money.
+- **Live today:** the agent already charges a per-check fee over x402 (the pre-clear service, sponsored payments, our own facilitator). Next: price it in a PLT stablecoin (the package already supports USDR on testnet), add more paid checks (counterparty badges, invoice duplicates across escrows), and run the facilitator as its own service with monitoring and platform rate limits, as a revenue line separate from supplier money. The sponsor account that pays the gas holds only a few CCD at a time, so the most an abusive caller can cost is that float.
 - Keep extending the cross-chain identity: the same operator proving one agent across the chains Clear to Pay runs on.
 
 ## 7. A first pilot
