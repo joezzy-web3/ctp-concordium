@@ -41,10 +41,10 @@ const ROLES = {
 const routes = {
   '': () => pickView(),
   buyer: (sub) => buyerView(sub),
-  signer: (sub) => (sub === 'prove' ? proveView() : signerView()),
-  supplier: () => supplierView(),
+  signer: (sub) => (sub === 'prove' ? proveView() : signerView(sub)),
+  supplier: (sub) => supplierView(sub),
   agent: () => agentView(),
-  referee: () => refereeView(),
+  referee: (sub) => refereeView(sub),
   judge: () => (isDemo ? judgeView() : demoOnly()),
   start: () => startView(),
 };

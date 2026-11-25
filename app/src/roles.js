@@ -1,11 +1,12 @@
 // Supplier and Agent spaces.
 import { AGENT, currentAccount, listOrders, viewConfig, viewSupplier } from './chain.js';
-import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen, invoiceDeadline, supplierCanInvoice } from './codec.js';
+import { ccdToMicro, microToCcd, orderStage, toHex, invoiceApproved, pastDue, invoiceOpen, invoiceDeadline, supplierCanInvoice, deliveryConfirmed } from './codec.js';
 import { dateBlock, refereeBlock, recountButton, askPaymentButton, releaseButton, countsLine, iso, fmtDay } from './ordertools.js';
 import { askForPayment, receiptPanel } from './payreceipt.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, short, countdown, fmtDate, notice, holdText } from './ui.js';
+import { navSide, tile, row, ccd, sum, plural, attnPanel, holdRing, dashHead } from './dash.js';
 
 const ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
 const fileHash = async (file) => toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())));
@@ -21,9 +22,10 @@ function frame(side, ...body) {
 const unreachable = () => h('section.panel', h('p.err', icon('alert', 16), 'Could not read the escrow contract right now. Check your connection, then reload.'));
 
 // ---------------- supplier ----------------
-export async function supplierView() {
+export async function supplierView(sub = '') {
   const me = currentAccount();
-  const side = sidebar('S', me ? CAST.nameOf(me) : 'Supplier', me ? short(me) : 'Connect your wallet', 'Money goes only to the payout account you set yourself. Every change waits out a hold before money can go there.');
+  const side = navSide({ initial: 'S', title: me ? CAST.nameOf(me) : 'Supplier', role: 'supplier', cur: sub,
+    items: [['', 'Dashboard', 'grid'], ['orders', 'Orders', 'list'], ['payout', 'Payout account', 'lock']] });
   if (!me) return frame(side, h('section.panel.empty', h('h2', 'Connect your wallet'), h('p', 'Use the supplier account registered on the escrow.')));
   let sup, cfg, orders;
   try {
@@ -153,13 +155,71 @@ export async function supplierView() {
     supplierCanInvoice(o) ? selfInvoice(o) : null,
     tools(o));
 
+  if (sub === 'payout') return frame(side, dashHead('Payout account', 'Money goes only to the payout account you set yourself. Every change waits out a hold before money can go there.'), payout);
+  if (sub !== 'orders') return frame(side, supplierDash({ me, sup, cfg, staged, end }));
   return frame(side,
     h('header.dash-h', h('div', h('h2', 'Your invoices'), h('p', 'Approve your own invoice and amount. Nobody can pay you less than you approve.'))),
     toAccept.map(acceptCard),
     toApprove.length ? toApprove.map(approveCard) : h('section.panel.empty-s', h('p', 'No invoices waiting for your approval.')),
     waiting.length ? [h('h3.sub-h', 'Waiting for the invoice'), waiting.map(waitingCard)] : null,
-    payout,
     paid.length ? h('section.panel', h('h3', 'Payments received'), h('ul.plain', paid.map(({ o }) => h('li', h('b.num', `#${o.id}`), ` ${microToCcd(o.amount)} CCD`, receiptPanel(o))))) : null);
+}
+
+
+/** What the supplier must do next on an order, or null when someone else acts. */
+function supplierNext(o, st, me) {
+  if (!o.accepted) return pastDue(o) ? null : 'Accept the order and its date';
+  if (o.invoice && !invoiceApproved(o) && invoiceOpen(o)) return 'Approve your invoice and amount';
+  if (supplierCanInvoice(o)) return 'Delivered and counted: the agent has not invoiced, so invoice it yourself';
+  if (st.key === 'ready') return 'Ask for your payment';
+  if (o.rep === me && !deliveryConfirmed(o) && !o.commits.some((c) => c.signer === me)) return 'Count at the gate: you are the delivery rep';
+  return null;
+}
+const SUPPLIER_WAIT = {
+  counting: 'The receiver and your delivery rep count at the gate.',
+  revealing: 'The counters unseal their counts.',
+  mismatch: 'Counts differ: a recount, or the referee decides.',
+  dispute: 'The referee decides on the delivery.',
+  invoice: 'The buyer’s agent sends your invoice’s fingerprint.',
+  approverwindow: 'The buyer’s approver has a window to count.',
+  hold: 'Your payout account is still in its hold.',
+  amount: 'The invoice amount differs from the escrow.',
+  expired: 'The date passed before the order was ready.',
+  grace: 'Delivered: invoice it before the grace week ends.',
+};
+
+function supplierDash({ me, sup, cfg, staged, end }) {
+  const open = staged.filter(({ o }) => !o.paid && !o.refunded);
+  const accepted = open.filter(({ o }) => o.accepted);
+  const offered = open.filter(({ o }) => !o.accepted);
+  const paid = staged.filter(({ o }) => o.paid).map(({ o }) => o);
+  const entries = open.map(({ o, st }) => {
+    const next = supplierNext(o, st, me);
+    return next ? { o, what: next, tone: 'gold', label: 'You', mine: true } : { o, what: SUPPLIER_WAIT[st.key] ?? st.label, tone: st.tone, label: st.label.split(':')[0] };
+  }).sort((a, b) => Number(Boolean(b.mine)) - Number(Boolean(a.mine)));
+  const yours = entries.filter((e) => e.mine).length;
+  const left = end - Date.now();
+  const own = sup.payout === me;
+  return h('div.dash',
+    dashHead('Dashboard', 'Your orders on this escrow, read live from the contract.'),
+    h('div.tiles',
+      tile('t-sage', 'Escrowed for you', ccd(sum(accepted.map((x) => x.o))), offered.length ? `${plural(accepted.length, 'accepted order')}, ${plural(offered.length, 'new order')} to accept` : plural(accepted.length, 'accepted order')),
+      tile('t-amber', 'Waiting on you', String(yours), yours ? 'see below what to do' : 'nothing needs you now'),
+      tile('t-sky', 'Paid to you', ccd(sum(paid)), plural(paid.length, 'paid order'))),
+    h('div.dash-cols',
+      attnPanel('Open orders', '#/supplier/orders', 'Work on orders', entries, 'No open orders. When a buyer orders from you, it shows here for you to accept.'),
+      h('div.dash-side',
+        h('section.panel.hold',
+          h('h3', 'Payout hold'),
+          holdRing(sup.payout_set_at, cfg.hold_ms),
+          h('p', left > 0 ? `You can be paid from ${fmtDate(end)}.` : 'You can be paid now.')),
+        h('section.panel.checks',
+          h('h3', 'Readiness'),
+          h('ul.ready-list.compact',
+            row('ok', 'Registered on this escrow', 'The buyer listed you. Only you can approve your invoices.'),
+            own ? row('ok', 'Paid to your own account', 'The buyer never chooses where you are paid.')
+              : row(left > 0 ? 'no' : 'hold', `Paid to ${short(sup.payout)}`, left > 0 ? 'Changed recently. If you did not do this, change it back now.' : 'A payout account you set yourself.', h('a.inline', { href: '#/supplier/payout' }, 'Check it', icon('arrow', 14))),
+            row(left > 0 ? 'hold' : 'ok', 'Payout hold', left > 0 ? `${countdown(left)} left of ${holdText(cfg.hold_ms)}. Every change restarts it.` : `Passed. Any change restarts the ${holdText(cfg.hold_ms)} hold.`))))));
 }
 
 // ---------------- agent ----------------

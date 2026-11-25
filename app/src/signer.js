@@ -3,6 +3,7 @@ import { ESCROW, currentAccount, listOrders } from './chain.js';
 import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, short, store, notice } from './ui.js';
+import { navSide, tile, row, plural, attnPanel, dashHead } from './dash.js';
 import { sealOf, toHex as hex, pastDue, deliveryConfirmed, gateSealed, MAX_RECOUNTS } from './codec.js';
 
 /** One key per order and count round, so a recount always gets a fresh seal. */
@@ -14,17 +15,17 @@ function parseBackup(code) {
   return m ? { qty: m[1], key: m[2] } : null;
 }
 
-function sidebar(me) {
+function sidebar(me, sub) {
   const name = me ? CAST.nameOf(me) : 'Not connected';
-  return h('aside.side',
-    h('div.who', h('span.avatar', name[0] ?? '?'), h('div', h('b', name === 'Account' ? 'Delivery signer' : name), h('span.mono', me ? short(me) : 'Connect your wallet'))),
-    h('p.side-note', 'You see only the orders that name you: as the buyer’s receiver or approver, or as the supplier’s delivery rep. Nobody sees a count until the gate counts are both sealed.'));
+  return navSide({ initial: name[0] ?? '?', title: name === 'Account' || name === 'Not connected' ? 'Delivery signer' : name, role: 'signer', cur: sub,
+    items: [['', 'Dashboard', 'grid'], ['count', 'Count deliveries', 'list']],
+    note: 'You see only the orders that name you. Nobody sees a count until the gate counts are both sealed.' });
 }
 
-export async function signerView() {
+export async function signerView(sub = '') {
   const me = currentAccount();
   const main = h('div.space-main');
-  const root = h('div.space.with-side', sidebar(me), main);
+  const root = h('div.space.with-side', sidebar(me, sub), main);
   if (!me) {
     fill(main, h('section.panel.empty', h('h2', 'Connect your wallet'), h('p', 'Use the receiver, approver or delivery rep account named on the order.')));
     return root;
@@ -42,6 +43,7 @@ export async function signerView() {
   }
   const open = orders.filter((o) => !o.paid && !o.refunded).reverse();
   const closed = orders.filter((o) => o.paid || o.refunded).reverse();
+  if (sub !== 'count') { fill(main, signerDash(orders, me)); return root; }
   fill(main,
     h('header.dash-h', h('div', h('h2', 'Count deliveries'), h('p', 'Count on your own, then seal it. When the receiver and the supplier’s rep have both sealed, unseal yours.'))),
     open.length ? open.map((o) => card(o, me)) : h('section.panel.empty-s', h('p', 'All your orders are counted.')),
@@ -166,4 +168,61 @@ function whatNote(o) {
     return h('p.what', h('strong', `Order #${o.id} from ${po.supplierName || CAST.nameOf(o.supplier)}: `), items.join(', '), '.');
   }
   return h('p.what', h('strong', `Order #${o.id} from ${CAST.nameOf(o.supplier)}. `), 'Check the items against the purchase order the driver hands you.');
+}
+
+// ---------- dashboard ----------
+const roleOn = (o, me) => (o.receiver === me ? 'Receiver' : o.approver === me ? 'Approver' : 'SupplierRep');
+const SHORT_ROLE = { Receiver: 'receiver', Approver: 'approver', SupplierRep: 'delivery rep' };
+
+/** Where this signer stands on one open order: what to do, or whom they wait for. */
+function signerStep(o, me) {
+  const role = roleOn(o, me);
+  const mine = o.commits.find((c) => c.signer === me);
+  const myReveal = o.reveals.find((r) => r.signer === me);
+  const confirmed = deliveryConfirmed(o);
+  const as = `As ${SHORT_ROLE[role]}: `;
+  if (pastDue(o) && !confirmed) return { o, what: `${as}the date passed, counting is closed.`, tone: 'mute', label: 'Closed', step: 'closed' };
+  if (!o.accepted) return { o, what: `${as}the supplier has not accepted yet. Nothing to count.`, tone: 'wait', label: 'New', step: 'waiting' };
+  if (!mine) {
+    if (role === 'SupplierRep' && !o.commits.some((c) => c.role === 'Receiver')) return { o, what: `${as}count and seal. The receiver has not sealed yet: do not unload.`, tone: 'gold', label: 'You', mine: true, step: 'count' };
+    return { o, what: `${as}count what arrived on your own, then seal it.`, tone: 'gold', label: 'You', mine: true, step: 'count' };
+  }
+  if (!gateSealed(o)) return { o, what: `${as}sealed. Waiting for ${role === 'Receiver' ? 'the supplier’s rep' : role === 'SupplierRep' ? 'the receiver' : 'the gate counts'} to seal.`, tone: 'wait', label: 'Sealed', step: 'sealed' };
+  if (!myReveal) {
+    const key = store.get(keyName(me, o));
+    return { o, what: key ? `${as}the gate counts are sealed. Unseal yours now.` : `${as}unseal now. This browser has no key for it: have your backup code ready.`, tone: key ? 'gold' : 'hold', label: key ? 'You' : 'Backup code', mine: true, step: 'unseal' };
+  }
+  if (confirmed) return { o, what: `${as}counts match. Delivery confirmed.`, tone: 'ok', label: 'Confirmed', step: 'done' };
+  if (countOf(o, 'Receiver') && countOf(o, 'SupplierRep')) return { o, what: `${as}counts do not match. A recount, or the referee decides.`, tone: 'hold', label: 'Mismatch', step: 'done' };
+  return { o, what: `${as}unsealed. Waiting for the other gate count.`, tone: 'wait', label: 'Unsealed', step: 'done' };
+}
+
+function signerDash(orders, me) {
+  const open = orders.filter((o) => !o.paid && !o.refunded).reverse();
+  const steps = open.map((o) => signerStep(o, me)).sort((a, b) => Number(Boolean(b.mine)) - Number(Boolean(a.mine)));
+  const toCount = steps.filter((x) => x.step === 'count').length;
+  const toUnseal = steps.filter((x) => x.step === 'unseal').length;
+  const confirmed = orders.filter(deliveryConfirmed).length;
+  const byRole = (r) => orders.filter((o) => roleOn(o, me) === r).length;
+  const sealedOpen = open.filter((o) => o.commits.some((c) => c.signer === me) && !o.reveals.some((r) => r.signer === me));
+  const keys = sealedOpen.filter((o) => store.get(keyName(me, o))).length;
+  const roleRows = [['Receiver', 'Buyer’s receiver', 'You count at the gate for the buyer.'], ['SupplierRep', 'Supplier’s delivery rep', 'You count at the gate for the supplier, and unload only after the receiver has sealed.'], ['Approver', 'Buyer’s approver', 'You check the delivery inside, after the gate.']]
+    .filter(([r]) => byRole(r)).map(([r, t, x]) => row('ok', `${t} on ${plural(byRole(r), 'order')}`, x));
+  return h('div.dash',
+    dashHead('Dashboard', 'The orders that name you, read live from the contract.'),
+    h('div.tiles',
+      tile('t-amber', 'To count', String(toCount), toCount ? 'count on your own, then seal' : 'nothing to count now'),
+      tile('t-sage', 'To unseal', String(toUnseal), toUnseal ? 'the gate counts are sealed' : 'nothing to unseal now'),
+      tile('t-sky', 'Deliveries confirmed', String(confirmed), `of ${plural(orders.length, 'order')} naming you`)),
+    h('div.dash-cols',
+      attnPanel('Open orders', '#/signer/count', 'Count deliveries', steps, 'All your orders are counted.'),
+      h('div.dash-side',
+        h('section.panel.checks', h('h3', 'Your roles'), h('ul.ready-list.compact', roleRows)),
+        h('section.panel.checks',
+          h('h3', 'This browser'),
+          h('ul.ready-list.compact',
+            sealedOpen.length
+              ? row(keys === sealedOpen.length ? 'ok' : 'hold', `Keys for ${plural(keys, 'sealed count')} of ${sealedOpen.length}`, keys === sealedOpen.length ? 'Keep this browser until you unseal. Save a backup code if you may switch devices.' : 'Some keys are not here. Unseal with the backup code you saved when you sealed.')
+              : row('ok', 'No keys to keep', 'Each key is deleted from this browser once its count is unsealed.'),
+            row('ok', 'Counts stay blind', 'Only a fingerprint of each count goes on-chain until both gate counts are sealed.'))))));
 }
