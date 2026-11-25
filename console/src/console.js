@@ -12,7 +12,7 @@ import { MODULE_SCHEMA_B64 } from './schema.js';
 
 const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
 // Escrow v2 (supplier approves the amount; one-transaction setup).
-const CONTRACT_INDEX = 13155;
+const CONTRACT_INDEX = 13161;
 const CONTRACT = ContractAddress.create(CONTRACT_INDEX, 0);
 // The contract's error variants, in order: concordium-std gives the first one code -1.
 const ERRORS = ['Parse', 'LogFull', 'LogMalformed', 'NotAdmin', 'NotSigner', 'NotSupplier', 'NotAgent', 'UnknownOrder', 'OrderExists', 'UnknownSupplier', 'SupplierExists', 'OrderClosed', 'ZeroAmount', 'BadHold', 'BadOrderSigners', 'NotOrderSigner', 'SignerNoLongerValid', 'AlreadyCommitted', 'NoInvoice', 'NotCommitted', 'AlreadyRevealed', 'WaitingForSecondRole', 'RevealDoesNotMatchCommit', 'InvoiceExists', 'TransferFailed'];
