@@ -210,3 +210,15 @@ test('a recently changed payout account is called out', async () => {
   chain.viewConfig = async () => ({ hold_ms: 72 * 3600000 });
   assert.match(await makeTools(chain).getOrder({ order_id: 1 }), /payout account was changed about 2 hours ago/);
 });
+
+// Suggested by Claude after the 25 Nov run: a timeout reads the order back instead of guessing.
+test('a payment request with no answer reads the order back and says whether it landed', async () => {
+  const chain = fakeChain();
+  const order = await chain.viewOrder(1);
+  chain.send = async () => { const e = new Error('Sent, but the node did not confirm it in time.'); e.sent = true; e.tx = 'cd'.repeat(32); throw e; };
+  chain.viewOrder = async () => ({ ...order, paid: true });
+  const out = await makeTools(chain, { receiptsDir: mkdtempSync(join(tmpdir(), 'ctp-')) }).requestPayment({ order_id: 1 });
+  assert.match(out, /node did not confirm it in time/);
+  assert.match(out, /It went through: order #1 is paid\. Do not ask again/);
+  assert.match(out, new RegExp('cd'.repeat(32)));
+});

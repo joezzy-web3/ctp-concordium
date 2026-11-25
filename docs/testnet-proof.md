@@ -24,6 +24,20 @@ Module `d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b`, [Veri
 | Approve | The supplier approved that exact invoice and amount from its own account | on the order |
 | **Cleared** | Claude asked again: **Cleared**, 2 CCD from `<13155,0>` to the supplier's own account `45H8…` | [`a5157713…1693a832`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=a5157713b6999186ac4996160acd5edaefee009cd7a10b19da972e0e1693a832) |
 
+**x402 pre-clear on order #2, 25 Nov 2026 (10 bags, 1 CCD, invoice `LF-0002`, fingerprint `b212eb0c…`):** Agent #1287 sells a paid check; Claude buys it from its capped spending wallet `3QZd…qUgJ`. Every fee is a sponsored transfer: the sponsor `3Mqk…2nGH` pays the gas, the fee goes to Agent #1287's account `44Fc…iWeG`.
+
+| Step | What happened | Tx |
+|---|---|---|
+| Count | Receiver and the supplier's rep counted blind: 10 = 10 | on the order |
+| Invoice | Claude submitted the invoice for 1 CCD | on the order |
+| **Paid pre-clear 1** | Claude asked before spending, then paid 0.01 CCD over x402. The contract's own dry run: **would be held**, the supplier had not approved | [`bd4dd7cf…666a99`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=bd4dd7cf1421e3c9f7c5e0973c05aa2481c34793fb958a5242c6d3e497666a99) |
+| Approve | The supplier approved that invoice and amount from its own account | on the order |
+| **Paid pre-clear 2** | 0.01 CCD again: **would clear**. Spent today 0.03 of the 0.5 CCD limit | [`26550a01…d51dd1`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=26550a016debcec4e61092620c714eededb64fcb1560342511432ebe8fd51dd1) |
+| Timeout | Claude's first payment request got no answer from the node in 15 s. Claude did not resend blind; it checked the order (still ready to pay), then asked again | none landed |
+| **Cleared** | 1 CCD from `<13155,0>` to the supplier `45H8…`, exactly one payment | [`e3adb30f…032ec8`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=e3adb30fda56d601156c8740a875cb57bc454b832512578d09386b4229032ec8) |
+
+First paid check (24 Nov, on paid order #1, answer `OrderClosed`): [`95338bae…1569de2`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=95338bae5af7ada0abb28717af416a1e021ce3deeba33ac8de73c9b0f1569de2).
+
 ## Escrow v6, Verified module: `<13151,0>` (replaced by v7 after the 24 Nov audit)
 
 Module `196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde`, [Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/196930b8de58a1ef92a97480322cd0c0051c99be3fdb2f459567e9c426e6fdde) (source and module match). Built and published in public by the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45031516327) from release [`escrow-v6-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v6-src1).

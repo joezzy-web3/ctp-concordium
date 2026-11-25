@@ -133,7 +133,13 @@ export function createEscrow({ escrow, agent, keyFile, client, verifiedModules }
     };
     const hash = await node.sendAccountTransaction(tx, await signTransaction(tx, signer));
     const tx64 = TransactionHash.toHexString(hash);
-    const item = await node.waitForTransactionFinalization(hash, 120000);
+    let item;
+    try { item = await node.waitForTransactionFinalization(hash, 120000); } catch (e) {
+      // Sent, but no answer in time: say which transaction to look for, so nobody resends blind.
+      const err = new Error(`Sent, but the node did not confirm it in time (${e?.message ?? e}).`);
+      err.tx = tx64; err.sent = true;
+      throw err;
+    }
     const sum = item.summary;
     if (sum.type === 'accountTransaction' && sum.transactionType === 'failed') return { ok: false, tx: tx64, ...rejection(sum.rejectReason) };
     return { ok: true, tx: tx64, decisions: await decisionsIn(escrowEvents(sum.events, escrow)) };

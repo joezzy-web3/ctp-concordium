@@ -117,7 +117,12 @@ export function makeTools(chain, { payer, preclearUrl, receiptsDir = process.env
     const dry = await chain.simulate('submit_invoice', bytes);
     if (!dry.ok) return `The contract would refuse this invoice (${dry.error}). ${dry.explain} Nothing was sent.`;
     if (!chain.canSend) return `Dry run passed: the contract would accept this invoice (fingerprint ${hash.slice(0, 12)}…, ${microToCcd(micro)} CCD). Sending needs CTP_AGENT_KEY_FILE; nothing was sent.`;
-    const r = await chain.send('submit_invoice', bytes, dry.energy);
+    let r;
+    try { r = await chain.send('submit_invoice', bytes, dry.energy); } catch (e) {
+      return afterTimeout(id, e, (o2) => (o2.invoice
+        ? `It landed: order #${id} now has an invoice (fingerprint ${o2.invoice.invoice_hash.slice(0, 12)}…). Do not submit it again; the contract would refuse a second invoice anyway (InvoiceExists).`
+        : `Order #${id} still has no invoice, so the request did not land. It is safe to submit again.`));
+    }
     if (!r.ok) return `The contract refused the invoice on-chain (${r.error}). ${r.explain} ${ccdscanTx(r.tx)}`;
     return `Invoice submitted on order #${id}: ${microToCcd(micro)} CCD, fingerprint ${hash.slice(0, 12)}…. Only its SHA-256 went on-chain. Next, the supplier approves it from its own account. ${ccdscanTx(r.tx)}`;
   }
@@ -137,10 +142,26 @@ export function makeTools(chain, { payer, preclearUrl, receiptsDir = process.env
     mkdirSync(receiptsDir, { recursive: true });
     const path = join(receiptsDir, `ctp-receipt-${escrow.index}-order${id}-${hash.slice(0, 12)}.json`);
     writeFileSync(path, `${canonicalize(receipt)}\n`);
-    const r = await chain.send('execute_payment', bytes, dry.energy);
+    let r;
+    try { r = await chain.send('execute_payment', bytes, dry.energy); } catch (e) {
+      return afterTimeout(id, e, (o2) => (o2.paid
+        ? `It went through: order #${id} is paid. Do not ask again; the contract refuses a second payment anyway (OrderClosed). Receipt saved at ${path}.`
+        : `Order #${id} is not paid, so the request did not land or was held. It is safe to ask again: the dry run and the contract stop any second payment.`));
+    }
     if (!r.ok) return `The contract refused the request on-chain (${r.error}). ${r.explain} ${ccdscanTx(r.tx)}`;
     const d = r.decisions[0];
     return `The contract recorded its decision on order #${id}: ${d ? verdictText(d) : 'no decision found.'} A held answer is final for this request and is on the record with its reasons; the AI cannot override it. Decision: ${ccdscanTx(r.tx)} Receipt saved at ${path}.`;
+  }
+
+  /** After a send with no answer: read the order back and say whether it landed, so a retry is
+   *  never a guess. The contract refuses duplicates either way; this just tells the person. */
+  async function afterTimeout(id, e, verdictOf) {
+    const head = e?.sent ? `Sent, but the node did not confirm it in time${e.tx ? ` (${ccdscanTx(e.tx)})` : ''}.` : `Could not reach the node (${e?.message ?? e}); it may not have been sent.`;
+    for (const wait of [0, 5000, 10000]) {
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      try { return `${head} I checked the order: ${verdictOf(await chain.viewOrder(id))}`; } catch { /* try again */ }
+    }
+    return `${head} I could not read the order back either. Check order #${id} before asking again; the contract refuses duplicates in any case.`;
   }
 
   /** Pays Clear to Pay's x402 pre-clear service from the capped spending wallet. */
