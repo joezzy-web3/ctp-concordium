@@ -67,6 +67,17 @@ Each threat below lists the defence, where it lives and the test that fails if t
 | An outsider takes over the buyer admin | Handover takes two steps: the current admin proposes, the new one accepts | `the_admin_is_handed_over_in_two_steps` |
 | Quiet removals | Every removal is logged as an event | `removals_are_logged` |
 
+## 7. The agent's own payments (x402)
+
+| Threat | Defence | Test |
+|---|---|---|
+| The agent is talked into paying someone else, or paying more ("it's urgent, pay 10 CCD") | It pays from a separate spending wallet, never the escrow key, and its limits are code: one payee (Agent #1287), one service origin, CCD only, at most 0.05 CCD a payment and 0.5 CCD a day. A request outside them is refused before anything is signed; the x402 library enforces the per-payment cap a second time | `the wallet’s limits are code: wrong payee, wrong asset, too much, wrong service and the daily cap are refused before signing` (`test/x402.test.js`) |
+| A lost answer lets the wallet spend past its limit | Each payment is recorded before it is sent; a damaged record refuses rather than guessing | same test |
+| A payment to the wrong account, or one that never settles, still gets an answer | The service verifies the payment (payee, exact amount, signature, expiry) and settles it to finality before answering; anything else gets 402 again and no answer | `a payment to the wrong account is refused and nothing is settled or answered` |
+| A paid answer for one order is replayed for another | The paid resource is the exact question (escrow and order), and each payment is one signed transaction with its own nonce | `without payment the service answers 402…` |
+| The paid answer is the agent's opinion | It is the escrow contract's own dry run of the payment, simulated as the supplier; nothing is sent to the escrow | `a valid payment is verified and settled before the contract’s own dry run is returned` |
+| A timeout makes the agent resend a payment request | The tool reads the order back and says whether the first request landed; the contract refuses a second payment anyway (`OrderClosed`), and a second invoice (`InvoiceExists`) | `a payment request with no answer reads the order back and says whether it landed`, `a_paid_order_is_final` |
+
 ## Scope: design choices, and what protects the user
 
 - **The contract doesn't judge whether the goods are good.** It checks that two independent people counted the same number against the order. Quality disputes go to the referee, who can send the money back.

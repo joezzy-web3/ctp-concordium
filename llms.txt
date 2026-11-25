@@ -13,7 +13,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=32ae2
 
 - `cd contract && cargo test --lib` : 26 rule tests (contract/src/rules.rs)
 - `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 59 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the 20, 21 and 24 Nov security reviews
-- `npm ci && npm test` : 83 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
+- `npm ci && npm test` : 90 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
 - `node gate/cli.js JyP9U25oUQ6KdnBBHdTYP` : live badge check of Agent #1287 on testnet
 - Verifiable build: `git checkout escrow-v7-src1 && cd contract && cargo concordium build --verifiable --out ctp_escrow.wasm.v1 && sha256sum ctp_escrow.wasm.v1` prints f36a55cc…c735; with its source link embedded it is module d6d99ee4…, the one live at <13155,0> and shown as Verified on CCDExplorer
 
@@ -45,6 +45,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=32ae2
 - README.md: overview, how the brief is met, what is live
 - contract/DESIGN.md: every rule of the escrow
 - PATH_TO_PRODUCTION.md: audit, mainnet, stablecoin payouts, sponsored fees
+- x402 (agent gets paid and pays): x402/preclear.js (paid pre-clear service, own facilitator from @x402/concordium, sponsored payments), x402/payer.js (capped spending wallet: one payee, one service, 0.05 CCD a payment, 0.5 CCD a day, refused before signing), api/preclear.js (Vercel function); test/x402.test.js. Live 25 Nov 2026 on order #2: fees bd4dd7cf1421e3c9f7c5e0973c05aa2481c34793fb958a5242c6d3e497666a99 (would be held), 26550a016debcec4e61092620c714eededb64fcb1560342511432ebe8fd51dd1 (would clear); payment Cleared e3adb30fda56d601156c8740a875cb57bc454b832512578d09386b4229032ec8
 - THREAT_MODEL.md: every threat, its defence and the test that fails if the defence breaks
 - docs/testnet-proof.md: every testnet transaction, newest first
 - README.md "Why now": sourced figures (FBI IC3 2025, AFP 2026, Forrester for Basware 2026); "How we got here": timeline from the NEAR build (30 Oct 2026) to the Verified module
