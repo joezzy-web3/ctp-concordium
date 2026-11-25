@@ -73,3 +73,25 @@ export function auditAnchor(record, role) {
   const info = { ctp: 'signer-audit', role: role[0] };
   return { bytes: VerificationAuditRecordV1.createAnchor(record, info), hash: toHex(VerificationAuditRecordV1.computeAnchorHash(record, info)), json: record.toJSON() };
 }
+
+// ---------- who stands behind the agent (Agent IDP-style owner proof) ----------
+import { OWNER_AUDIT_INFO } from './agentid.js';
+import { draftOwnerRequest, checkAgentIdentity } from './agentid-chain.js';
+
+export const draftOwner = async (agentId, owner, opts) => draftOwnerRequest(agentId, owner, await testnetIssuers(), opts);
+
+/** Checks the owner's own answer before anything is anchored; returns the audit record. */
+export async function verifyOwnerAnswer(agentId, owner, requestJSON, presentation) {
+  const request = VerificationRequestV1.fromJSON(requestJSON);
+  const vp = VerifiablePresentationV1.fromJSON(presentation);
+  const res = await VerificationAuditRecordV1.createChecked(`ctp-agent:${agentId}:${owner}:${Date.now()}`, request, vp, grpcClient, 'Testnet');
+  if (res.type !== 'success') throw new Error(`The proof did not verify: ${res.error?.message ?? res.error}`);
+  const info = await grpcClient.getAccountInfo(AccountAddress.fromBase58(owner));
+  if (!boundToAccount(presentation, info)) throw new Error(`This proof is not from ${owner}. Choose that account at the top of the wallet window and try again.`);
+  return res.result;
+}
+
+/** RegisterData bytes for the owner's audit record. */
+export const ownerAuditAnchor = (record, agentId) => VerificationAuditRecordV1.createAnchor(record, OWNER_AUDIT_INFO(agentId));
+
+export const checkAgent = (file, agentId, owner) => checkAgentIdentity(file, { agentId, owner, grpc: grpcClient });

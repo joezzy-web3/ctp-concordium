@@ -11,6 +11,7 @@ waited out its hold. A held answer is recorded on-chain with its reasons.
 | `list_orders` | Every order, its amount, where it stands and who acts next | no |
 | `get_order` | One order in full: parties, counts, invoice, approval | no |
 | `check_agent_badge` | Asks Concordium's agent registry about Agent #1287 | no |
+| `agent_identity` | Checks, against the chain, the Concordium ID proof published by Agent #1287's owner (a verified adult, and their country of residence) | no |
 | `dry_run_payment` | Runs the real contract code to see what it would decide now | no |
 | `submit_invoice` | Hashes the invoice file, dry-runs, then submits the fingerprint and amount | yes, as the agent |
 | `request_payment` | Builds and saves the receipt, dry-runs, then asks the contract to pay | yes, as the agent |

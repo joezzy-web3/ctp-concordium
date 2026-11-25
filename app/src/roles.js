@@ -7,6 +7,7 @@ import { CAST } from './cast.js';
 import { act } from './act.js';
 import { h, fill, icon, chip, short, countdown, fmtDate, notice, holdText } from './ui.js';
 import { navSide, tile, row, ccd, sum, plural, attnPanel, holdRing, dashHead } from './dash.js';
+import { agentIdentityView, agentBehindLine } from './agentid.js';
 
 const ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{50}$/;
 const fileHash = async (file) => toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())));
@@ -18,6 +19,9 @@ function sidebar(initial, title, sub, note) {
 function frame(side, ...body) {
   return h('div.space.with-side', side, h('div.space-main', ...body));
 }
+
+/** Filled in when the published owner proof loads (it is a small static file). */
+const behind = () => { const slot = h('div'); agentBehindLine().then((n) => { if (n) slot.replaceWith(n); }).catch(() => {}); return slot; };
 
 const unreachable = () => h('section.panel', h('p.err', icon('alert', 16), 'Could not read the escrow contract right now. Check your connection, then reload.'));
 
@@ -108,6 +112,7 @@ export async function supplierView(sub = '') {
       h('div.big-amount.num', `${microToCcd(o.invoice.amount)} CCD`),
       h('p.fine', `Escrowed for this order: ${microToCcd(o.amount)} CCD. Invoice ${o.invoice.invoice_hash.slice(0, 8)}…, submitted ${o.invoice.agent === o.supplier ? 'by you' : `by Agent #${o.invoice.agent_token_id ?? AGENT.id}`}.`),
       h('p.fine', `Counts: ${countsLine(o)}.`),
+      o.invoice.agent === AGENT.owner ? behind() : null,
       closed ? h('p.err', icon('alert', 16), `The last day to approve (${fmtDay(invoiceDeadline(o))}) has passed, so approvals are closed. Ask the buyer to agree a new date.`) : null,
       approved || closed ? null : [
         h('label.field', h('span', 'Your invoice file'), fileIn), fileState,
@@ -233,9 +238,12 @@ async function checkBadge(id) {
   return { ok: j.badge_valid === true, text: j.badge_valid ? `Verified: agent #${j.token_id}, owner ${short(j.on_chain?.owner_account)}, ${j.on_chain?.status}.` : `Does not check out: ${(j.issues ?? []).join(', ') || 'see the registry'}.` };
 }
 
-export async function agentView() {
+export async function agentView(sub = '') {
   const me = currentAccount();
-  const side = sidebar('A', `Agent #${AGENT.id}`, short(AGENT.owner), 'The agent reads invoices and asks for payment. The contract decides; the agent can never pay on its own.');
+  const side = navSide({ initial: 'A', title: `Agent #${AGENT.id}`, role: 'agent', cur: sub,
+    items: [['', 'Agent desk', 'grid'], ['identity', 'Who stands behind it', 'user']],
+    note: 'The agent reads invoices and asks for payment. The contract decides; the agent can never pay on its own.' });
+  if (sub === 'identity') return agentIdentityView(side, frame);
   const badgeIn = h('input.mono', { value: AGENT.badge, 'aria-label': 'Agent ID to check', spellcheck: false });
   const badgeOut = h('p.live');
   const checker = h('section.panel',
