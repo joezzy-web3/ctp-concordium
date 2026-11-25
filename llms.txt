@@ -13,7 +13,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=569df
 
 - `cd contract && cargo test --lib` : 26 rule tests (contract/src/rules.rs)
 - `cd contract && cargo concordium build --schema-embed --out ctp_escrow.wasm.v1 && cargo test --test escrow` : 61 end-to-end tests against the compiled contract (contract/tests/escrow.rs), including one for each attack raised in the 20, 21, 24 and 25 Nov security reviews
-- `npm ci && npm test` : 93 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
+- `npm ci && npm test` : 98 tests: the app's decoders, the MCP server's tools (against a fake chain), the ID-check logic, receipts and the badge gate
 - `node gate/cli.js JyP9U25oUQ6KdnBBHdTYP` : live badge check of Agent #1287 on testnet
 - Verifiable build: `git checkout escrow-v8-src1 && cd contract && cargo concordium build --verifiable --out ctp_escrow.wasm.v1 && sha256sum ctp_escrow.wasm.v1` prints 36764425…2cc04; with its source link embedded it is module 67e4c0b6…, the one live at <13161,0> and shown as Verified on CCDExplorer
 
@@ -31,6 +31,7 @@ Proof: Held https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=569df
 - Disputes have a way out, and neither side can stall the other: tests `the_buyers_counters_cannot_stall_a_delivered_order_into_a_refund`, `the_referee_can_send_the_money_back_and_rules_only_on_a_real_dispute`, `a_silent_referee_can_be_replaced_only_by_both_sides`, `once_both_gate_counters_sealed_the_buyer_cannot_refund_alone`
 - Every decision is recorded by the contract, with the payment receipt's fingerprint inside its Decision event: `Decision` event in contract/src/lib.rs; receipt/escrowReceipt.js; check a receipt in the app under Judge mode
 - Any company can start its own escrow from the verified module, and the app refuses contracts not running that code: app/src/start.js, `checkEscrow` and `VERIFIED_MODULES` in app/src/chain.js
+- Who stands behind the agent: the owner of Agent #1287 proved with Concordium ID (zero knowledge) that they are a verified adult living in Nigeria; request and audit record anchored on-chain (tx 9318d2c214a1ae9769bfb3f296bd535e3d95271142f0f6b467628a48c9e40fb9, 08550d8eff6c0bb48048ce9a50000108a9a3daa2717ecfde0ac02e33d215734e), record in app/agent-identity.json, checked by idcheck/src/agentid-chain.js (`checkAgentIdentity`), the app page #/agent/identity and the MCP tool agent_identity; tests in test/agentid.test.js
 - The agent is linked across chains: Agent #1287 bound via CIS-8 to the NEAR agent buyer.cleartopay.testnet (link/, link tx https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)
 - Counterparty agents are badge-checked before their invoices are accepted, and an outage holds rather than clears: gate/badgeGate.js, gate/safeFetch.js
 

@@ -51,6 +51,7 @@ Each step below extends that working system. None of them changes the core rule:
 - Connect purchasing systems (ERP and accounting tools) through the same MCP tools, so purchase orders and invoices flow in from the systems companies already use.
 - **Live today:** the agent already charges a per-check fee over x402 (the pre-clear service, sponsored payments, our own facilitator). Next: price it in a PLT stablecoin (the package already supports USDR on testnet), add more paid checks (counterparty badges, invoice duplicates across escrows), and run the facilitator as its own service with monitoring and platform rate limits, as a revenue line separate from supplier money. The sponsor account that pays the gas holds only a few CCD at a time, so the most an abusive caller can cost is that float.
 - Keep extending the cross-chain identity: the same operator proving one agent across the chains Clear to Pay runs on.
+- **Live today:** the agent's owner has proven with Concordium ID that they are a verified adult and where they live, anchored on-chain and checkable by anyone (app and MCP). Next: move this onto Concordium's native Agent IDP when it ships, so the agent carries the delegated attributes itself; let a business owner prove its legal name and registration the same way; and let the contract or the supplier's policy require such a proof before an agent may invoice.
 
 ## 7. A first pilot
 
