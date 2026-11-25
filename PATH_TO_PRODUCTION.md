@@ -6,7 +6,7 @@ Each step below extends that working system. None of them changes the core rule:
 
 ## 1. An independent audit, then mainnet
 
-**Today:** escrow v8 has been through five external AI audits (19, 20, 21, 24 Nov, and a re-check on 25 Nov). Every finding was fixed and covered by a test, or answered as a design choice in `contract/DESIGN.md`: 26 rule tests and 59 end-to-end tests run on the compiled contract in CI. Every deployed module is a verifiable build that anyone can rebuild and match on-chain.
+**Today:** escrow v8 has been through five external AI audits (19, 20, 21, 24 Nov, and a re-check on 25 Nov). Every finding that can move or lock money is fixed and tested; the rest are design choices (`contract/DESIGN.md`) or listed below as before-mainnet work. 26 rule tests and 61 end-to-end tests run on the compiled contract in CI. Every deployed module is a verifiable build that anyone can rebuild and match on-chain.
 
 **Next:**
 - A human security audit of the escrow contract, scoped to the payment rules and the registry check.
@@ -14,7 +14,7 @@ Each step below extends that working system. None of them changes the core rule:
 - Build with the contract's `mainnet` feature, which already raises the minimum payout hold to 24 hours. On testnet the app defaults to 72 hours and offers 1 minute only as a labelled test setting; on mainnet no escrow can be created with a hold short enough to rush a new payout account.
 - Add a long backstop for money that can never move, for example when a referee stays silent and the two sides never agree on a replacement: after 90 days with no ruling and no payment, either side can return the money to the funder.
 - Alert people, not just screens. A payout-account change is already flagged in the app and to the agent; production adds email or push alerts from an indexer, so the supplier and buyer hear about it within the hold.
-- Encrypt the ID-check answer for the buyer's page (a one-time key from the buyer's browser), so the link a counter sends back carries only ciphertext. Today the answer travels as a link the counter sends privately, the app deletes it once recorded and after 24 hours if not, and only a salted fingerprint goes on-chain.
+- Encrypt the ID-check answer for the buyer's page (a one-time key from the buyer's browser), so the link a counter sends back carries only ciphertext, and derive the ID salt from fresh randomness kept in the buyer's backup instead of from a wallet signature. Today the answer travels as a link the counter sends privately, the app deletes it once recorded and after 24 hours if not, and only a salted fingerprint goes on-chain.
 - Start with a per-order cap during the pilot, raised as order history builds.
 
 **What protects users in the meantime:** the testnet build already refuses by default. If the contract cannot read the registry, or anything is missing, the request is Held, never paid.
