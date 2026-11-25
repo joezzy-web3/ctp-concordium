@@ -1,6 +1,6 @@
 # ctp_escrow: Clear to Pay escrow contract
 
-Status: **live on Concordium testnet** at `<13155,0>`, module `d6d99ee4…8d5b` (v7), **[Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b)**. 26 rule tests and 59 end-to-end tests against the compiled module pass in CI.
+Status: **live on Concordium testnet** at `<13161,0>`, module `67e4c0b6…db6e` (v8), **[Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e)**. 26 rule tests and 61 end-to-end tests against the compiled module pass in CI.
 
 Rules and roles: see [DESIGN.md](DESIGN.md).
 
@@ -9,7 +9,7 @@ cargo test --lib                       # 26 rule tests, run natively
 rustup target add wasm32v1-none        # once
 cargo install --locked cargo-concordium  # once
 cargo concordium build --schema-embed --out ctp_escrow.wasm.v1
-cargo test --test escrow               # 59 end-to-end tests against the compiled module
+cargo test --test escrow               # 61 end-to-end tests against the compiled module
 ```
 
 ## Reproducible, verifiable build
@@ -30,6 +30,6 @@ The verifiable build embeds a fingerprint of the packaged `contract/` sources, s
 
 | | |
 |---|---|
-| Contract | `<13155,0>` on Concordium testnet |
-| Module | `d6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b`: the verifiable build `f36a55cc…c735` with the link to its source archive embedded ([publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45459752646), source in release [`escrow-v7-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v7-src1)) |
+| Contract | `<13161,0>` on Concordium testnet (v8; v7 was `<13155,0>`) |
+| Module | `67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e`: the verifiable build `36764425…2cc04` with the link to its source archive embedded ([publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45600450904), source in release [`escrow-v8-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v8-src1)) |
 | Verification | CCDExplorer rebuilds the source and shows **Verified: source and module match** |

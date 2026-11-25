@@ -6,7 +6,7 @@ Each step below extends that working system. None of them changes the core rule:
 
 ## 1. An independent audit, then mainnet
 
-**Today:** escrow v7 has been through four external AI audits (19, 20, 21 and 24 Nov). Every finding was fixed and covered by a test, or answered as a design choice in `contract/DESIGN.md`: 26 rule tests and 59 end-to-end tests run on the compiled contract in CI. Every deployed module is a verifiable build that anyone can rebuild and match on-chain.
+**Today:** escrow v8 has been through five external AI audits (19, 20, 21, 24 Nov, and a re-check on 25 Nov). Every finding was fixed and covered by a test, or answered as a design choice in `contract/DESIGN.md`: 26 rule tests and 59 end-to-end tests run on the compiled contract in CI. Every deployed module is a verifiable build that anyone can rebuild and match on-chain.
 
 **Next:**
 - A human security audit of the escrow contract, scoped to the payment rules and the registry check.
@@ -61,7 +61,7 @@ Run with one buyer and its regular suppliers on a recurring order, such as weekl
 
 ## Where to check the work
 
-- Escrow `<13155,0>` on [CCDExplorer](https://ccdexplorer.io/testnet/instance/13155/0) and [CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13155&dcontractAddressSubIndex=0)
+- Escrow `<13161,0>` on [CCDExplorer](https://ccdexplorer.io/testnet/instance/13161/0) and [CCDScan](https://testnet.ccdscan.io/?dentity=contract&dcontractAddressIndex=13161&dcontractAddressSubIndex=0)
 - Contract rules and design: [contract/DESIGN.md](contract/DESIGN.md)
 - Signer identity design: [docs/F01_SIGNER_IDENTITY.md](docs/F01_SIGNER_IDENTITY.md)
 - MCP server: [mcp/README.md](mcp/README.md)
