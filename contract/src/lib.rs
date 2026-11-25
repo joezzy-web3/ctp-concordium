@@ -1061,6 +1061,8 @@ fn reject_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Log
 
 /// Fallback when the buyer's agent does not invoice: the supplier invoices its own
 /// confirmed delivery, for the full escrowed amount, which also counts as its approval.
+/// It replaces any invoice the supplier has not approved (logged as rejected), in one step,
+/// so an agent cannot block it with a wrong-amount or junk invoice (25 Nov re-check).
 /// The agent stays the normal path; payment still runs every rule in execute_payment.
 #[receive(contract = "ctp_escrow", name = "supplier_invoice", parameter = "InvoiceParams", error = "Error", mutable, enable_logger)]
 fn supplier_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut Logger) -> ContractResult<()> {
@@ -1071,9 +1073,12 @@ fn supplier_invoice(ctx: &ReceiveContext, host: &mut Host<State>, logger: &mut L
     ensure!(order.supplier == supplier, Error::NotSupplier);
     ensure!(order.accepted, Error::OrderNotAccepted);
     ensure!(delivery_confirmed(&order), Error::DeliveryNotConfirmed);
-    ensure!(order.invoice.is_none(), Error::InvoiceExists);
+    ensure!(!invoice_approved(&order), Error::InvoiceExists);
     ensure!(p.amount == order.amount, Error::NotFullAmount);
     invoice_window(ctx, &order)?;
+    if let Some(old) = &order.invoice {
+        logger.log(&Event::InvoiceRejected { order_id: p.order_id, by: supplier, invoice_hash: old.invoice_hash })?;
+    }
     if let Some(mut o) = host.state_mut().orders.get_mut(&p.order_id) {
         // The supplier is recorded as the submitter (agent_token_id 0: no agent involved).
         o.invoice = Some(Invoice { agent: supplier, agent_token_id: 0, invoice_hash: p.invoice_hash, amount: p.amount });

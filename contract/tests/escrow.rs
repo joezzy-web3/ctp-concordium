@@ -1089,3 +1089,42 @@ fn only_the_supplier_decides_where_it_is_paid() {
     let s = t.ok(STRANGER, "view_supplier", &STRANGER).parse_return_value::<Supplier>().unwrap();
     assert_eq!(s.payout, STRANGER);
 }
+
+// ---------- audit 25 Nov re-check ----------
+
+#[test]
+fn a_wrong_amount_invoice_from_the_agent_cannot_block_the_supplier() {
+    // A buyer-controlled agent submits an invoice 1 microCCD short after the gate counts.
+    let mut t = setup();
+    count(&mut t, QTY, QTY);
+    let short = Amount::from_micro_ccd(PRICE.micro_ccd - 1);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: short });
+    // The supplier replaces it in one call with its own full-amount invoice; the replaced one is logged.
+    let own = HashSha2256([0xcc; 32]);
+    let r = t.ok(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: own, amount: PRICE });
+    let evs = T::events(&r);
+    assert!(evs.contains(&Event::InvoiceRejected { order_id: ORDER, by: SUPPLIER, invoice_hash: INVOICE }));
+    assert!(evs.contains(&Event::SupplierInvoiced { order_id: ORDER, supplier: SUPPLIER, invoice_hash: own, amount: PRICE }));
+    // Nobody on the buyer's side can now swap it out or claw the money back.
+    assert_eq!(t.err(ADMIN, "reject_invoice", &ORDER), Error::InvoiceApprovedBySupplier);
+    assert_eq!(t.err(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: short }), Error::InvoiceExists);
+    t.past_due();
+    t.wait(8 * 24 * 3600 * 1000); // past the grace week
+    assert_eq!(t.err(ADMIN, "refund", &ORDER), Error::RefundLocked);
+    // And it pays, in full, to the supplier's payout account.
+    let before = t.balance(PAYOUT);
+    let r = t.ok(SUPPLIER, "execute_payment", &ExecuteParams { order_id: ORDER, receipt_hash: RECEIPT });
+    assert_eq!(t.decision(&r), (Verdict::Cleared, vec![], Some(PAYOUT)));
+    assert_eq!(t.balance(PAYOUT), before + PRICE);
+}
+
+#[test]
+fn a_junk_hash_from_the_agent_is_replaced_by_the_suppliers_own_invoice_too() {
+    let mut t = setup();
+    count(&mut t, QTY, QTY);
+    t.ok(AGENT, "submit_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: HashSha2256([0xee; 32]), amount: PRICE });
+    let r = t.ok(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: INVOICE, amount: PRICE });
+    assert!(T::events(&r).contains(&Event::InvoiceRejected { order_id: ORDER, by: SUPPLIER, invoice_hash: HashSha2256([0xee; 32]) }));
+    // Once approved, the supplier's own invoice is final: it is not replaced again.
+    assert_eq!(t.err(SUPPLIER, "supplier_invoice", &InvoiceParams { order_id: ORDER, invoice_hash: HashSha2256([0xcc; 32]), amount: PRICE }), Error::InvoiceExists);
+}
