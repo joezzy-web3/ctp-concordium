@@ -7,15 +7,13 @@ import { MODULE_SCHEMA_B64 } from '../../console/src/schema.js';
 import { decodeConfig, decodeOrder, decodeSupplier, decodeDecision } from './codec.js';
 
 export const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
-const DEFAULT_ESCROW = Number(globalThis.CTP_ESCROW ?? 13155);
+const DEFAULT_ESCROW = Number(globalThis.CTP_ESCROW ?? 13161);
 /** The demo escrow anyone can walk through with the demo cast. */
-export const DEMO_ESCROW = 13155;
+export const DEMO_ESCROW = 13161;
 /** Modules built from this repo's verifiable build. An escrow on any other module is refused. */
 export const VERIFIED_MODULES = [
   '67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e', // v8 with its source link (release escrow-v8-src1)
   '36764425bd13f1556df3d1ffb1f7d0c91edda6ba2066e390d524fb9a4992cc04', // the same v8 build before the link
-  'd6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b', // v7 with its source link (release escrow-v7-src1)
-  'f36a55cc8d528d97decba0acfadba11f2e1d0b8c01be57c0f4b7a7b87513c735', // the same v7 build before the link
 ];
 /** The module new escrows are created from. */
 export const ESCROW_MODULE = VERIFIED_MODULES[0];
