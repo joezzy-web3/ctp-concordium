@@ -4,6 +4,18 @@ Every transaction below is on Concordium testnet and can be opened on CCDScan. N
 
 Link pattern: `https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=<tx>`
 
+## Who stands behind Agent #1287 (25 Nov 2026)
+
+The owner account `44Fc…iWeG` proved with Concordium ID, in zero knowledge, that it belongs to a verified adult (over 18) living in Nigeria. Nothing else was revealed. Built for the job Concordium's Agent IDP will do natively.
+
+| Step | What happened | Tx |
+|---|---|---|
+| Request | The proof request (resource `ctp-agent:1287:owner:44Fc…`) anchored with RegisterData | [`9318d2c2…c9e40fb9`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9318d2c214a1ae9769bfb3f296bd535e3d95271142f0f6b467628a48c9e40fb9) |
+| Proof | The owner's wallet answered; the app checked it against the chain and that it is about the owner's own account | in the app |
+| Anchor | The audit record's hash `304d48ef…2e308` registered on-chain (`CCDVAA`, public info `agent-owner`, agent 1287) | [`08550d8e…d215734e`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=08550d8eff6c0bb48048ce9a50000108a9a3daa2717ecfde0ac02e33d215734e) |
+
+The record is published as `app/agent-identity.json`; its hash matches the on-chain anchor. Check it live: https://cleartopay-concordium.vercel.app/app/#/agent/identity
+
 ## Escrow v8, Verified module: `<13161,0>` (live)
 
 Module `67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e`, [Verified on CCDExplorer](https://ccdexplorer.io/testnet/module/67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e) (archive `537cfeec…82eff0`). Built and published in public by the [publish-module run](https://github.com/joezzy-web3/ctp-concordium/actions/runs/45600450904) from release [`escrow-v8-src1`](https://github.com/joezzy-web3/ctp-concordium/releases/tag/escrow-v8-src1) (verifiable build `36764425…2cc04`). Fix from the 25 Nov re-check: the supplier can replace any invoice it has not approved with its own, and the replaced one is logged as rejected, so the buyer's agent can't block a confirmed delivery with a wrong amount or a junk hash. The two new tests failed on v7 in CI (59 passed, 2 failed) before the fix. 26 rule tests, 61 end-to-end tests.

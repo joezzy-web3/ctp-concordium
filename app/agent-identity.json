@@ -1,0 +1,143 @@
+{
+  "type": "ClearToPayAgentIdentity",
+  "version": 1,
+  "agent": 1287,
+  "owner": "44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG",
+  "proves": {
+    "verifiedAdult": true,
+    "minimumAge": 18,
+    "countryOfResidence": "NIGERIA"
+  },
+  "requestAnchorTx": "9318d2c214a1ae9769bfb3f296bd535e3d95271142f0f6b467628a48c9e40fb9",
+  "auditAnchorTx": "08550d8eff6c0bb48048ce9a50000108a9a3daa2717ecfde0ac02e33d215734e",
+  "createdAt": "2026-11-25T15:02:36.129Z",
+  "record": {
+    "request": {
+      "type": "ConcordiumVerificationRequestV1",
+      "context": {
+        "type": "ConcordiumUnfilledContextInformationV1",
+        "given": [
+          {
+            "label": "Nonce",
+            "context": "d1c99353bbadd84d4725feddf2113b03a1a83240ee659e507a9ce26d16c3f482"
+          },
+          {
+            "label": "ConnectionID",
+            "context": "ctp-cf1e059a19a744b9"
+          },
+          {
+            "label": "ResourceID",
+            "context": "ctp-agent:1287:owner:44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG"
+          },
+          {
+            "label": "ContextString",
+            "context": "Clear to Pay: prove who stands behind Agent #1287 (a verified adult, and your country of residence)"
+          }
+        ],
+        "requested": [
+          "BlockHash"
+        ]
+      },
+      "subjectClaims": [
+        {
+          "type": "identity",
+          "source": [
+            "accountCredential"
+          ],
+          "statements": [
+            {
+              "type": "RevealAttribute",
+              "attributeTag": "countryOfResidence"
+            },
+            {
+              "type": "AttributeInRange",
+              "attributeTag": "dob",
+              "lower": "18000101",
+              "upper": "20081126"
+            }
+          ],
+          "issuers": [
+            "did:ccd:testnet:idp:0",
+            "did:ccd:testnet:idp:1",
+            "did:ccd:testnet:idp:3",
+            "did:ccd:testnet:idp:4",
+            "did:ccd:testnet:idp:5"
+          ]
+        }
+      ],
+      "transactionRef": "9318d2c214a1ae9769bfb3f296bd535e3d95271142f0f6b467628a48c9e40fb9"
+    },
+    "presentation": {
+      "type": [
+        "VerifiablePresentation",
+        "ConcordiumVerifiablePresentationV1"
+      ],
+      "presentationContext": {
+        "type": "ConcordiumContextInformationV1",
+        "given": [
+          {
+            "label": "Nonce",
+            "context": "d1c99353bbadd84d4725feddf2113b03a1a83240ee659e507a9ce26d16c3f482"
+          },
+          {
+            "label": "ConnectionID",
+            "context": "ctp-cf1e059a19a744b9"
+          },
+          {
+            "label": "ResourceID",
+            "context": "ctp-agent:1287:owner:44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG"
+          },
+          {
+            "label": "ContextString",
+            "context": "Clear to Pay: prove who stands behind Agent #1287 (a verified adult, and your country of residence)"
+          }
+        ],
+        "requested": [
+          {
+            "label": "BlockHash",
+            "context": "6e3055e6b0b89755684351e6cb90d6fb0cac9803896392f801c946b1c99deeab"
+          }
+        ]
+      },
+      "verifiableCredential": [
+        {
+          "type": [
+            "VerifiableCredential",
+            "ConcordiumVerifiableCredentialV1",
+            "ConcordiumAccountBasedCredential"
+          ],
+          "credentialSubject": {
+            "id": "did:ccd:testnet:cred:a76755fb4bedda6dfd3d25391fceae6dc60d793bd7be5e662d5eab05521c126e083a7bba5a65dbfec1b3b4725f0d3dbd",
+            "statement": [
+              {
+                "type": "AttributeValue",
+                "attributeTag": "countryOfResidence",
+                "attributeValue": "NIGERIA"
+              },
+              {
+                "type": "AttributeInRange",
+                "attributeTag": "dob",
+                "lower": "18000101",
+                "upper": "20081126"
+              }
+            ]
+          },
+          "issuer": "did:ccd:testnet:idp:0",
+          "proof": {
+            "created": "2026-11-25T15:02:24.660Z",
+            "proofValue": "00000000000000020056a4be3cd60f9a4ac0e52f7f345b0f6298c44c71abce76df5ab1f3373e39f1ef39b691aa9bf0f1e4e57f2672a2f131920147c7bd12ce08ac4f35d9ed8873026d02929aa40e84bbe970c93a56b8de5cd645817ffc9bdb8488cb1bb1d3d95bf9e315b56f20e9a8e5568aedd9664b659078bfb1c1dc3ed444f7d6bcc77840ecac9312cfa697fa6fd8c36213d45880d604e8adc8f27790989ed4e1102a8d7a42a2f6bd8adafaec9685e985a7681fe2abd67454781d205fc3db04b9627da72c619667493bc644c375063e2ba097b2dc932184439647d5354288d676853784dd36c14409037cc55ba097149bb1bc94ea12321a3d89efbee90d629f61f5c5f1e59cae76a51e99ac4915ec978e6e4906f81d0b794e54d6a945431922ee903edb077787a0c50665565d01681f81422a90b5cca2f673ea0bfaa3f045599a6bd111815a8f51602f9945c025ffa35ac08d252920b6631c8e0f709f1ee3c7955983d5cb816072dc00000007a7d18338d487bdd36a787c7b85b5bd3b7b0b52f7b2d31f216109aaf3c98c83eb928241e1857b299875584a6328b635b8904abe93501d0109175f674fa95606947cc57445f5008f65f50969b1d8ffcf548e2a50f0315e1d91b44fe9ea0694f051907be0a1a161f6aa1346638498801a947da94bf60ef9f33e83c51cb2b9e5f53b4ff742bffb45073d0a01e11e3e6001c6a121895fa58c8d3a01a5062c7c6db4a11b03521ee40779cbfd8f658b01b82419c93b251d5e9be9305ac6de120e18c1019773add989fda64cd8aa27a1dfaa6458ec0d993e3b728f67ca2481150421b1541b8947f28cbc78fbf3dc80b7f15ea2d48f91e11535ca8bb2c5f0aadd8617a80f3be6296350c3e443dd5b0cf5ffb62c1b25796608cde0729a5d008b5e6ffa4ea58f44412404e12014beffd314820630fdc90ef15fad4ccaec6ff449a48960fac1000303455bae86b5de03ef00517362fdb5bab2365f9c06f158c3113161c6e0dc2f6d2d3d29821660ed96e74be13a0853fb8a21c8d118f742e290de9203e56ffb916fced7ac4be866c920f1cfc7a1eeef9835b41620517aa4008f960c057f6aa519af4ce95b630250d58348cccbfad886af599d68df32396680f472314c487983daa976bc792d6c1025ce94ef3c56b779637da559bb21cbff1d0818eeff053059b37ba72fc9d70094264fce0f1f1d3904e1094de8dff653c02c344f2b782a75e9ca0de996f0e258fd8e4e731ff3b6fc0fb14aea616369050ba26cd48b7642e7469393590d8a7d4f4042bdafa57f6ba0ef87b34354a64631a2ba7c895314ccec99b381a08eb55a90f587eaa9b5e1c4cccb8ba2be596c785187b80fa4bdbf30049f13fb4e3edf0986d6b16897c0018606b989acc7ed7cd30e421c77c0f313f6a0cb26744c7f89999dcb75364b0c35993a1705ce1a8d27ccf80f4bd98063f51380805b12e58f105abdfad22898bb0ab34903ccff6030a9e08de94955507771fbfa344bbb0e6acef120c50cd729b74d1271abf589a56b8f70af6738f64ddd0cfc377e",
+            "type": "ConcordiumZKProofV4"
+          }
+        }
+      ],
+      "proof": {
+        "created": "2026-11-25T15:02:24.660Z",
+        "proofValue": "",
+        "type": "ConcordiumWeakLinkingProofV1"
+      }
+    },
+    "id": "ctp-agent:1287:44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG:1795618945181",
+    "version": 1,
+    "type": "ConcordiumVerificationAuditRecord"
+  }
+}
