@@ -5,7 +5,7 @@ import { say, code, bold, br, txLink } from '../../ui/say.js';
 
 const TESTNET_GENESIS_PREFIX = '4221332d34e1694168c2a0c0b3fd0f27';
 // SHA-256 of the verifiable build from CI that we deploy (contract/ at the pinned commit).
-const EXPECTED_MODULE_SHA256 = 'd6d99ee4b4c8c7b71e00f06aa4b410bb0552871392439f528da6183a56f58d5b'; // escrow v7 (f36a55cc) plus its source link (publish-module run 45459752646, release escrow-v7-src1)
+const EXPECTED_MODULE_SHA256 = '67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e'; // escrow v8 (36764425) plus its source link (publish-module run 45600450904, release escrow-v8-src1)
 const DEPLOY_MODULE = 0; // AccountTransactionType.DeployModule
 const INIT_CONTRACT = 1; // AccountTransactionType.InitContract
 const HOLDS = { prod: 72 * 3600 * 1000, test: 60 * 1000 }; // 72 hours, or 1 minute for a test run
