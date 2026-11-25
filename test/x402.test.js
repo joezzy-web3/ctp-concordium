@@ -148,3 +148,40 @@ test('the wallet’s limits are code: wrong payee, wrong asset, too much, wrong 
   await assert.rejects(payer(asking({})).pay(URL1), /spending record is damaged/);
   assert.equal(signed.n, 0);
 });
+
+// Audit 25 Nov re-check: X1 redirects, X2 parallel calls, X4 rate limit.
+test('the payer never follows a redirect, before or after signing', async () => {
+  const signed = { n: 0 };
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'ctp-')), 'spend.json');
+  const redirect = async () => new Response(null, { status: 302, headers: { location: 'https://evil.example/' } });
+  const p = makePayer({ scheme: fakeClientScheme(signed), payTo: AGENT, origin: ORIGIN, maxPerPayment: 50_000n, maxPerDay: 500_000n, ledgerPath, fetch: redirect });
+  assert.match((await p.pay(URL1)).refused, /redirect/);
+  assert.equal(signed.n, 0);
+  // A redirect on the paid request: the payment is not sent on, and it stays counted.
+  const { handle } = service();
+  let n = 0;
+  const thenRedirect = async (url, init) => (n++ === 0 ? fetchTo(handle)(url, init) : new Response(null, { status: 307, headers: { location: 'https://evil.example/' } }));
+  const p2 = makePayer({ scheme: fakeClientScheme(signed), payTo: AGENT, origin: ORIGIN, maxPerPayment: 50_000n, maxPerDay: 500_000n, ledgerPath, fetch: thenRedirect });
+  const r = await p2.pay(URL1);
+  assert.equal(r.ok, false);
+  assert.match(r.refused, /redirected the paid request/);
+  assert.equal(JSON.parse(readFileSync(ledgerPath, 'utf8')).length, 1);
+});
+
+test('two payments at the same moment cannot both pass the daily cap', async () => {
+  const { handle } = service({ chain: fakeChain({ verdict: { verdict: 'Cleared', codes: [] } }) });
+  const ledgerPath = join(mkdtempSync(join(tmpdir(), 'ctp-')), 'spend.json');
+  writeFileSync(ledgerPath, JSON.stringify([{ at: Date.now() - 1000, amount: '485000' }])); // 0.485 of 0.5 spent
+  const p = makePayer({ scheme: fakeClientScheme(), payTo: AGENT, origin: ORIGIN, maxPerPayment: 50_000n, maxPerDay: 500_000n, ledgerPath, fetch: fetchTo(handle) });
+  const [a, b] = await Promise.all([p.pay(URL1), p.pay(URL1)]);
+  assert.equal([a, b].filter((r) => r.ok).length, 1, 'only one 0.01 CCD payment fits');
+  assert.match([a, b].find((r) => !r.ok).refused, /daily limit/);
+});
+
+test('unpaid requests are rate-limited per caller', async () => {
+  const facilitator = fakeFacilitator(); const chain = fakeChain();
+  const handle = makePreclear({ facilitator, chainFor: () => chain, payTo: AGENT, defaultEscrow: 13155, ratePerMinute: 3 });
+  for (let i = 0; i < 3; i++) assert.equal((await handle({ url: URL1, caller: '1.2.3.4' })).status, 402);
+  assert.equal((await handle({ url: URL1, caller: '1.2.3.4' })).status, 429);
+  assert.equal((await handle({ url: URL1, caller: '5.6.7.8' })).status, 402, 'another caller is unaffected');
+});

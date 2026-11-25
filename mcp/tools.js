@@ -170,7 +170,7 @@ export function makeTools(chain, { payer, preclearUrl, receiptsDir = process.env
     const url = `${preclearUrl}?escrow=${escrow.index}&order=${id}`;
     let r;
     try { r = await payer.pay(url); } catch (e) { return `Could not complete the paid check: ${e?.message ?? e}. If a payment was signed, it is counted in today's spending.`; }
-    if (r.refused) return `Refused by the spending limits, before anything was signed: ${r.refused} Nothing was paid.`;
+    if (r.refused) return r.amount ? `Stopped: ${r.refused}` : `Refused by the spending limits, before anything was signed: ${r.refused} Nothing was paid.`;
     if (!r.ok) return `The pre-clear service answered ${r.status}: ${r.body?.message ?? r.body?.error ?? 'no reason given'}. ${r.amount ? 'The fee was offered but the service did not confirm it.' : 'Nothing was paid.'}`;
     const b = r.body ?? {};
     const fee = `${microToCcd(BigInt(r.amount))} ${r.asset}`;

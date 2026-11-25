@@ -44,7 +44,8 @@ export default async function handler(req, res) {
   try {
     handle ??= setup();
     const proto = req.headers['x-forwarded-proto'] ?? 'https';
-    const out = await handle({ url: `${proto}://${req.headers.host}${req.url}`, headers: req.headers });
+    const caller = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || undefined;
+    const out = await handle({ url: `${proto}://${req.headers.host}${req.url}`, headers: req.headers, caller });
     for (const [k, v] of Object.entries(out.headers)) res.setHeader(k, v);
     // Let browsers and agents read the x402 headers cross-origin.
     res.setHeader('access-control-allow-origin', '*');

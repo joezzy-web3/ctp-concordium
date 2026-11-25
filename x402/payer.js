@@ -40,12 +40,19 @@ export function makePayer({ scheme, payTo, origin, asset = 'CCD', maxPerPayment,
   /** Spent in the last 24 hours. */
   const spentToday = () => readLedger(ledgerPath).filter((e) => now() - e.at < DAY_MS).reduce((s, e) => s + BigInt(e.amount), 0n);
 
+  // One payment at a time, so two calls at once can never both pass the daily cap (audit X2).
+  let queue = Promise.resolve();
+  const pay = (url) => { const run = queue.then(() => payOnce(url)); queue = run.catch(() => {}); return run; };
+  const isRedirect = (r) => r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400);
+
   /** Pays for one request to `url` if it fits the limits; returns { ok, status, body, receipt } or { ok:false, refused }. */
-  async function pay(url) {
+  async function payOnce(url) {
     let u;
     try { u = new URL(url); } catch { return { ok: false, refused: 'That is not a valid address.' }; }
     if (u.origin !== origin) return { ok: false, refused: `This wallet only pays ${origin}.` };
-    const first = await fetchImpl(url);
+    // Never follow redirects: the signed payment must only ever go to the allowed origin (audit X1).
+    const first = await fetchImpl(url, { redirect: 'manual' });
+    if (isRedirect(first)) return { ok: false, refused: 'The service tried to redirect the request elsewhere. Nothing was paid.' };
     if (first.status !== 402) return { ok: first.ok, status: first.status, body: await first.json().catch(() => null) };
     const header = first.headers.get('payment-required');
     let pr;
@@ -69,7 +76,8 @@ export function makePayer({ scheme, payTo, origin, asset = 'CCD', maxPerPayment,
     mkdirSync(dirname(ledgerPath), { recursive: true });
     writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, { mode: 0o600 });
 
-    const second = await fetchImpl(url, { headers: { 'payment-signature': encodePaymentSignatureHeader(payload) } });
+    const second = await fetchImpl(url, { redirect: 'manual', headers: { 'payment-signature': encodePaymentSignatureHeader(payload) } });
+    if (isRedirect(second)) return { ok: false, status: second.status, body: null, amount: req.amount, asset: req.asset, refused: 'The service redirected the paid request; the signed payment was not sent on. It is counted in today\u2019s spending.' };
     const body = await second.json().catch(() => null);
     const rh = second.headers.get('payment-response');
     let receipt = null;

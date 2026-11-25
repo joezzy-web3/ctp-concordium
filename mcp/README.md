@@ -83,7 +83,7 @@ Add to the `args` list, next to `CTP_AGENT_KEY_FILE`:
 "CTP_SPEND_ACCOUNT=<the spending wallet's address>",
 ```
 
-Make the key file the same way as the agent's (step 2), named `spend.key`, with `chmod 600`.
+Make the key file the same way as the agent's (step 2), named `spend.key`, with `chmod 600`. The server refuses to use the agent's own account as the spending wallet, never follows a redirect with a signed payment, and makes one payment at a time.
 
 ## Try it
 

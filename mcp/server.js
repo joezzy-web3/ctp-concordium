@@ -38,7 +38,10 @@ const chain = createEscrow({ escrow, agent, keyFile: process.env.CTP_AGENT_KEY_F
 // The spending wallet: separate from the agent's escrow key, and capped in code (x402/payer.js).
 const PRECLEAR_URL = process.env.CTP_PRECLEAR_URL ?? 'https://cleartopay-concordium.vercel.app/api/preclear';
 let payer = null;
-if (process.env.CTP_SPEND_KEY_FILE && process.env.CTP_SPEND_ACCOUNT) {
+// The spending wallet must never be the agent's own escrow account (audit X3).
+const spendIsAgent = process.env.CTP_SPEND_ACCOUNT && process.env.CTP_SPEND_ACCOUNT === agent.owner;
+if (spendIsAgent) console.error('CTP_SPEND_ACCOUNT is the agent\u2019s own account; paid checks are off. Use a separate spending wallet.');
+if (!spendIsAgent && process.env.CTP_SPEND_KEY_FILE && process.env.CTP_SPEND_ACCOUNT) {
   const { address, signer } = loadAgentSigner(process.env.CTP_SPEND_KEY_FILE, process.env.CTP_SPEND_ACCOUNT);
   payer = makePayer({
     scheme: new ExactConcordiumScheme({ accountAddress: AccountAddress.fromBase58(address), signer }),
