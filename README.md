@@ -31,7 +31,7 @@ Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/p
 | **Who owns it?** | The Agent Registry names the owner, and the owner has proven with Concordium ID that they are a verified adult living in Nigeria ([check it](https://cleartopay-concordium.vercel.app/app/#/agent/identity)). Nothing else about them is revealed |
 | **Is it real?** | The escrow contract reads the registry itself when the agent is added, at every invoice and at every payment request: a revoked or transferred agent is refused at once |
 | **What can it do?** | Its Agent Card lists its skills, including one other agents can hire: a paid pre-clear over x402 (0.01 CCD) that returns the contract's own verdict and the checklist behind it. Its MCP tools: read orders, dry-run, submit an invoice, ask for payment, buy a pre-clear, show who stands behind it. It can never pay: only the contract can |
-| **Can I trust the card?** | The card's SHA-256 is anchored on-chain ([anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) |
+| **Can I trust the card?** | The card's SHA-256 is anchored on-chain ([anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=352ef1a55cd3a989f4c7d5bd4af8be816a0c287640cff5da57451575344b2bb4)) |
 
 ## Why now
 
@@ -114,7 +114,7 @@ Over 300 commits across the two repos, sixteen security reviews, and every threa
 | Agent Card | https://joezzy-web3.github.io/ctp-concordium/agent-card.json |
 | **Escrow contract (live, test run)** | `<13161,0>` (v8) · module `67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e`, **Verified on CCDExplorer** (source and module match) · buyer admin `4QzE6Z…cEmTthG` · payout hold 1 minute, so the full flow runs in one sitting (new escrows default to 72 hours) · [app](https://cleartopay-concordium.vercel.app/app/) |
 | Earlier escrows (replaced) | v7 `<13155,0>`, v6 `<13151,0>` and earlier: see the [proof log](docs/testnet-proof.md) and the history below |
-| **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
+| **Registered agent** | **#1287** · Agent ID `JyP9U25oUQ6KdnBBHdTYP` · owner `44Fcwcy…mbiWeG` · badge valid ([card anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=352ef1a55cd3a989f4c7d5bd4af8be816a0c287640cff5da57451575344b2bb4)) · linked via CIS-8 to the NEAR agent `buyer.cleartopay.testnet` ([link tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)) |
 
 Earlier work: [Clear to Pay on NEAR](https://github.com/joezzy-web3/clear-to-pay) (the idea and threat model, rebuilt from scratch for Concordium).
 

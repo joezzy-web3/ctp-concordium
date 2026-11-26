@@ -120,6 +120,7 @@ Module `ad60bdff1c57a8b54f684a159b149e21bfb0721f54a91263d3a0c184a28c7e52` (CI ru
 
 ## Agent #1287 (19 Nov 2026)
 
+- Agent Card v3 (1.1.0) anchored with `setAgentURI` on 26 Nov 2026: card SHA-256 `14c9319c…929b1`, now listing the paid pre-clear as an x402 skill and who stands behind the agent: [`352ef1a5…4b2bb4`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=352ef1a55cd3a989f4c7d5bd4af8be816a0c287640cff5da57451575344b2bb4)
 - Agent Card v2 anchored with `setAgentURI` (card SHA-256 `b6567d9b…9588`; registry `check-badge`: all 15 checks pass): [`9556522b…dec23`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)
 - Linked to the NEAR agent `buyer.cleartopay.testnet`. CIS-8 `registerExternalKey` (the contract checked the NEAR signature): [`c3395739…c5e3`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=c33957395cb0176e4b8994bf5f94741fa69fdf1d5f5c2dac5e9f0efcddf2c5e3); `setExternalReference` (the registry called CIS-8 to confirm before attaching): [`3837cc7a…c1d7`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=3837cc7a487731da88b6aa183fd62489e9e9f1da534cddc082cdfcc271f7c1d7)
 - First accountability receipt, verdict CLEARED, `CTP1` + receipt hash `7072261d…3c61` via RegisterData: [`6ee54f73…9d01`](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=6ee54f73adee62d2ca1dfb1f03a9dc492c123884daa5a0c81d61f30c31639d01)
