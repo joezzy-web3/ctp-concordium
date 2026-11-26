@@ -6,7 +6,8 @@ import { gateVerdict } from '../gate/codes.js';
 
 // Real registry answer for Agent #1287 (captured 19 Nov 2026) and the real card bytes.
 const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/check-badge-1287.json', import.meta.url)));
-const CARD = readFileSync(new URL('../agent-card.json', import.meta.url));
+// The card as served when the fixture was captured (v2); the live card is v3 since 26 Nov.
+const CARD = readFileSync(new URL('./fixtures/agent-card-v2.json', import.meta.url));
 const BADGE = 'JyP9U25oUQ6KdnBBHdTYP';
 const OWNER = '44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG';
 const now = () => new Date('2026-11-19T14:00:00Z');

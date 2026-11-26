@@ -1,8 +1,8 @@
 {
   "name": "Clear to Pay",
-  "description": "Supplier-payment guard for AI agents. Clear to Pay reads supplier invoices but can never release payment on its own: money is released only when two verified people sign blind delivery counts, the invoice is signed by the supplier's registered key and matches the order, and any new payout account has waited 72 hours. It refuses invoices from agents whose Verified by Concordium badge does not check out, and keeps an audit trail for EU AI Act record keeping.",
+  "description": "Supplier-payment guard for AI agents. The AI asks; the escrow contract on Concordium decides. Clear to Pay submits supplier invoices but can never release payment on its own: the escrow pays only when two people have counted the delivery blind, the supplier has approved that exact invoice and amount from its own account, and the money goes to the supplier's own payout account after its hold. Other agents can hire it: a paid pre-clear check over x402 (0.01 CCD) returns the contract's own verdict and the checklist behind it. Its owner is proven with Concordium ID to be a verified adult living in Nigeria, anchored on-chain.",
   "url": "https://joezzy-web3.github.io/ctp-concordium/agent-card.json",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "defaultInputModes": [
     "text/markdown",
     "application/json"
@@ -16,13 +16,38 @@
   },
   "skills": [
     {
+      "id": "preclear-order",
+      "name": "Pre-clear a payment (paid, x402)",
+      "description": "Would this order's payment clear right now? Returns the escrow contract's own dry-run verdict (Cleared, Held with reasons, or Refused) plus the checklist behind it: delivery counts, invoice and supplier approval, payout account and its hold, deadline. Nothing is sent to the escrow. Pay per request over x402: GET https://cleartopay-concordium.vercel.app/api/preclear?order=<n>[&escrow=<index>] answers 402 with the payment requirements; pay 0.01 CCD (exact scheme, Concordium testnet, gas sponsored) and get the answer. Works for any escrow running the Verified Clear to Pay module.",
+      "tags": [
+        "x402",
+        "payments",
+        "invoice",
+        "pre-clear",
+        "paid"
+      ],
+      "examples": [
+        "GET /api/preclear?order=1&escrow=13161"
+      ]
+    },
+    {
       "id": "check-invoice",
-      "name": "Check an invoice",
-      "description": "Returns CLEARED, HELD or SEIZED with reason codes for a supplier invoice. Never pays.",
+      "name": "Submit and check an invoice",
+      "description": "Submits a supplier invoice's SHA-256 fingerprint to a Clear to Pay escrow and asks for payment. Never pays: the contract decides, and answers Cleared or Held with reason codes, on-chain.",
       "tags": [
         "invoice",
         "payments",
         "fraud",
+        "accountability"
+      ]
+    },
+    {
+      "id": "agent-identity",
+      "name": "Who stands behind this agent",
+      "description": "The owner of Agent #1287 proved with Concordium ID, in zero knowledge, that they are a verified adult living in Nigeria; nothing else is revealed. Proof file: https://cleartopay-concordium.vercel.app/app/agent-identity.json, anchored on-chain (tx 08550d8eff6c0bb48048ce9a50000108a9a3daa2717ecfde0ac02e33d215734e). Check it live: https://cleartopay-concordium.vercel.app/app/#/agent/identity",
+      "tags": [
+        "concordium-id",
+        "zero-knowledge",
         "accountability"
       ]
     },
@@ -62,6 +87,22 @@
             "mcp": "https://agent-registry-mcp.concordium.com/mcp",
             "docs": "https://docs.concordium.com/en/mainnet/technical-reference/agent-registry/concordium-badge.html"
           }
+        }
+      },
+      {
+        "uri": "https://www.x402.org",
+        "description": "Paid skills over x402 (HTTP 402) on Concordium",
+        "required": false,
+        "params": {
+          "endpoint": "https://cleartopay-concordium.vercel.app/api/preclear",
+          "skill": "preclear-order",
+          "scheme": "exact",
+          "network": "ccd:4221332d34e1694168c2a0c0b3fd0f27",
+          "asset": "CCD",
+          "price": "10000",
+          "priceUnit": "microCCD",
+          "payTo": "44FcwcyGN5cPLqtPtaCcJTnELkb9TM4PKpmVTQppJXQAmbiWeG",
+          "gas": "sponsored by the service"
         }
       }
     ]

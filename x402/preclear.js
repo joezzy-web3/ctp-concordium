@@ -17,6 +17,8 @@ export const TESTNET = 'ccd:4221332d34e1694168c2a0c0b3fd0f27';
 /** 0.01 CCD, in microCCD. */
 export const DEFAULT_PRICE = '10000';
 const ZERO = '0'.repeat(64);
+import { orderChecks } from './checks.js';
+
 const json = (status, body, headers = {}) => ({ status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }, body });
 
 /**
@@ -100,8 +102,14 @@ export function makePreclear({ facilitator, chainFor, payTo, price = DEFAULT_PRI
     const answer = !sim.ok
       ? { verdict: 'Refused', reason: sim.error, explain: sim.explain }
       : { verdict: d?.verdict ?? 'Unknown', codes: d?.codes ?? [], reasons: (d?.codes ?? []).map((c) => CODE_TEXT[c] ?? c) };
+    // The checklist behind the verdict: delivery, invoice, payout account and its hold, deadline.
+    let checks = null;
+    try {
+      const [supplier, config] = await Promise.all([chain.viewSupplier?.(order.supplier) ?? null, chain.viewConfig?.() ?? null]);
+      checks = orderChecks(order, supplier, config, now());
+    } catch { checks = null; }
     return json(200, {
-      escrow: `<${escrow},0>`, order: orderId, ...answer,
+      escrow: `<${escrow},0>`, order: orderId, ...answer, checks,
       note: 'The escrow contract’s own dry run. Nothing was sent to the escrow; only the fee moved.',
       fee: { amount: price, asset, payTo, payer: settled.payer, transaction: settled.transaction, network: settled.network },
     }, { 'payment-response': encodePaymentResponseHeader(settled) });
