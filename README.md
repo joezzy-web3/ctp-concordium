@@ -30,7 +30,7 @@ Built for the [Concordium Trusted Agents Hackathon](https://www.encodeclub.com/p
 |---|---|
 | **Who owns it?** | The Agent Registry names the owner, and the owner has proven with Concordium ID that they are a verified adult living in Nigeria ([check it](https://cleartopay-concordium.vercel.app/app/#/agent/identity)). Nothing else about them is revealed |
 | **Is it real?** | The escrow contract reads the registry itself when the agent is added, at every invoice and at every payment request: a revoked or transferred agent is refused at once |
-| **What can it do?** | Its Agent Card and MCP tools: read orders, dry-run, submit an invoice, ask for payment, buy a paid pre-clear, show who stands behind it. It can never pay: only the contract can |
+| **What can it do?** | Its Agent Card lists its skills, including one other agents can hire: a paid pre-clear over x402 (0.01 CCD) that returns the contract's own verdict and the checklist behind it. Its MCP tools: read orders, dry-run, submit an invoice, ask for payment, buy a pre-clear, show who stands behind it. It can never pay: only the contract can |
 | **Can I trust the card?** | The card's SHA-256 is anchored on-chain ([anchor tx](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=9556522bc1a0decb964276fd7b4d13b9a6f5404a25d5a02692ae3c6ad80dec23)) |
 
 ## Why now

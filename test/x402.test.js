@@ -185,3 +185,22 @@ test('unpaid requests are rate-limited per caller', async () => {
   assert.equal((await handle({ url: URL1, caller: '1.2.3.4' })).status, 429);
   assert.equal((await handle({ url: URL1, caller: '5.6.7.8' })).status, 402, 'another caller is unaffected');
 });
+
+test('the paid answer carries the checklist behind the verdict', async () => {
+  const { orderChecks } = await import('../x402/checks.js');
+  const S = 'S', now = 1_000_000;
+  const base = { supplier: S, amount: 10n, expected_qty: 2n, commits: [], reveals: [], invoice: null, supplier_approval: null, invoice_by: now + 1000, paid: false, refunded: false };
+  const counted = { ...base, gate_met: true, commits: [{ role: 'Receiver' }, { role: 'SupplierRep' }], reveals: [{ role: 'Receiver', qty: 2n }, { role: 'SupplierRep', qty: 2n }] };
+  const inv = { invoice_hash: 'h', amount: 10n };
+  const sup = { payout: S, payout_set_at: now - 500 }, cfg = { hold_ms: 1000 };
+  let c = orderChecks(base, sup, cfg, now);
+  assert.equal(c.delivery, 'not counted yet'); assert.equal(c.invoice, 'none submitted yet');
+  assert.deepEqual(c.payout, { toSuppliersOwnAccount: true, holdPassed: false, holdEndsAt: new Date(now + 500).toISOString() });
+  c = orderChecks({ ...counted, invoice: inv }, sup, cfg, now);
+  assert.match(c.delivery, /^confirmed/); assert.match(c.invoice, /^waiting for the supplier/);
+  c = orderChecks({ ...counted, invoice: { ...inv, amount: 9n } }, sup, cfg, now);
+  assert.match(c.invoice, /^wrong amount/);
+  c = orderChecks({ ...counted, invoice: inv, supplier_approval: { invoice_hash: 'h', amount: 10n } }, { payout: 'X', payout_set_at: 0 }, cfg, now);
+  assert.match(c.invoice, /^approved/); assert.equal(c.payout.toSuppliersOwnAccount, false); assert.equal(c.payout.holdPassed, true);
+  assert.equal(orderChecks({ ...base, paid: true }, null, null, now).settled, 'paid');
+});

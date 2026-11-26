@@ -177,7 +177,9 @@ export function makeTools(chain, { payer, preclearUrl, ownerProof, receiptsDir =
     const fee = `${microToCcd(BigInt(r.amount))} ${r.asset}`;
     const tx = r.receipt?.transaction ?? b.fee?.transaction;
     const verdict = b.verdict === 'Cleared' ? 'it would clear now' : b.verdict === 'Held' ? `it would be held: ${(b.reasons ?? []).join(' ')}` : `the contract would refuse the request (${b.reason ?? 'no reason'})`;
-    return `Paid pre-clear for order #${id} on ${where}: ${verdict} This is the escrow contract's own dry run; nothing was sent to the escrow. Fee: ${fee} paid over x402 to ${short(b.fee?.payTo)}${tx ? ` (${ccdscanTx(tx)})` : ''}. Spent today: ${microToCcd(BigInt(r.spentToday))} ${r.asset}.`;
+    const c = b.checks;
+    const list = c ? ` Checklist: delivery ${c.delivery}; invoice ${c.invoice}${c.payout ? `; payout ${c.payout.toSuppliersOwnAccount ? "to the supplier's own account" : 'to an account the supplier set'}, hold ${c.payout.holdPassed ? 'passed' : `until ${c.payout.holdEndsAt}`}` : ''}${c.deadline ? `; deadline ${c.deadline.date}${c.deadline.passed ? ' (passed)' : ''}` : ''}.` : '';
+    return `Paid pre-clear for order #${id} on ${where}: ${verdict}${list} This is the escrow contract's own dry run; nothing was sent to the escrow. Fee: ${fee} paid over x402 to ${short(b.fee?.payTo)}${tx ? ` (${ccdscanTx(tx)})` : ''}. Spent today: ${microToCcd(BigInt(r.spentToday))} ${r.asset}.`;
   }
 
   /** Who stands behind this agent: the owner's Concordium ID proof, checked against the chain. */
