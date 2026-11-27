@@ -8,6 +8,8 @@ In 2024 an AI agent guarding $47,000 had one rule: never send the money. One mes
 
 Clear to Pay lets AI agents handle supplier payments without being able to move money on their own. An agent (here, Claude) submits the invoice. Two people, one from each side, count the delivery blind; the buyer's counters can prove with **Concordium ID** that they're real verified adults, and the escrow refuses an order where one person would count twice. The supplier approves the exact invoice from its own account. Only then does the escrow contract on Concordium pay, and only to the supplier's own payout account. Tell the agent to skip the checks and the contract answers **Held**, on the record.
 
+**▶ [Watch the 3-minute demo](https://x.com/joezzyweb3/status/2125894572609835204)**: Held, then Cleared, live with Claude on Concordium testnet.
+
 > **Judges: 3 minutes, nothing to install.**
 > 1. **See it happen on-chain.** Claude was told to skip the checks and pay; the contract answered **[Held](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=569dfcf721056b8e0e01166b178d23b1ff50c45ace84698d6a71067f8aa09287)**. The supplier approved its invoice from its own account, Claude asked again: **[Cleared](https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=d7c5f9b422cfe7e7e6d030f70562d21f5935563a1609aaaeb227596f0b5095e3)**, 2 CCD to the supplier's payout account. Both on escrow `<13161,0>`.
 > 2. **Check the code is the code.** CCDExplorer downloads our source, rebuilds it and shows **[Verified: source and module match](https://ccdexplorer.io/testnet/module/67e4c0b60ea3945b594ca3ddd32f1287ae89d2eec399827bc3f8ee7eeff1db6e)**.
